@@ -73,7 +73,8 @@ export async function listarPersonal(q: PersonalQuery): Promise<PersonalLista> {
   let query = supabase
     .from('empleado')
     .select(SELECT, { count: 'exact' })
-    .order('id_empleado', { ascending: true })
+    .order('feccre', { ascending: false })
+    .order('id_empleado', { ascending: false })
     .range(desde, hasta);
 
   if (q.cargo !== undefined) {
@@ -141,32 +142,49 @@ export async function existeDocumento(tipoDoc: string, doc: string): Promise<boo
 }
 
 export async function crearPersonal(input: PersonalCreate, usucre: string, pc = ''): Promise<Personal> {
-  const idTipo = await idTipoDoc(input.tipoDoc);
-  if (!idTipo) {
-    throw new Error('DB_REF_FAIL: sin TIPO_IDENTIDAD');
+  // Ficha única: reutiliza la persona si el documento ya existe (ej. era cliente).
+  let idPersona: number | null = null;
+  const { buscarPersonaPorDoc, esViolacionUnica } = await import('./personas-repository.js');
+  const existente = await buscarPersonaPorDoc(input.tipoDoc, input.documento);
+  if (existente) {
+    idPersona = existente.id;
+  } else {
+    const idTipo = await idTipoDoc(input.tipoDoc);
+    if (!idTipo) {
+      throw new Error('DB_REF_FAIL: sin TIPO_IDENTIDAD');
+    }
+    const { data: per, error: errPer } = await supabase
+      .from('persona')
+      .insert({
+        id_tipoidentidad: idTipo,
+        id_distrito: input.distritoId ?? null,
+        n_documento: input.documento,
+        nombre: input.nombres,
+        ap_paterno: input.apPaterno || null,
+        ap_materno: input.apMaterno || null,
+        f_nacimiento: input.fNacimiento ?? null,
+        email: input.correo || null,
+        celular: input.telefono,
+        genero: input.genero ?? null,
+        direccion: input.direccion || null,
+        ...createAudit(usucre, pc),
+      })
+      .select('id_persona')
+      .single();
+    if (errPer) {
+      if (esViolacionUnica(errPer)) {
+        const reintento = await buscarPersonaPorDoc(input.tipoDoc, input.documento);
+        if (reintento) {
+          idPersona = reintento.id;
+        }
+      }
+      if (idPersona === null) {
+        throw new Error(`DB_CREATE_FAIL: ${errPer.message}`);
+      }
+    } else {
+      idPersona = (per as { id_persona: number }).id_persona;
+    }
   }
-  const { data: per, error: errPer } = await supabase
-    .from('persona')
-    .insert({
-      id_tipoidentidad: idTipo,
-      id_distrito: input.distritoId ?? null,
-      n_documento: input.documento,
-      nombre: input.nombres,
-      ap_paterno: input.apPaterno || null,
-      ap_materno: input.apMaterno || null,
-      f_nacimiento: input.fNacimiento ?? null,
-      email: input.correo || null,
-      celular: input.telefono,
-      genero: input.genero ?? null,
-      direccion: input.direccion || null,
-      ...createAudit(usucre, pc),
-    })
-    .select('id_persona')
-    .single();
-  if (errPer) {
-    throw new Error(`DB_CREATE_FAIL: ${errPer.message}`);
-  }
-  const idPersona = (per as { id_persona: number }).id_persona;
 
   const { data: emp, error: errEmp } = await supabase
     .from('empleado')
@@ -185,7 +203,7 @@ export async function crearPersonal(input: PersonalCreate, usucre: string, pc = 
     .select('id_empleado')
     .single();
   if (errEmp) {
-    await supabase.from('persona').delete().eq('id_persona', idPersona);
+    // Sin delete compensatorio: la persona puede ser compartida con cliente.
     throw new Error(`DB_CREATE_FAIL: ${errEmp.message}`);
   }
   const creado = await obtenerPersonal((emp as { id_empleado: number }).id_empleado);

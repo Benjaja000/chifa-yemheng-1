@@ -47,7 +47,8 @@ export async function listarCategorias(q: CategoriaQuery): Promise<CategoriaList
       'id_categoriaproducto, n_categoriaproducto, descripcion, area_despacho, orden_carta, f_creacion, estado',
       { count: 'exact' },
     )
-    .order('orden_carta', { ascending: true })
+    .order('f_creacion', { ascending: false })
+    .order('id_categoriaproducto', { ascending: false })
     .range(desde, hasta);
 
   if (q.nombre) {

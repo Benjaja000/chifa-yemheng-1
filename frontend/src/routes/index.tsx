@@ -4,6 +4,7 @@ import { ClientesPage } from '../features/admin/clientes/clientes-page';
 import { DashboardPage } from '../features/admin/dashboard/dashboard-page';
 import { MesasPage } from '../features/admin/mesas/mesas-page';
 import { PersonalPage } from '../features/admin/personal/personal-page';
+import { PersonasPage } from '../features/admin/personas/personas-page';
 import { ProductosPage } from '../features/admin/productos/productos-page';
 import { LoginPage } from '../features/auth/login/login-page';
 import { ClienteLoginPage } from '../features/cliente/login/cliente-login-page';
@@ -73,6 +74,14 @@ export const router = createBrowserRouter([
         element: (
           <RoleGuard roles={['ADMINISTRADOR', 'GERENTE']}>
             <PersonalPage />
+          </RoleGuard>
+        ),
+      },
+      {
+        path: 'personas',
+        element: (
+          <RoleGuard roles={['ADMINISTRADOR', 'GERENTE']}>
+            <PersonasPage />
           </RoleGuard>
         ),
       },

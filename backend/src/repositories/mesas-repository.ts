@@ -67,7 +67,8 @@ export async function listarMesas(q: MesaQuery): Promise<MesaLista> {
   let query = supabase
     .from('mesa')
     .select(SELECT, { count: 'exact' })
-    .order('id_mesa', { ascending: true })
+    .order('feccre', { ascending: false })
+    .order('id_mesa', { ascending: false })
     .range(desde, hasta);
 
   if (q.ambiente !== undefined) {
@@ -103,20 +104,42 @@ export async function obtenerMesa(id: number): Promise<Mesa | null> {
   return mapRow(data as unknown as MesaRow);
 }
 
-/** Resuelve una mesa por su `codigo_qr` exacto (para validar QR escaneado). */
+/**
+ * Resuelve una mesa por su QR escaneado. Acepta el código corto (`01-AbCd1234`,
+ * lo que viaja en `?mesa=`), el `codigo_qr` completo (`yemheng.pe/m/...`) e
+ * incluso la URL escaneada entera (`.../cliente/login?mesa=...`).
+ * Las mesas inactivas (`estado <> 'A'`) resuelven a `null` (→ 404 QR_INVALIDO):
+ * su QR no da acceso.
+ */
 export async function obtenerPorQr(codigo: string): Promise<Mesa | null> {
-  const { data, error } = await supabase
-    .from('mesa')
-    .select(SELECT)
-    .eq('codigo_qr', codigo.trim())
-    .maybeSingle();
+  let limpio = codigo.trim();
+  if (!limpio) {
+    return null;
+  }
+  // Si pegaron la URL completa, extraer ?mesa=...
+  const mesaParam = limpio.match(/[?&]mesa=([^&#\s]+)/)?.[1];
+  if (mesaParam) {
+    limpio = decodeURIComponent(mesaParam);
+  }
+  // Si viene con /m/, quedarse con la parte final (corta query/hash/espacios).
+  const trasM = limpio.split('/m/').pop() ?? limpio;
+  const corto = trasM.split(/[?#\s]/)[0]?.trim() ?? '';
+  if (!corto) {
+    return null;
+  }
+  const candidatos = [...new Set([limpio, corto, `yemheng.pe/m/${corto}`])];
+  const { data, error } = await supabase.from('mesa').select(SELECT).in('codigo_qr', candidatos).maybeSingle();
   if (error) {
     throw new Error(`DB_GET_FAIL: ${error.message}`);
   }
   if (!data) {
     return null;
   }
-  return mapRow(data as unknown as MesaRow);
+  const mesa = mapRow(data as unknown as MesaRow);
+  if (mesa.estado !== 'A') {
+    return null;
+  }
+  return mesa;
 }
 
 export async function existeNumero(ambienteId: number, numero: string, excluirId?: number): Promise<boolean> {
@@ -273,7 +296,8 @@ export async function listarAmbientes(): Promise<Ambiente[]> {
   const { data, error } = await supabase
     .from('ambiente')
     .select('id_ambiente, n_ambiente, descripcion, piso, estado')
-    .order('id_ambiente', { ascending: true });
+    .order('feccre', { ascending: false })
+    .order('id_ambiente', { ascending: false });
   if (error) {
     throw new Error(`DB_LIST_FAIL: ${error.message}`);
   }

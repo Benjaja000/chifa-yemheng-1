@@ -36,6 +36,7 @@ const GRUPOS: Grupo[] = [
   {
     titulo: 'Gestión de personas',
     items: [
+      { to: '/admin/personas', icono: 'person_search', label: 'Personas' },
       { to: '/admin/personal', icono: 'badge', label: 'Personal' },
       { to: '/admin/clientes', icono: 'groups', label: 'Clientes' },
     ],

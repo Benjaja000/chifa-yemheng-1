@@ -11,6 +11,7 @@ import { healthRouter } from './routes/health.js';
 import { maestrosRouter } from './routes/maestros.js';
 import { mesasRouter } from './routes/mesas.js';
 import { personalRouter } from './routes/personal.js';
+import { personasRouter } from './routes/personas.js';
 import { productosRouter } from './routes/productos.js';
 
 export function createApp() {
@@ -34,6 +35,7 @@ export function createApp() {
   app.use('/api/v1/clientes', clientesRouter);
   app.use('/api/v1/dashboard', dashboardRouter);
   app.use('/api/v1/personal', personalRouter);
+  app.use('/api/v1/personas', personasRouter);
   app.use('/api/v1/productos', productosRouter);
 
   app.use(notFoundHandler);

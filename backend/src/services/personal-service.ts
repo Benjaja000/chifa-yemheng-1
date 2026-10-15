@@ -11,10 +11,10 @@ import {
   auditar,
   cambiarEstadoPersonal,
   crearPersonal,
-  existeDocumento,
   listarPersonal,
   obtenerPersonal,
 } from '../repositories/personal-repository.js';
+import { rolesActivosPorDoc } from '../repositories/personas-repository.js';
 
 export function listarService(q: PersonalQuery): Promise<PersonalLista> {
   return listarPersonal(q);
@@ -37,8 +37,14 @@ export async function crearService(
   if (input.tipoDoc === 'DNI' && !/^\d{8}$/.test(input.documento)) {
     throw new PersonalError('VALIDATION_ERROR');
   }
-  if (await existeDocumento(input.tipoDoc, input.documento)) {
+  // Un rol activo a la vez: si ya es empleado activo → YA_EXISTE;
+  // si es cliente activo → debe convertirse desde Personas.
+  const roles = await rolesActivosPorDoc(input.tipoDoc, input.documento);
+  if (roles.empleadoId !== null) {
     throw new PersonalError('YA_EXISTE');
+  }
+  if (roles.clienteId !== null) {
+    throw new PersonalError('YA_ES_CLIENTE_ACTIVO');
   }
   const per = await crearPersonal(input, logeo, pc);
   await auditar(idUsuario, 'CREAR_EMPLEADO', per.id, `${per.nombres} ${per.apPaterno}`);

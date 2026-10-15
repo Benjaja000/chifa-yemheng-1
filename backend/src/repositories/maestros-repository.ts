@@ -18,7 +18,8 @@ async function listar(
     .from(tabla)
     .select(cols)
     .eq('estado', 'A')
-    .order(idCol, { ascending: true });
+    .order('feccre', { ascending: false })
+    .order(idCol, { ascending: false });
   if (error) {
     throw new Error(`DB_LIST_FAIL: ${error.message}`);
   }

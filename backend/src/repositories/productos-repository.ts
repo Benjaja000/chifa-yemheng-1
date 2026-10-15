@@ -63,7 +63,8 @@ export async function listarProductos(q: ProductoQuery): Promise<ProductoLista> 
   let query = supabase
     .from('producto')
     .select(SELECT, { count: 'exact' })
-    .order('id_producto', { ascending: true })
+    .order('feccre', { ascending: false })
+    .order('id_producto', { ascending: false })
     .range(desde, hasta);
 
   if (q.nombre) {

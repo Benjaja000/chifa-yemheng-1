@@ -144,15 +144,6 @@ export async function obtenerCliente(id: number): Promise<Cliente | null> {
   return mapRow(data as unknown as ClienteRow);
 }
 
-async function idTipoIdentidad(nombre: string): Promise<number | null> {
-  const { data } = await supabase
-    .from('tipo_identidad')
-    .select('id_tipoidentidad')
-    .eq('n_tipoidentidad', nombre)
-    .maybeSingle();
-  return (data as { id_tipoidentidad: number } | null)?.id_tipoidentidad ?? null;
-}
-
 export async function existeDocumento(tipo: TipoCliente, doc: string): Promise<boolean> {
   if (tipo === 'N') {
     const { count, error } = await supabase
@@ -179,34 +170,50 @@ export async function crearCliente(input: ClienteCreate, usucre: string, pc = ''
   let idEmpresa: number | null = null;
 
   if (input.tipo === 'N') {
+    // Ficha única: reutiliza la persona si el documento ya existe (ej. era personal).
+    const { buscarPersonaPorDoc, esViolacionUnica, idTipoDoc } = await import('./personas-repository.js');
     const nombreTipo =
       input.tipoDoc === 'CE' ? 'CARNET EXTRANJERIA' : (input.tipoDoc ?? 'DNI');
-    const idTipo = await idTipoIdentidad(nombreTipo);
-    if (!idTipo) {
-      throw new Error('DB_REF_FAIL: sin TIPO_IDENTIDAD');
+    const existente = await buscarPersonaPorDoc(nombreTipo, input.dni);
+    if (existente) {
+      idPersona = existente.id;
+    } else {
+      const idTipo = await idTipoDoc(nombreTipo);
+      if (!idTipo) {
+        throw new Error('DB_REF_FAIL: sin TIPO_IDENTIDAD');
+      }
+      const { data, error } = await supabase
+        .from('persona')
+        .insert({
+          id_tipoidentidad: idTipo,
+          n_documento: input.dni,
+          nombre: input.nombres,
+          ap_paterno: input.apPaterno || null,
+          ap_materno: input.apMaterno || null,
+          f_nacimiento: input.fNacimiento ?? null,
+          celular: input.telefono,
+          email: input.correo || null,
+          genero: input.genero ?? null,
+          direccion: input.direccion || null,
+          id_distrito: input.distritoId ?? null,
+          ...createAudit(usucre, pc),
+        })
+        .select('id_persona')
+        .single();
+      if (error) {
+        if (esViolacionUnica(error)) {
+          const reintento = await buscarPersonaPorDoc(nombreTipo, input.dni);
+          if (reintento) {
+            idPersona = reintento.id;
+          }
+        }
+        if (idPersona === null) {
+          throw new Error(`DB_CREATE_FAIL: ${error.message}`);
+        }
+      } else {
+        idPersona = (data as { id_persona: number }).id_persona;
+      }
     }
-    const { data, error } = await supabase
-      .from('persona')
-      .insert({
-        id_tipoidentidad: idTipo,
-        n_documento: input.dni,
-        nombre: input.nombres,
-        ap_paterno: input.apPaterno || null,
-        ap_materno: input.apMaterno || null,
-        f_nacimiento: input.fNacimiento ?? null,
-        celular: input.telefono,
-        email: input.correo || null,
-        genero: input.genero ?? null,
-        direccion: input.direccion || null,
-        id_distrito: input.distritoId ?? null,
-        ...createAudit(usucre, pc),
-      })
-      .select('id_persona')
-      .single();
-    if (error) {
-      throw new Error(`DB_CREATE_FAIL: ${error.message}`);
-    }
-    idPersona = (data as { id_persona: number }).id_persona;
   } else {
     const { data, error } = await supabase
       .from('empresa')

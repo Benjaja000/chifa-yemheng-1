@@ -29,7 +29,10 @@ context: |
   (cifras, nombres, pcts, fallbacks inventados): toda cifra viene de BD/Supabase; en vacío/error
   devolver 0/[] con estado vacío en UI, nunca inventar (skeletons visuales sí permitidos). Convenciones: carpetas/archivos kebab-case,
   clases/componentes/interfaces PascalCase, vars/funcs camelCase, consts UPPER_SNAKE_CASE,
-  TS strict + noAny. Detalle largo: openspec/docs/general/00-stack-tecnologico.md.
+  TS strict + noAny. Orden listado universal: todo listar* de cualquier tabla ordena nuevo->antiguo
+  por defecto con feccre/f_creacion/f_registro DESC + id_* DESC como desempate; prohibido
+  ascending:true u orden_carta/orden ASC en listados; solo se permite otro orden con parametro
+  explicito del usuario (ej. clientes alpha/puntos). Detalle largo: openspec/docs/general/00-stack-tecnologico.md.
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.

@@ -15,6 +15,7 @@ import {
   listarClientes,
   obtenerCliente,
 } from '../repositories/clientes-repository.js';
+import { rolesActivosPorDoc } from '../repositories/personas-repository.js';
 
 export function listarService(q: ClienteQuery): Promise<ClienteLista> {
   return listarClientes(q);
@@ -35,7 +36,17 @@ export async function crearService(
   pc = '',
 ): Promise<Cliente> {
   const doc = input.tipo === 'N' ? input.dni : input.ruc;
-  if (await existeDocumento(input.tipo, doc)) {
+  if (input.tipo === 'N') {
+    // Un rol activo a la vez: si ya es cliente activo → YA_EXISTE;
+    // si es empleado activo → debe convertirse desde Personas.
+    const roles = await rolesActivosPorDoc(input.tipoDoc ?? 'DNI', doc);
+    if (roles.clienteId !== null) {
+      throw new ClienteError('YA_EXISTE');
+    }
+    if (roles.empleadoId !== null) {
+      throw new ClienteError('YA_ES_EMPLEADO_ACTIVO');
+    }
+  } else if (await existeDocumento(input.tipo, doc)) {
     throw new ClienteError('YA_EXISTE');
   }
   const cli = await crearCliente(input, logeo, pc);

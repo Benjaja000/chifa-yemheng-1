@@ -37,7 +37,7 @@ export interface PersonalLista {
   total: number;
 }
 
-export type PersonalErrorCode = 'YA_EXISTE' | 'NOT_FOUND' | 'VALIDATION_ERROR';
+export type PersonalErrorCode = 'YA_EXISTE' | 'YA_ES_CLIENTE_ACTIVO' | 'NOT_FOUND' | 'VALIDATION_ERROR';
 
 export class PersonalError extends Error {
   readonly code: PersonalErrorCode;

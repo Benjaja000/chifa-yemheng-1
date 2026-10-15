@@ -25,6 +25,7 @@ FROM (VALUES
   ('CLIENTE',         'Zona cliente QR / reservas / delivery',   100),
   ('RESERVAS',        'Reservas de mesa 3 canales',              110),
   ('PERSONAL',        'Recursos humanos (empleados)',            120),
+  ('PERSONAS',        'Ficha única de personas y asignación de rol', 125),
   ('INVENTARIO',      'Stock de insumos y kardex',               130),
   ('RECETAS',         'Recetas plato → insumos',                 140),
   ('REPORTES',        'Reportes y tableros',                     150),
@@ -51,6 +52,10 @@ FROM (VALUES
   ('PERSONAL',  'Ver personal',             'EMP_VER',             'Listar empleados (recursos-humanos.md)'),
   ('PERSONAL',  'Crear personal',           'EMP_CREAR',           'Crear PERSONA+EMPLEADO (recursos-humanos.md)'),
   ('PERSONAL',  'Editar personal',          'EMP_EDITAR',          'Editar/activar personal (recursos-humanos.md)'),
+  -- PERSONAS (add-modulo-personas: ficha única + asignación exclusiva de rol)
+  ('PERSONAS',  'Ver personas',             'PER_VER',             'Listar/buscar fichas de persona'),
+  ('PERSONAS',  'Crear personas',           'PER_CREAR',           'Crear ficha base y editar datos compartidos'),
+  ('PERSONAS',  'Asignar rol',              'PER_ASIGNAR',         'Hacer personal / hacer cliente / convertir (un rol activo a la vez)'),
   -- INVENTARIO (legitima huérfanos de roles.md)
   ('INVENTARIO','Ver inventario',           'INV_VER',             'Ver stock insumos (inventario.md)'),
   ('INVENTARIO','Ajustar inventario',       'INV_CREAR',           'Registrar movimientos E/S (inventario.md)'),

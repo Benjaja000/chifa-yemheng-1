@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { Maestro } from '../../../services/maestros';
 import { DistritoPicker } from '../../../components/distrito-picker';
 import {
@@ -222,7 +223,9 @@ export function ClientesPage() {
       setFormError(
         codigo === 'YA_EXISTE'
           ? 'Ya existe un cliente con ese documento.'
-          : 'No se pudo guardar. Reintente.',
+          : codigo === 'YA_ES_EMPLEADO_ACTIVO'
+            ? 'Esta persona ya es personal activo (un rol activo a la vez). Dale de baja allá antes de hacerla cliente.'
+            : 'No se pudo guardar. Reintente.',
       );
     } finally {
       setGuardando(false);
@@ -254,13 +257,22 @@ export function ClientesPage() {
             Directorio de comensales, corporativos y Club Dinastía.
           </p>
         </div>
-        <button
-          onClick={abrirNuevo}
-          className="flex shrink-0 items-center gap-2 rounded-xl bg-[#A61E22] px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[#7F1518]"
-        >
-          <span className="material-symbols-outlined text-[20px]">person_add</span>
-          <span>Nuevo Cliente</span>
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            to="/admin/personas"
+            className="flex items-center gap-2 rounded-xl border border-[#A61E22] px-5 py-2.5 text-sm font-semibold text-[#A61E22] shadow-sm transition-all hover:bg-[#A61E22]/10"
+          >
+            <span className="material-symbols-outlined text-[20px]">person_search</span>
+            <span>Ir a Personas</span>
+          </Link>
+          <button
+            onClick={abrirNuevo}
+            className="flex items-center gap-2 rounded-xl bg-[#A61E22] px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[#7F1518]"
+          >
+            <span className="material-symbols-outlined text-[20px]">person_add</span>
+            <span>Nuevo Cliente</span>
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

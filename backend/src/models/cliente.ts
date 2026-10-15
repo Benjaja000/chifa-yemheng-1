@@ -31,7 +31,12 @@ export interface ClienteLista {
   total: number;
 }
 
-export type ClienteErrorCode = 'YA_EXISTE' | 'NOT_FOUND' | 'TIPO_INMUTABLE' | 'VALIDATION_ERROR';
+export type ClienteErrorCode =
+  | 'YA_EXISTE'
+  | 'YA_ES_EMPLEADO_ACTIVO'
+  | 'NOT_FOUND'
+  | 'TIPO_INMUTABLE'
+  | 'VALIDATION_ERROR';
 
 export class ClienteError extends Error {
   readonly code: ClienteErrorCode;
