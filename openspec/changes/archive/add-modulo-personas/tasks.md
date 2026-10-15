@@ -7,4 +7,4 @@
 - [x] T5 Backend: seed `PER_VER/CREAR/ASIGNAR` en `permiso_modulo.sql` + `typecheck` limpio
 - [x] T6 Frontend: `features/admin/personas/` (service, types, page) + ruta `/admin/personas` + menú shell
 - [x] T7 Frontend: avisos cruzados en PersonalPage/ClientesPage + `tsc` + `vite build`
-- [ ] T8 Verificación manual pendiente (con API corriendo): alta→asignar→409 cruzado→convertir→sin duplicados; ejecutar `permiso_modulo.sql` en BD para activar PER_*
+- [x] T8 Verificación 2026-10-15: PER_VER/CREAR/ASIGNAR existen en BD; UI recortada a registro (sin ficha/buscador/roles) el 2026-10-15
