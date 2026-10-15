@@ -438,3 +438,6 @@ Given un movimiento sin concepto
 When intenta registrarse
 Then el sistema valida el campo obligatorio
 ```
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

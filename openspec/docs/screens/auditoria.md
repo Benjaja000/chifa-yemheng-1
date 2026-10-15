@@ -481,3 +481,7 @@ Given un LOGIN cliente Gmail
 When consulta AUDITORIA
 Then existe fila Accion='LOGIN' con CLIENTE/EMAIL e IP
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

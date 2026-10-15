@@ -597,3 +597,6 @@ Given el efectivo fÃ­sico coincide con el sistema
 When se registra el arqueo
 Then el resultado se marca como Cuadrado
 ```
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

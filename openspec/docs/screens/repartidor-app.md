@@ -308,3 +308,7 @@ Given un E
 When reviso ubicaciÃ³n
 Then ya no se comparte (corte en E)
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

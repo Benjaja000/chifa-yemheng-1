@@ -516,3 +516,7 @@ Footer: Uso interno · Toda acción queda auditada
 
 > Tono llamativo-orientado a personal (variante B + final A).
 > Prohibido: claims de cifrado/SSL, poesía gastronómica al comensal.
+
+## Estado de implementaci�n
+
+**Estado:** implementada (ruta en `frontend/src/routes/index.tsx`, verificada 2026-10-15).

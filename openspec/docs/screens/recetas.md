@@ -340,3 +340,7 @@ Given una receta con insumo duplicado
 When guarda
 Then rechaza por UQ
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

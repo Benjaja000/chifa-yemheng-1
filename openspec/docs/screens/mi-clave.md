@@ -340,3 +340,7 @@ Given nueva débil o confirmación distinta
 When envía el form
 Then ve error de política sin llamar al backend
 ```
+
+## Estado de implementaci�n
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

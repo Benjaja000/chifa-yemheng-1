@@ -742,3 +742,6 @@ Given un pedido ya rendido
 When se intenta rendir nuevamente
 Then el sistema rechaza la operaciÃ³n
 ```
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

@@ -759,3 +759,6 @@ Given un usuario sin permiso USR_EDITAR
 When intenta modificar un usuario
 Then el sistema deniega la operaciÃ³n
 ```
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

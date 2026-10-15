@@ -735,3 +735,6 @@ Given un usuario sin permiso VEN_COBRAR
 When intenta procesar una venta
 Then el sistema deniega la operaciÃ³n
 ```
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

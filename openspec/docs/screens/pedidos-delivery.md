@@ -410,3 +410,7 @@ Given dos repartidores, uno ocupado
 When asigna
 Then propone el primer disponible (BR-ACC-041)
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

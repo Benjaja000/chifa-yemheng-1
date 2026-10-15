@@ -354,3 +354,7 @@ Given un empleado sin usuario
 When pulsa Crear usuario
 Then navega a usuarios.md con empleado precargado
 ```
+
+## Estado de implementación
+
+**Estado:** implementada (ruta en `frontend/src/routes/index.tsx`, verificada 2026-10-15).

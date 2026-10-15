@@ -813,3 +813,6 @@ Given un usuario sin permiso ROL_PERMISOS
 When intenta modificar la matriz
 Then el sistema deniega la operaciÃ³n
 ```
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

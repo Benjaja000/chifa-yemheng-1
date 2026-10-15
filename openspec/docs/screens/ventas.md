@@ -1005,3 +1005,6 @@ Given una venta QR compartida
 When consulta el detalle
 Then visualiza los participantes asociados a la mesa
 ```
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

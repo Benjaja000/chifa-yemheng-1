@@ -859,3 +859,6 @@ Given una reserva atendida
 When intenta anularla
 Then el sistema rechaza la operaciÃ³n
 ```
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

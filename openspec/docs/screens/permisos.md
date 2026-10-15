@@ -440,3 +440,7 @@ Given la matriz roles Ã— permisos
 When se consulta un permiso
 Then el conteo de roles coincide con ROL_PERMISO Concedido='S'
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

@@ -504,3 +504,6 @@ Given una categoría asociada a productos
 When el usuario intenta desactivarla
 Then el sistema solicita confirmación antes de continuar
 ```
+## Estado de implementaci�n
+
+**Estado:** implementada (ruta en `frontend/src/routes/index.tsx`, verificada 2026-10-15).

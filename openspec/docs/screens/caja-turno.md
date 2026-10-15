@@ -419,3 +419,7 @@ Given cierre con diferencia ≠ 0
 When el cajero declara sin supervisor
 Then el cierre queda pendiente de validación (BR-ACC-046)
 ```
+
+## Estado de implementaci�n
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

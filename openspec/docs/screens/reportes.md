@@ -1028,3 +1028,6 @@ Given datos de caja
 When consulta arqueos
 Then visualiza diferencias y estados correctamente
 ```
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

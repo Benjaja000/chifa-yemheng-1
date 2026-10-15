@@ -332,3 +332,7 @@ Given un ajuste registrado
 When consulta kardex
 Then ve el movimiento con usuario y saldo resultante
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

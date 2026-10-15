@@ -466,3 +466,7 @@ Given una comanda presencial
 When pide la cuenta desde el POS
 Then pasa a POR_COBRAR y solo el cajero puede cobrar
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

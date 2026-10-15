@@ -854,3 +854,6 @@ Given una reserva pendiente
 When el usuario la anula
 Then el sistema registra la anulaciÃ³n y actualiza el estado
 ```
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

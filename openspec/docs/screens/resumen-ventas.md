@@ -372,3 +372,7 @@ Given filtros por rango
 When cambia fechas
 Then KPIs y top productos recalculan
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

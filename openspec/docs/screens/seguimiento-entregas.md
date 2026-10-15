@@ -348,3 +348,7 @@ Given un R en efectivo
 When confirma entrega
 Then queda marcado por rendir en caja
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

@@ -831,3 +831,6 @@ Then el sistema deniega la operación
 ```gherkin
 Given existen pedidos en preparación
 When el tablero se refresca
+## Estado de implementaci�n
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

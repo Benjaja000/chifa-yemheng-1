@@ -786,3 +786,6 @@ Given un producto con stock menor al mÃ­nimo
 When se visualiza el listado
 Then el sistema muestra una alerta visual de stock bajo
 ```
+## Estado de implementación
+
+**Estado:** implementada (ruta en `frontend/src/routes/index.tsx`, verificada 2026-10-15).

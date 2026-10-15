@@ -163,3 +163,7 @@ Given delivery ajeno
 When intento verlo
 Then recibo 403
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

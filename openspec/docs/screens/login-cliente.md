@@ -430,3 +430,7 @@ Given un primer login Gmail
 When el EMAIL no existe en PERSONA
 Then se crea PERSONA + CLIENTE N y se audita
 ```
+
+## Estado de implementación
+
+**Estado:** implementada (ruta en `frontend/src/routes/index.tsx`, verificada 2026-10-15).

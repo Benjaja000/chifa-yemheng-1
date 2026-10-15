@@ -810,3 +810,6 @@ Given un pedido con incidencia
 When el repartidor registra el problema
 Then el sistema almacena la incidencia y genera auditorÃ­a
 ```
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

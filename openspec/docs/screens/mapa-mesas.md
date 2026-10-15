@@ -473,3 +473,7 @@ Given una comanda en POR COBRAR
 When mira el mapa
 Then la mesa figura POR_COBRAR y no admite nuevos Ã­tems
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

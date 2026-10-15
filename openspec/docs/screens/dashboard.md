@@ -423,3 +423,7 @@ AUDITORIA
 
 ---
 
+
+## Estado de implementación
+
+**Estado:** parcial (/admin índice sí; subrutas /admin/auditoria, /admin/caja, /admin/reservas, /admin/ventas no) (verificado 2026-10-15).

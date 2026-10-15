@@ -523,3 +523,7 @@ Given una comanda compartida Mesa 12
 When Juan, María y Carlos agregan productos
 Then todo consolida en una única comanda y un total
 ```
+
+## Estado de implementaci�n
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

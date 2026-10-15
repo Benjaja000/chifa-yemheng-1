@@ -123,3 +123,7 @@ Given cliente logueado con Gmail
 When abre /cliente/inicio
 Then ve su nombre y 4 accesos
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

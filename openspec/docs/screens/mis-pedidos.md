@@ -907,3 +907,6 @@ Given un pedido delivery anterior
 When selecciona Repetir Pedido
 Then el sistema permite iniciar un nuevo pedido con los mismos productos
 ```
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

@@ -186,3 +186,7 @@ Given intenta efectivo por web
 When confirma
 Then el sistema rechaza (solo telÃ©fono)
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

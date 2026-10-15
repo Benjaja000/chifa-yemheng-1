@@ -320,3 +320,7 @@ Given un producto que se agota
 When cocina lo marca A o Disponible N
 Then desaparece de la carta en siguiente refresh
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

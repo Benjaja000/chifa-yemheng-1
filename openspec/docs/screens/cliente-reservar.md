@@ -227,3 +227,7 @@ Given reserva P propia
 When la cancela
 Then pasa a X
 ```
+
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

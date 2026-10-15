@@ -904,3 +904,6 @@ Given un cliente con historial de compras
 When se consulta su detalle
 Then el sistema muestra pedidos, reservas y consumo acumulado
 ```
+## Estado de implementación
+
+**Estado:** implementada (ruta en `frontend/src/routes/index.tsx`, verificada 2026-10-15).

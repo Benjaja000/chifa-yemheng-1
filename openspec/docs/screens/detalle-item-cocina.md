@@ -402,3 +402,7 @@ Given un ítem en S
 When intenta revertir a E
 Then el sistema rechaza transición ilegal
 ```
+
+## Estado de implementaci�n
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

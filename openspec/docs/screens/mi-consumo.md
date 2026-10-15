@@ -923,3 +923,6 @@ Given una mesa POR COBRAR
 When un participante intenta agregar productos
 Then el sistema rechaza la operaciÃ³n
 ```
+## Estado de implementación
+
+**Estado:** pendiente (sin ruta en el router al 2026-10-15).

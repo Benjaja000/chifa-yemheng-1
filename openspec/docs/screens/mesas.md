@@ -557,3 +557,6 @@ POST /api/ambientes
 
 ```http
 PUT /
+## Estado de implementación
+
+**Estado:** parcial (/admin/mesas sí; /cliente/mesa/{id} no) (verificado 2026-10-15).
