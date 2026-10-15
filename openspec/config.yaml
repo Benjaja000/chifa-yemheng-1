@@ -23,7 +23,7 @@ context: |
   Módulos (7): seguridad, mesas-atencion, cocina, caja-ventas, delivery, catalogos-admin, zona-cliente.
   Reglas madre: BR-RES-052 (reserva online P sin mesa), BR-ACC-055 (NC solo supervisor),
   BR-DER-030 (pago único), BR-RES-015 (anular solo no-facturado).
-  GPS opcional con fallback manual (BR-GPS-001/002). Seed permisos: openspec/database/permiso_modulo.sql.
+  GPS opcional con fallback manual (BR-GPS-001/002). Seed permisos: openspec/database/inserciones/permiso-modulo.sql.
   Prohibido: UUID, Supabase Auth, created_at/deleted_at, reglas paralelas sin código BR-* del catálogo
   (openspec/docs/REGLAS_DE_NEGOCIO.md). Prohibido hardcodear datos de negocio en backend/frontend
   (cifras, nombres, pcts, fallbacks inventados): toda cifra viene de BD/Supabase; en vacío/error

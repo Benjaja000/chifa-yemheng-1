@@ -5,7 +5,7 @@
 --           icono, orden, estado)
 --         public.permiso(id_permiso IDENTITY, id_modulo,
 --           n_permiso, clave, descripcion, estado)
--- Uso: psql -d RESTAURANTEV3 -f openspec/database/permiso_modulo.sql
+-- Uso: psql -d RESTAURANTEV3 -f openspec/database/inserciones/permiso-modulo.sql
 -- Idempotente: solo inserta lo que no existe (por n_modulo/clave).
 -- =============================================================
 

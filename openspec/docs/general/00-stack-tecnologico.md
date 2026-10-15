@@ -102,8 +102,8 @@ roles: [admin, gerente, supervisor, cajero, mozo, cocinero, repartidor, cliente]
 # 8 obligatorios: supervisor valida caja/NC, repartidor opera delivery.
 ```
 
-Seed de permisos: `openspec/database/permiso_modulo.sql`
-(idempotente; ejecutar con `psql -d RESTAURANTEV3 -f openspec/database/permiso_modulo.sql`).
+Seed de permisos: `openspec/database/inserciones/permiso-modulo.sql`
+(idempotente; ejecutar con `psql -d RESTAURANTEV3 -f openspec/database/inserciones/permiso-modulo.sql`).
 
 ---
 

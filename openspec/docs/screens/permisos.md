@@ -338,11 +338,11 @@ ROL (solo lectura para conteo)
 ## Seed
 
 ```text
-openspec/database/permiso_modulo.sql — alta idempotente de MODULO (16)
+openspec/database/inserciones/permiso-modulo.sql — alta idempotente de MODULO (16)
 + PERMISO (~30 claves: AUD_VER, PED_*, EMP_*, INV_*, REC_*,
 CAJA_APERTURA/CIERRE, DELIVERY_*, CLIENTE_*, RES_*, VEN_NOTACREDITO,
 SAL_RESERVA, PED_DESCUENTO). Ejecutar con:
-psql -d RESTAURANTEV3 -f openspec/database/permiso_modulo.sql
+psql -d RESTAURANTEV3 -f openspec/database/inserciones/permiso-modulo.sql
 ```
 
 ---
