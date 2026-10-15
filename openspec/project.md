@@ -1,0 +1,25 @@
+# Chifa Yemheng — contexto del proyecto (OpenSpec)
+
+Project: sistema-restaurante — Gestión de chifa (reservas 3 canales, QR compartido,
+delivery, caja/facturación, auditoría). BD RESTAURANTEV3 (Supabase Postgres).
+Stack: React + TypeScript + Vite + TailwindCSS + React Router + Hook Form + TanStack Query
+/ Express + TypeScript MVC (routes/controllers/services/repositories/models/middlewares)
++ Zod. Flow: React → Express API (/api/v1) → Supabase Postgres. Google Stitch: solo diseño.
+BD (intocable): PKs integer-identity (id_* GENERATED AS IDENTITY, NO UUID);
+snake_case; auditoría usucre/pccre/feccre/usumod/pcmod/fecmod + estado A/I/E (NO created_at/deleted_at).
+Auth propio: personal USP_LOGIN sha256 + bloqueo 3 intentos (BR-ACC-035);
+cliente Gmail OAuth → CLIENTE (BR-ACC-044); RBAC por tablas ROL/PERMISO (BR-ACC-036).
+Roles (8): admin, gerente, supervisor, cajero, mozo, cocinero, repartidor, cliente.
+Módulos (7): seguridad, mesas-atencion, cocina, caja-ventas, delivery, catalogos-admin, zona-cliente.
+Reglas madre: BR-RES-052 (reserva online P sin mesa), BR-ACC-055 (NC solo supervisor),
+BR-DER-030 (pago único), BR-RES-015 (anular solo no-facturado).
+GPS opcional con fallback manual (BR-GPS-001/002). Seed permisos: openspec/database/inserciones/permiso-modulo.sql.
+Prohibido: UUID, Supabase Auth, created_at/deleted_at, reglas paralelas sin código BR-* del catálogo
+(openspec/docs/REGLAS_DE_NEGOCIO.md). Prohibido hardcodear datos de negocio en backend/frontend
+(cifras, nombres, pcts, fallbacks inventados): toda cifra viene de BD/Supabase; en vacío/error
+devolver 0/[] con estado vacío en UI, nunca inventar (skeletons visuales sí permitidos). Convenciones: carpetas/archivos kebab-case,
+clases/componentes/interfaces PascalCase, vars/funcs camelCase, consts UPPER_SNAKE_CASE,
+TS strict + noAny. Orden listado universal: todo listar* de cualquier tabla ordena nuevo->antiguo
+por defecto con feccre/f_creacion/f_registro DESC + id_* DESC como desempate; prohibido
+ascending:true u orden_carta/orden ASC en listados; solo se permite otro orden con parametro
+explicito del usuario (ej. clientes alpha/puntos). Detalle largo: openspec/docs/general/00-stack-tecnologico.md.
