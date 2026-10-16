@@ -7,6 +7,8 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
   JWT_SECRET: z.string().min(16),
   DATABASE_URL: z.string().min(1).optional(),
+  FACTILIZA_TOKEN: z.string().min(10).optional(),
+  FACTILIZA_BASE_URL: z.string().url().default('https://api.factiliza.com/v1'),
 });
 
 export const env = envSchema.parse(process.env);

@@ -5,7 +5,10 @@ import { DistritoPicker } from '../../../components/distrito-picker';
 import {
   actualizarCliente,
   cambiarEstadoCliente,
+  consultarDni,
+  consultarRuc,
   crearCliente,
+  distritoPorUbigeo,
   listarClientes,
   listarDistritos,
   listarTiposIdentidad,
@@ -82,6 +85,11 @@ export function ClientesPage() {
   const [cargandoDistritos, setCargandoDistritos] = useState(true);
   const [errorDistritos, setErrorDistritos] = useState<string | null>(null);
   const [tiposDoc, setTiposDoc] = useState<Maestro[]>([]);
+  /** Asistencia Factiliza: qué consulta está en curso, avisos y referencia de distrito. */
+  const [consultando, setConsultando] = useState<null | 'dni' | 'ruc'>(null);
+  const [avisoDoc, setAvisoDoc] = useState<string | null>(null);
+  const [avisoRuc, setAvisoRuc] = useState<string | null>(null);
+  const [refDistrito, setRefDistrito] = useState<string | null>(null);
 
   const cargar = async () => {
     setCargando(true);
@@ -129,6 +137,9 @@ export function ClientesPage() {
   const abrirNuevo = () => {
     setForm(VACIO);
     setFormError(null);
+    setAvisoDoc(null);
+    setAvisoRuc(null);
+    setRefDistrito(null);
     setModal({ editando: null });
   };
 
@@ -152,7 +163,76 @@ export function ClientesPage() {
       codigoCliente: c.codigoCliente ?? '',
     });
     setFormError(null);
+    setAvisoDoc(null);
+    setAvisoRuc(null);
+    setRefDistrito(null);
     setModal({ editando: c });
+  };
+
+  /** Preselecciona el distrito por ubigeo exacto (nunca por nombre). */
+  const aplicarUbigeo = async (ubigeo?: string) => {
+    if (!ubigeo) {
+      setRefDistrito('El documento no trae ubigeo: selecciona el distrito.');
+      return;
+    }
+    try {
+      const d = await distritoPorUbigeo(ubigeo);
+      setForm((f) => ({ ...f, distritoId: d.id }));
+      setRefDistrito(`Distrito según SUNAT: ${d.nombre}`);
+    } catch {
+      setRefDistrito(`Ubigeo SUNAT ${ubigeo} sin equivalencia local: selecciona el distrito.`);
+    }
+  };
+
+  const mensajeIdentidad = (codigo: string): string => {
+    switch (codigo) {
+      case 'DOCUMENTO_NO_ENCONTRADO':
+        return 'No se encontró en RENIEC/SUNAT. Completa los datos manualmente.';
+      case 'IDENTIDAD_NO_CONFIGURADA':
+        return 'Consulta externa no configurada en el servidor. Completa manualmente.';
+      case 'IDENTIDAD_NO_DISPONIBLE':
+        return 'El servicio de consulta no respondió. Intenta de nuevo o completa manualmente.';
+      default:
+        return 'No se pudo consultar. Completa los datos manualmente.';
+    }
+  };
+
+  /** Autocompleta identidad por documento (RENIEC para DNI, SUNAT para RUC). */
+  const onBuscarDocumento = async () => {
+    setConsultando(form.tipo === 'N' ? 'dni' : 'ruc');
+    setAvisoDoc(null);
+    setAvisoRuc(null);
+    try {
+      if (form.tipo === 'N') {
+        const d = await consultarDni(form.dni);
+        setForm((f) => ({
+          ...f,
+          dni: d.numero || f.dni,
+          nombres: d.nombres,
+          apPaterno: d.apPaterno,
+          apMaterno: d.apMaterno,
+          fNacimiento: d.fNacimiento ? d.fNacimiento.slice(0, 10) : f.fNacimiento,
+          genero: d.genero ?? f.genero,
+        }));
+        await aplicarUbigeo(d.ubigeo);
+      } else {
+        const r = await consultarRuc(form.ruc);
+        setForm((f) => ({
+          ...f,
+          ruc: r.numero || f.ruc,
+          razonSocial: r.razonSocial,
+          direccion: r.direccion ?? f.direccion,
+        }));
+        if (!r.habilitado) {
+          setAvisoRuc(`RUC ${r.estado || '—'} / ${r.condicion || '—'}: puede emitir comprobantes, pero no está activo y habido.`);
+        }
+        await aplicarUbigeo(r.ubigeo);
+      }
+    } catch (e) {
+      setAvisoDoc(mensajeIdentidad((e as Error).message));
+    } finally {
+      setConsultando(null);
+    }
   };
 
   const validar = (): string | null => {
@@ -602,20 +682,36 @@ export function ClientesPage() {
                       ))}
                     </select>
                   </label>
-                  <label className="flex flex-col gap-1.5 md:col-span-4">
+                  <div className="flex flex-col gap-1.5 md:col-span-4">
                     <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">
                       {form.tipoDoc === 'DNI' ? 'DNI (8)' : form.tipoDoc === 'CE' ? 'CE (9)' : 'Pasaporte'} *
                     </span>
-                    <input
-                      value={form.dni}
-                      maxLength={15}
-                      inputMode={form.tipoDoc === 'PASAPORTE' ? 'text' : 'numeric'}
-                      disabled={!!modal.editando}
-                      onChange={(e) => setForm({ ...form, dni: e.target.value })}
-                      placeholder={form.tipoDoc === 'DNI' ? '48291049' : form.tipoDoc === 'CE' ? '001234567' : 'AB123456'}
-                      className="rounded-xl bg-[#F5F5F5] px-3.5 py-2.5 font-mono text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22] disabled:opacity-60"
-                    />
-                  </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={form.dni}
+                        maxLength={15}
+                        inputMode={form.tipoDoc === 'PASAPORTE' ? 'text' : 'numeric'}
+                        disabled={!!modal.editando}
+                        onChange={(e) => setForm({ ...form, dni: e.target.value })}
+                        placeholder={form.tipoDoc === 'DNI' ? '48291049' : form.tipoDoc === 'CE' ? '001234567' : 'AB123456'}
+                        className="w-full rounded-xl bg-[#F5F5F5] px-3.5 py-2.5 font-mono text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22] disabled:opacity-60"
+                      />
+                      {!modal.editando && form.tipoDoc === 'DNI' && (
+                        <button
+                          type="button"
+                          onClick={() => void onBuscarDocumento()}
+                          disabled={consultando !== null || !/^\d{8}$/.test(form.dni.trim())}
+                          title="Consultar DNI en RENIEC"
+                          aria-label="Consultar DNI en RENIEC"
+                          className="shrink-0 rounded-xl bg-[#A61E22] px-3 py-2.5 text-white transition hover:bg-[#7F1518] disabled:opacity-40"
+                        >
+                          <span className="material-symbols-outlined text-lg">
+                            {consultando === 'dni' ? 'progress_activity' : 'search'}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <label className="flex flex-col gap-1.5 md:col-span-4">
                     <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">F. Nacimiento</span>
                     <input
@@ -677,18 +773,34 @@ export function ClientesPage() {
                       className="rounded-xl bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22]"
                     />
                   </label>
-                  <label className="flex flex-col gap-1.5 md:col-span-5">
+                  <div className="flex flex-col gap-1.5 md:col-span-5">
                     <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">RUC (11) *</span>
-                    <input
-                      value={form.ruc}
-                      maxLength={11}
-                      inputMode="numeric"
-                      disabled={!!modal.editando}
-                      onChange={(e) => setForm({ ...form, ruc: e.target.value })}
-                      placeholder="20601928371"
-                      className="rounded-xl bg-[#F5F5F5] px-3.5 py-2.5 font-mono text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22] disabled:opacity-60"
-                    />
-                  </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={form.ruc}
+                        maxLength={11}
+                        inputMode="numeric"
+                        disabled={!!modal.editando}
+                        onChange={(e) => setForm({ ...form, ruc: e.target.value })}
+                        placeholder="20601928371"
+                        className="w-full rounded-xl bg-[#F5F5F5] px-3.5 py-2.5 font-mono text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22] disabled:opacity-60"
+                      />
+                      {!modal.editando && (
+                        <button
+                          type="button"
+                          onClick={() => void onBuscarDocumento()}
+                          disabled={consultando !== null || !/^\d{11}$/.test(form.ruc.trim())}
+                          title="Consultar RUC en SUNAT"
+                          aria-label="Consultar RUC en SUNAT"
+                          className="shrink-0 rounded-xl bg-[#A61E22] px-3 py-2.5 text-white transition hover:bg-[#7F1518] disabled:opacity-40"
+                        >
+                          <span className="material-symbols-outlined text-lg">
+                            {consultando === 'ruc' ? 'progress_activity' : 'search'}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <label className="flex flex-col gap-1.5 md:col-span-12">
                     <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">
                       Nombre comercial
@@ -756,8 +868,25 @@ export function ClientesPage() {
                     error={errorDistritos}
                     onReintentar={() => void recargarDistritos()}
                   />
+                  {refDistrito && <p className="text-[11px] text-[#666666]">{refDistrito}</p>}
                 </div>
               </div>
+              {avisoRuc && (
+                <div
+                  role="status"
+                  className="rounded-xl border border-[#D4A017]/40 bg-[#D4A017]/10 p-3 text-xs text-[#7A5A00]"
+                >
+                  {avisoRuc}
+                </div>
+              )}
+              {avisoDoc && (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-[#DC2626]/30 bg-[#DC2626]/10 p-3 text-xs text-[#A61E22]"
+                >
+                  {avisoDoc}
+                </div>
+              )}
               <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   onClick={() => setModal(null)}

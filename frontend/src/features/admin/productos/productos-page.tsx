@@ -8,10 +8,22 @@ import {
   listarProductos,
 } from './productos-service';
 import type { CategoriaOpcion } from './productos-service';
-import { prefijoParaCategoria, requiereTiempo, siguienteCodigo, TIPOS, UNIDADES } from './productos-types';
+import { prefijoParaCategoria, requiereTiempo, siguienteCodigo, TIPOS } from './productos-types';
 import type { Producto, ProductoForm, TipoProducto } from './productos-types';
+import {
+  actualizarUnidad,
+  cambiarEstadoUnidad,
+  crearUnidad,
+  listarUnidades,
+  listarUnidadesActivas,
+} from './unidades-service';
+import type { Unidad, UnidadForm } from './unidades-types';
 
 const LIMITE = 20;
+
+type Tab = 'productos' | 'unidades';
+
+const VACIO_UNIDAD: UnidadForm = { nombre: '', abreviatura: '', codigoSunat: '', estado: 'A' };
 
 const VACIO: ProductoForm = {
   nombre: '',
@@ -50,24 +62,61 @@ export function ProductosPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [sugiriendo, setSugiriendo] = useState(false);
+  const [tab, setTab] = useState<Tab>('productos');
+  // --- Tab Unidades (UNIDAD_MEDIDA, API viva) ---
+  const [uPage, setUPage] = useState(1);
+  const [uNombre, setUNombre] = useState('');
+  const [uBusqueda, setUBusqueda] = useState('');
+  const [uEstado, setUEstado] = useState<'' | 'A' | 'I'>('');
+  const [unidades, setUnidades] = useState<Unidad[]>([]);
+  const [uTotal, setUTotal] = useState(0);
+  const [uCargando, setUCargando] = useState(true);
+  const [uError, setUError] = useState<string | null>(null);
+  const [unidadesSel, setUnidadesSel] = useState<{ id: number; nombre: string }[]>([]);
+  const [uModal, setUModal] = useState<null | { editando: Unidad | null }>(null);
+  const [uForm, setUForm] = useState<UnidadForm>(VACIO_UNIDAD);
+  const [uFormError, setUFormError] = useState<string | null>(null);
+  const [uGuardando, setUGuardando] = useState(false);
+  const [uConfirmar, setUConfirmar] = useState<Unidad | null>(null);
 
   const cargar = async () => {
     setCargando(true);
     setError(null);
     try {
-      const [res, cats] = await Promise.all([
+      const [res, cats, uni] = await Promise.all([
         listarProductos({ page, limit: LIMITE, nombre: busqueda, categoria, estado, disponible }),
         listarCategoriasActivas(),
+        listarUnidadesActivas(),
       ]);
       setDatos(res.data);
       setTotal(res.total);
       setCategorias(cats);
+      setUnidadesSel(uni);
     } catch {
       setError('No fue posible cargar los productos.');
     } finally {
       setCargando(false);
     }
   };
+
+  const cargarUnidades = async () => {
+    setUCargando(true);
+    setUError(null);
+    try {
+      const res = await listarUnidades({ page: uPage, limit: LIMITE, nombre: uBusqueda, estado: uEstado });
+      setUnidades(res.data);
+      setUTotal(res.total);
+    } catch {
+      setUError('No fue posible cargar las unidades.');
+    } finally {
+      setUCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    void cargarUnidades();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uPage, uBusqueda, uEstado]);
 
   useEffect(() => {
     void cargar();
@@ -78,7 +127,7 @@ export function ProductosPage() {
   const disponibles = datos.filter((d) => d.disponible && d.estado === 'A').length;
 
   const abrirNuevo = () => {
-    setForm(VACIO);
+    setForm({ ...VACIO, unidadId: unidadesSel[0]?.id ?? 0 });
     setFormError(null);
     setModal({ editando: null });
   };
@@ -145,6 +194,10 @@ export function ProductosPage() {
       setFormError('Seleccione la categoría (solo activas).');
       return;
     }
+    if (!form.unidadId) {
+      setFormError('Seleccione la unidad (solo activas).');
+      return;
+    }
     if (!(form.precio >= 0)) {
       setFormError('El precio debe ser ≥ 0.');
       return;
@@ -183,6 +236,73 @@ export function ProductosPage() {
     }
   };
 
+  // --- Handlers tab Unidades ---
+  const uTotalPaginas = Math.max(1, Math.ceil(uTotal / LIMITE));
+
+  const abrirNuevaUnidad = () => {
+    setUForm(VACIO_UNIDAD);
+    setUFormError(null);
+    setUModal({ editando: null });
+  };
+
+  const abrirEditarUnidad = (u: Unidad) => {
+    setUForm({ nombre: u.nombre, abreviatura: u.abreviatura, codigoSunat: u.codigoSunat ?? '', estado: u.estado });
+    setUFormError(null);
+    setUModal({ editando: u });
+  };
+
+  const guardarUnidad = async () => {
+    if (!uForm.nombre.trim()) {
+      setUFormError('El nombre es obligatorio (máx. 30).');
+      return;
+    }
+    if (!uForm.abreviatura.trim()) {
+      setUFormError('La abreviatura es obligatoria (máx. 10).');
+      return;
+    }
+    setUGuardando(true);
+    setUFormError(null);
+    try {
+      const payload = { ...uForm, nombre: uForm.nombre.trim(), abreviatura: uForm.abreviatura.trim().toUpperCase(), codigoSunat: uForm.codigoSunat.trim().toUpperCase() };
+      if (uModal?.editando) {
+        await actualizarUnidad(uModal.editando.id, payload);
+      } else {
+        await crearUnidad(payload);
+      }
+      setUModal(null);
+      await cargarUnidades();
+    } catch (e) {
+      const codigo = (e as Error).message;
+      setUFormError(
+        codigo === 'YA_EXISTE'
+          ? 'Ya existe una unidad con ese nombre.'
+          : 'No se pudo guardar. Reintente.',
+      );
+    } finally {
+      setUGuardando(false);
+    }
+  };
+
+  const toggleUnidad = async (u: Unidad, forzar = false) => {
+    const nuevo = u.estado === 'A' ? 'I' : 'A';
+    if (nuevo === 'I' && u.productosAsociados > 0 && !forzar) {
+      setUConfirmar(u);
+      return;
+    }
+    try {
+      await cambiarEstadoUnidad(u.id, nuevo, forzar);
+      setUConfirmar(null);
+      await cargarUnidades();
+    } catch (e) {
+      const err = e as Error & { productosAsociados?: number };
+      if (err.message === 'TIENE_PRODUCTOS') {
+        setUConfirmar(u);
+      } else {
+        setUError('No se pudo cambiar el estado.');
+      }
+    }
+  };
+
   return (
     <div className="flex w-full flex-col gap-6 pb-12">
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
@@ -200,14 +320,38 @@ export function ProductosPage() {
           </p>
         </div>
         <button
-          onClick={abrirNuevo}
+          onClick={() => (tab === 'unidades' ? abrirNuevaUnidad() : abrirNuevo())}
           className="flex shrink-0 items-center gap-2 rounded-xl bg-[#A61E22] px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[#7F1518]"
         >
           <span className="material-symbols-outlined text-[22px]">add</span>
-          <span>Nuevo Producto</span>
+          <span>{tab === 'unidades' ? 'Nueva Unidad' : 'Nuevo Producto'}</span>
         </button>
       </div>
 
+      <div className="flex w-full max-w-md gap-1 rounded-xl bg-white p-1.5 shadow-sm">
+        {(
+          [
+            { v: 'productos', label: 'Productos', icono: 'restaurant_menu' },
+            { v: 'unidades', label: 'Unidades', icono: 'straighten' },
+          ] as { v: Tab; label: string; icono: string }[]
+        ).map((t) => (
+          <button
+            key={t.v}
+            onClick={() => setTab(t.v)}
+            className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold transition-all ${
+              tab === t.v
+                ? 'bg-[#F5F5F5] text-[#A61E22] shadow-sm'
+                : 'text-[#333333]/60 hover:bg-[#F5F5F5] hover:text-[#333333]'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">{t.icono}</span>
+            <span>{t.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {tab === 'productos' && (
+      <>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi titulo="Total Productos" valor={String(total)} detalle="Catálogo completo" icono="restaurant" />
         <Kpi titulo="Disponibles" valor={String(disponibles)} detalle="En carta y comandas" icono="check_circle" />
@@ -483,6 +627,279 @@ export function ProductosPage() {
         </>
       )}
 
+      </>
+      )}
+
+      {tab === 'unidades' && (
+      <>
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+        <p className="max-w-3xl text-sm text-[#333333]/70">
+          Unidades de medida del catálogo (<strong>UNIDAD_MEDIDA</strong>). Se usan al registrar productos.
+        </p>
+        <button
+          onClick={abrirNuevaUnidad}
+          className="flex shrink-0 items-center gap-2 rounded-xl bg-[#A61E22] px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[#7F1518]"
+        >
+          <span className="material-symbols-outlined text-[22px]">add</span>
+          <span>Nueva Unidad</span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 items-center gap-3 rounded-xl bg-white p-4 shadow-sm md:grid-cols-2 lg:grid-cols-12">
+        <div className="relative lg:col-span-8">
+          <input
+            value={uNombre}
+            onChange={(e) => setUNombre(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setUBusqueda(uNombre);
+                setUPage(1);
+              }
+            }}
+            placeholder="Buscar por nombre…"
+            className="w-full rounded-xl bg-[#F5F5F5] py-2.5 pr-12 pl-4 text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22]"
+          />
+          <button
+            type="button"
+            aria-label="Buscar"
+            onClick={() => {
+              setUBusqueda(uNombre);
+              setUPage(1);
+            }}
+            className="absolute top-1/2 right-2 -translate-y-1/2 rounded-lg bg-[#A61E22] p-1.5 text-white transition-colors hover:bg-[#7F1518]"
+          >
+            <span className="material-symbols-outlined text-[18px]">search</span>
+          </button>
+        </div>
+        <select
+          value={uEstado}
+          onChange={(e) => {
+            setUEstado(e.target.value as '' | 'A' | 'I');
+            setUPage(1);
+          }}
+          className="cursor-pointer rounded-xl bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none lg:col-span-4"
+        >
+          <option value="">Estado: Todos</option>
+          <option value="A">Activo</option>
+          <option value="I">Inactivo</option>
+        </select>
+      </div>
+
+      {uCargando ? (
+        <div className="rounded-xl bg-white p-6 shadow-sm">
+          <div className="h-8 animate-pulse rounded bg-[#F5F5F5]" />
+          <div className="mt-3 h-8 animate-pulse rounded bg-[#F5F5F5]" />
+        </div>
+      ) : uError ? (
+        <div className="rounded-xl bg-white p-6 text-center shadow-sm">
+          <p>{uError}</p>
+          <button
+            onClick={() => void cargarUnidades()}
+            className="mt-3 cursor-pointer rounded-lg bg-[#A61E22] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#7F1518]"
+          >
+            Reintentar
+          </button>
+        </div>
+      ) : unidades.length === 0 ? (
+        <div className="rounded-xl bg-white p-10 text-center shadow-sm">
+          <p className="text-lg font-semibold">No existen unidades registradas.</p>
+          <button
+            onClick={abrirNuevaUnidad}
+            className="mt-4 cursor-pointer rounded-xl bg-[#A61E22] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#7F1518]"
+          >
+            Crear la primera
+          </button>
+        </div>
+      ) : (
+        <div className="hidden overflow-hidden rounded-xl bg-white shadow-sm md:block">
+          <div className="max-h-[60vh] overflow-auto">
+            <table className="w-full border-collapse text-left">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-[#F5F5F5] text-[11px] tracking-wider text-[#333333]/60 uppercase">
+                  <th className="px-4 py-3">Nombre</th>
+                  <th className="px-4 py-3">Abreviatura</th>
+                  <th className="px-4 py-3">Código SUNAT</th>
+                  <th className="px-4 py-3 text-center">Productos</th>
+                  <th className="px-4 py-3 text-center">Estado</th>
+                  <th className="w-36 px-4 py-3 text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F5F5F5] text-sm">
+                {unidades.map((u) => (
+                  <tr key={u.id} className="transition-colors hover:bg-[#F5F5F5]">
+                    <td className="px-4 py-3 font-semibold">{u.nombre}</td>
+                    <td className="px-4 py-3">
+                      <span className="rounded-full bg-[#F2C94C]/30 px-2.5 py-1 text-[11px] font-bold">
+                        {u.abreviatura}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs">{u.codigoSunat || '—'}</td>
+                    <td className="px-4 py-3 text-center">{u.productosAsociados}</td>
+                    <td className="px-4 py-3 text-center">
+                      {u.estado === 'A' ? (
+                        <span className="rounded bg-[#22C55E]/15 px-2 py-0.5 text-[11px] font-bold text-[#22C55E]">
+                          Activo
+                        </span>
+                      ) : (
+                        <span className="rounded bg-[#D9D9D9]/40 px-2 py-0.5 text-[11px] font-bold text-[#333333]/60">
+                          Inactivo
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          title="Editar unidad"
+                          onClick={() => abrirEditarUnidad(u)}
+                          className="rounded-lg p-1.5 text-[#2563EB] transition-colors hover:bg-[#2563EB]/10"
+                        >
+                          <span className="material-symbols-outlined text-[19px]">edit</span>
+                        </button>
+                        <Toggle
+                          activo={u.estado === 'A'}
+                          titulo={u.estado === 'A' ? 'Desactivar' : 'Activar'}
+                          onClick={() => void toggleUnidad(u)}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-col items-center justify-between gap-3 bg-[#F5F5F5]/60 p-4 text-sm text-[#333333]/70 sm:flex-row">
+            <span>
+              Mostrando <strong>{unidades.length}</strong> de <strong>{uTotal}</strong> unidades
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={uPage <= 1}
+                onClick={() => setUPage((x) => Math.max(1, x - 1))}
+                className="cursor-pointer rounded-lg bg-white px-3 py-1.5 shadow-sm transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                ← Anterior
+              </button>
+              <span>
+                Página {uPage} de {uTotalPaginas}
+              </span>
+              <button
+                disabled={uPage >= uTotalPaginas}
+                onClick={() => setUPage((x) => x + 1)}
+                className="cursor-pointer rounded-lg bg-white px-3 py-1.5 shadow-sm transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Siguiente →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {uModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-0 backdrop-blur-xs sm:p-4">
+          <div className="flex max-h-[90vh] w-full flex-col overflow-y-auto bg-white shadow-2xl sm:max-w-lg sm:rounded-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between bg-[#F5F5F5] px-6 py-4">
+              <h2 className="text-xl font-bold text-[#7F1518]">
+                {uModal.editando ? 'Editar Unidad' : 'Nueva Unidad'}
+              </h2>
+              <button
+                onClick={() => setUModal(null)}
+                aria-label="Cerrar"
+                className="rounded-lg p-2 transition-colors hover:bg-[#D9D9D9]"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="flex flex-col gap-4 p-6">
+              {uFormError && (
+                <div role="alert" className="rounded-lg border border-[#DC2626]/30 bg-[#DC2626]/10 p-3 text-sm">
+                  {uFormError}
+                </div>
+              )}
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">
+                  Nombre <span className="text-[#A61E22]">*</span>
+                </span>
+                <input
+                  value={uForm.nombre}
+                  maxLength={30}
+                  onChange={(e) => setUForm({ ...uForm, nombre: e.target.value })}
+                  placeholder="Ej. Kilogramo"
+                  className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22]"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">
+                  Abreviatura <span className="text-[#A61E22]">*</span>
+                </span>
+                <input
+                  value={uForm.abreviatura}
+                  maxLength={10}
+                  onChange={(e) => setUForm({ ...uForm, abreviatura: e.target.value })}
+                  placeholder="Ej. KG"
+                  className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22]"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">
+                  Código SUNAT <span className="normal-case opacity-70">(opcional)</span>
+                </span>
+                <input
+                  value={uForm.codigoSunat}
+                  maxLength={5}
+                  onChange={(e) => setUForm({ ...uForm, codigoSunat: e.target.value })}
+                  placeholder="Ej. KGM"
+                  className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 font-mono text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22]"
+                />
+              </label>
+            </div>
+            <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-[#F5F5F5] bg-white px-6 py-4">
+              <button
+                onClick={() => setUModal(null)}
+                className="rounded-xl bg-[#F5F5F5] px-5 py-2.5 text-sm font-semibold transition-colors hover:bg-[#D9D9D9]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => void guardarUnidad()}
+                disabled={uGuardando}
+                className="flex items-center gap-2 rounded-xl bg-[#A61E22] px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[#7F1518] disabled:opacity-60"
+              >
+                <span className="material-symbols-outlined text-[20px]">save</span>
+                <span>{uGuardando ? 'Guardando…' : 'Guardar Unidad'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {uConfirmar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="text-lg font-bold">Desactivar con productos asociados</h2>
+            <p className="mt-2 text-sm opacity-70">
+              <strong>{uConfirmar.nombre}</strong> tiene {uConfirmar.productosAsociados} producto(s)
+              asociado(s). Ya no aparecerá como opción al crear productos.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setUConfirmar(null)}
+                className="rounded-xl bg-[#F5F5F5] px-5 py-2.5 text-sm font-semibold hover:bg-[#D9D9D9]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => void toggleUnidad(uConfirmar, true)}
+                className="rounded-xl bg-[#A61E22] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#7F1518]"
+              >
+                Desactivar igual
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      </>
+      )}
+
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-0 backdrop-blur-xs sm:p-4">
           <div className="flex max-h-[90vh] w-full flex-col overflow-y-auto bg-white shadow-2xl sm:max-w-3xl sm:rounded-2xl">
@@ -568,11 +985,15 @@ export function ProductosPage() {
                     onChange={(e) => setForm({ ...form, unidadId: Number(e.target.value) })}
                     className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
                   >
-                    {UNIDADES.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.label}
-                      </option>
-                    ))}
+                    {unidadesSel.length === 0 ? (
+                      <option value={0}>Sin unidades activas…</option>
+                    ) : (
+                      unidadesSel.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.nombre}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </label>
                 <label className="flex flex-col gap-1.5">

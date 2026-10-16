@@ -13,6 +13,8 @@ import { mesasRouter } from './routes/mesas.js';
 import { personalRouter } from './routes/personal.js';
 import { personasRouter } from './routes/personas.js';
 import { productosRouter } from './routes/productos.js';
+import { tiposMesaRouter } from './routes/tipos-mesa.js';
+import { unidadesRouter } from './routes/unidades.js';
 
 export function createApp() {
   const app = express();
@@ -37,6 +39,8 @@ export function createApp() {
   app.use('/api/v1/personal', personalRouter);
   app.use('/api/v1/personas', personasRouter);
   app.use('/api/v1/productos', productosRouter);
+  app.use('/api/v1/tipos-mesa', tiposMesaRouter);
+  app.use('/api/v1/unidades', unidadesRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

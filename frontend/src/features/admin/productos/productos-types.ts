@@ -100,12 +100,3 @@ export function siguienteCodigo(prefijo: string, existentes: string[]): string {
   }
   return `${pre}${String(max + 1).padStart(3, '0')}`;
 }
-
-/** Unidades base (UNIDAD_MEDIDA seed). Endpoint propio queda como mejora. */
-export const UNIDADES: { id: number; label: string }[] = [
-  { id: 1, label: 'Unidad' },
-  { id: 2, label: 'Porción' },
-  { id: 3, label: 'Jarra' },
-  { id: 4, label: 'Kilogramo' },
-  { id: 5, label: 'Litro' },
-];

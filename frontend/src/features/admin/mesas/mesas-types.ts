@@ -60,14 +60,6 @@ export interface AmbienteForm {
   piso: number;
 }
 
-/** Tipos base (TIPO_MESA seed). Endpoint propio queda como mejora. */
-export const TIPOS_MESA: { id: number; label: string }[] = [
-  { id: 1, label: 'MESA ESTANDAR' },
-  { id: 2, label: 'BOX' },
-  { id: 3, label: 'BARRA' },
-  { id: 4, label: 'MESA VIP' },
-];
-
 /** Colores oficiales fallback (ESTADO_MESA.Color manda desde la API). */
 export const COLOR_POR_ESTADO: Record<string, string> = {
   LIBRE: '#28A745',

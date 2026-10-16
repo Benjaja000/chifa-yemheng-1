@@ -11,14 +11,23 @@ import {
   listarOcupacion,
 } from './mesas-service';
 import { MesaIcon } from './mesa-icon';
-import { COLOR_POR_ESTADO, TIPOS_MESA } from './mesas-types';
+import { COLOR_POR_ESTADO } from './mesas-types';
 import type { Ambiente, AmbienteForm, Mesa, MesaForm, OcupacionMesa } from './mesas-types';
+import {
+  actualizarTipoMesa,
+  cambiarEstadoTipoMesa,
+  crearTipoMesa,
+  listarTiposActivos,
+  listarTiposMesa,
+} from './tipos-mesa-service';
+import type { TipoMesa, TipoMesaForm } from './tipos-mesa-types';
 
 const LIMITE = 20;
-type Tab = 'mapa' | 'mesas' | 'ambientes';
+type Tab = 'mapa' | 'mesas' | 'ambientes' | 'tipos';
 
 const VACIO_MESA: MesaForm = { ambienteId: 0, numero: '', capacidad: 4, tipoId: 1, detalle: '', regenerarQr: false };
 const VACIO_AMB: AmbienteForm = { nombre: '', descripcion: '', piso: 1 };
+const VACIO_TIPO: TipoMesaForm = { descripcion: '', cargoServicio: 0, estado: 'A' };
 
 /** Base pública para las URLs de prueba del cliente (LAN o Vercel). */
 const URL_BASE = import.meta.env.VITE_PUBLIC_URL ?? 'http://localhost:5174';
@@ -105,20 +114,37 @@ export function MesasPage() {
   const [zonaMapa, setZonaMapa] = useState<number | 'all'>('all');
   const [detalle, setDetalle] = useState<Mesa | null>(null);
   const [hojaQR, setHojaQR] = useState<Ambiente | null>(null);
+  // --- Tab Tipos (TIPO_MESA, API viva) ---
+  const [tPage, setTPage] = useState(1);
+  const [tNombre, setTNombre] = useState('');
+  const [tBusqueda, setTBusqueda] = useState('');
+  const [tEstado, setTEstado] = useState<'' | 'A' | 'I'>('');
+  const [tipos, setTipos] = useState<TipoMesa[]>([]);
+  const [tTotal, setTTotal] = useState(0);
+  const [tCargando, setTCargando] = useState(true);
+  const [tError, setTError] = useState<string | null>(null);
+  const [tiposSel, setTiposSel] = useState<{ id: number; descripcion: string }[]>([]);
+  const [uModalTipo, setUModalTipo] = useState<null | { editando: TipoMesa | null }>(null);
+  const [uFormTipo, setUFormTipo] = useState<TipoMesaForm>(VACIO_TIPO);
+  const [uFormTipoError, setUFormTipoError] = useState<string | null>(null);
+  const [uGuardandoTipo, setUGuardandoTipo] = useState(false);
+  const [uConfirmarTipo, setUConfirmarTipo] = useState<TipoMesa | null>(null);
 
   const cargar = async () => {
     setCargando(true);
     setError(null);
     try {
-      const [res, ambs, ocup] = await Promise.all([
+      const [res, ambs, ocup, tps] = await Promise.all([
         listarMesas({ page, limit: LIMITE, ambiente, estado: '', buscar }),
         listarAmbientes(),
         listarOcupacion().catch(() => [] as OcupacionMesa[]),
+        listarTiposActivos(),
       ]);
       const porMesa = new Map(ocup.map((o) => [o.mesaId, o]));
       setDatos(res.data.map((m) => ({ ...m, ocupacion: porMesa.get(m.id) ?? null })));
       setTotal(res.total);
       setAmbientes(ambs);
+      setTiposSel(tps);
     } catch {
       setError('No fue posible cargar las mesas.');
     } finally {
@@ -126,10 +152,29 @@ export function MesasPage() {
     }
   };
 
+  const cargarTipos = async () => {
+    setTCargando(true);
+    setTError(null);
+    try {
+      const res = await listarTiposMesa({ page: tPage, limit: LIMITE, nombre: tBusqueda, estado: tEstado });
+      setTipos(res.data);
+      setTTotal(res.total);
+    } catch {
+      setTError('No fue posible cargar los tipos de mesa.');
+    } finally {
+      setTCargando(false);
+    }
+  };
+
   useEffect(() => {
     void cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, buscar, ambiente]);
+
+  useEffect(() => {
+    void cargarTipos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tPage, tBusqueda, tEstado]);
 
   const totalPaginas = Math.max(1, Math.ceil(total / LIMITE));
   const porAmbiente = (id: number) => datos.filter((m) => m.ambienteId === id);
@@ -139,7 +184,7 @@ export function MesasPage() {
   const cambioNumero = !!modal?.editando && numeroNuevo !== '' && numeroNuevo !== numeroOriginal;
 
   const abrirNuevo = () => {
-    setForm(VACIO_MESA);
+    setForm({ ...VACIO_MESA, tipoId: tiposSel[0]?.id ?? 1 });
     setFormError(null);
     setModal({ editando: null });
   };
@@ -232,6 +277,73 @@ export function MesasPage() {
     }
   };
 
+  // --- Handlers tab Tipos ---
+  const tTotalPaginas = Math.max(1, Math.ceil(tTotal / LIMITE));
+
+  const abrirNuevoTipo = () => {
+    setUFormTipo(VACIO_TIPO);
+    setUFormTipoError(null);
+    setUModalTipo({ editando: null });
+  };
+
+  const abrirEditarTipo = (t: TipoMesa) => {
+    setUFormTipo({ descripcion: t.descripcion, cargoServicio: t.cargoServicio, estado: t.estado });
+    setUFormTipoError(null);
+    setUModalTipo({ editando: t });
+  };
+
+  const guardarTipo = async () => {
+    if (!uFormTipo.descripcion.trim()) {
+      setUFormTipoError('La descripción es obligatoria (máx. 80).');
+      return;
+    }
+    if (!(uFormTipo.cargoServicio >= 0 && uFormTipo.cargoServicio <= 100)) {
+      setUFormTipoError('El recargo debe estar entre 0 y 100%.');
+      return;
+    }
+    setUGuardandoTipo(true);
+    setUFormTipoError(null);
+    try {
+      const payload = { ...uFormTipo, descripcion: uFormTipo.descripcion.trim().toUpperCase() };
+      if (uModalTipo?.editando) {
+        await actualizarTipoMesa(uModalTipo.editando.id, payload);
+      } else {
+        await crearTipoMesa(payload);
+      }
+      setUModalTipo(null);
+      await cargarTipos();
+    } catch (e) {
+      const codigo = (e as Error).message;
+      setUFormTipoError(
+        codigo === 'YA_EXISTE'
+          ? 'Ya existe un tipo de mesa con esa descripción.'
+          : 'No se pudo guardar. Reintente.',
+      );
+    } finally {
+      setUGuardandoTipo(false);
+    }
+  };
+
+  const toggleTipo = async (t: TipoMesa, forzar = false) => {
+    const nuevo = t.estado === 'A' ? 'I' : 'A';
+    if (nuevo === 'I' && t.mesasAsociadas > 0 && !forzar) {
+      setUConfirmarTipo(t);
+      return;
+    }
+    try {
+      await cambiarEstadoTipoMesa(t.id, nuevo, forzar);
+      setUConfirmarTipo(null);
+      await cargarTipos();
+    } catch (e) {
+      const err = e as Error & { mesasAsociadas?: number };
+      if (err.message === 'TIENE_MESAS') {
+        setUConfirmarTipo(t);
+      } else {
+        setTError('No se pudo cambiar el estado.');
+      }
+    }
+  };
+
   return (
     <div className="flex w-full flex-col gap-6 pb-12">
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
@@ -258,13 +370,14 @@ export function MesasPage() {
       </div>
 
       <div className="flex w-full max-w-md gap-1 rounded-xl bg-white p-1.5 shadow-sm">
-        {(
-          [
-            { v: 'mapa', label: 'Mapa', icono: 'map' },
-            { v: 'mesas', label: 'Mesas', icono: 'table_bar' },
-            { v: 'ambientes', label: 'Ambientes', icono: 'meeting_room' },
-          ] as { v: Tab; label: string; icono: string }[]
-        ).map((t) => (
+          {(
+            [
+              { v: 'mapa', label: 'Mapa', icono: 'map' },
+              { v: 'mesas', label: 'Mesas', icono: 'table_bar' },
+              { v: 'ambientes', label: 'Ambientes', icono: 'meeting_room' },
+              { v: 'tipos', label: 'Tipos', icono: 'table_restaurant' },
+            ] as { v: Tab; label: string; icono: string }[]
+          ).map((t) => (
           <button
             key={t.v}
             onClick={() => setTab(t.v)}
@@ -650,6 +763,266 @@ export function MesasPage() {
         </section>
       )}
 
+      {tab === 'tipos' && (
+        <section className="flex flex-col gap-4">
+          <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+            <p className="max-w-3xl text-sm text-[#333333]/70">
+              Tipos de mesa (<strong>TIPO_MESA</strong>). El recargo % se aplica al total del pedido
+              según la mesa.
+            </p>
+            <button
+              onClick={abrirNuevoTipo}
+              className="flex shrink-0 items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold shadow-sm transition-colors hover:bg-[#F5F5F5]"
+            >
+              <span className="material-symbols-outlined text-[18px]">add</span>
+              <span>Nuevo Tipo</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 items-center gap-3 rounded-xl bg-white p-4 shadow-sm md:grid-cols-2 lg:grid-cols-12">
+            <div className="relative lg:col-span-8">
+              <input
+                value={tNombre}
+                onChange={(e) => setTNombre(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setTBusqueda(tNombre);
+                    setTPage(1);
+                  }
+                }}
+                placeholder="Buscar por descripción…"
+                className="w-full rounded-xl bg-[#F5F5F5] py-2.5 pr-12 pl-4 text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22]"
+              />
+              <button
+                type="button"
+                aria-label="Buscar"
+                onClick={() => {
+                  setTBusqueda(tNombre);
+                  setTPage(1);
+                }}
+                className="absolute top-1/2 right-2 -translate-y-1/2 rounded-lg bg-[#A61E22] p-1.5 text-white transition-colors hover:bg-[#7F1518]"
+              >
+                <span className="material-symbols-outlined text-[18px]">search</span>
+              </button>
+            </div>
+            <select
+              value={tEstado}
+              onChange={(e) => {
+                setTEstado(e.target.value as '' | 'A' | 'I');
+                setTPage(1);
+              }}
+              className="cursor-pointer rounded-xl bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none lg:col-span-4"
+            >
+              <option value="">Estado: Todos</option>
+              <option value="A">Activo</option>
+              <option value="I">Inactivo</option>
+            </select>
+          </div>
+
+          {tCargando ? (
+            <div className="rounded-xl bg-white p-6 shadow-sm">
+              <div className="h-8 animate-pulse rounded bg-[#F5F5F5]" />
+              <div className="mt-3 h-8 animate-pulse rounded bg-[#F5F5F5]" />
+            </div>
+          ) : tError ? (
+            <div className="rounded-xl bg-white p-6 text-center shadow-sm">
+              <p>{tError}</p>
+              <button
+                onClick={() => void cargarTipos()}
+                className="mt-3 cursor-pointer rounded-lg bg-[#A61E22] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#7F1518]"
+              >
+                Reintentar
+              </button>
+            </div>
+          ) : tipos.length === 0 ? (
+            <div className="rounded-xl bg-white p-10 text-center shadow-sm">
+              <p className="text-lg font-semibold">No existen tipos registrados.</p>
+              <button
+                onClick={abrirNuevoTipo}
+                className="mt-4 cursor-pointer rounded-xl bg-[#A61E22] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#7F1518]"
+              >
+                Crear el primero
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl bg-white shadow-sm">
+              <div className="max-h-[60vh] overflow-auto">
+                <table className="w-full border-collapse text-left">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-[#F5F5F5] text-[11px] tracking-wider text-[#333333]/60 uppercase">
+                      <th className="px-4 py-3">Descripción</th>
+                      <th className="px-4 py-3 text-right">Recargo %</th>
+                      <th className="px-4 py-3 text-center">Mesas</th>
+                      <th className="px-4 py-3 text-center">Estado</th>
+                      <th className="w-36 px-4 py-3 text-center">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F5F5F5] text-sm">
+                    {tipos.map((t) => (
+                      <tr key={t.id} className="transition-colors hover:bg-[#F5F5F5]">
+                        <td className="px-4 py-3 font-semibold">{t.descripcion}</td>
+                        <td className="px-4 py-3 text-right font-bold">
+                          {t.cargoServicio > 0 ? `${t.cargoServicio}%` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-center">{t.mesasAsociadas}</td>
+                        <td className="px-4 py-3 text-center">
+                          {t.estado === 'A' ? (
+                            <span className="rounded bg-[#22C55E]/15 px-2 py-0.5 text-[11px] font-bold text-[#22C55E]">
+                              Activo
+                            </span>
+                          ) : (
+                            <span className="rounded bg-[#D9D9D9]/40 px-2 py-0.5 text-[11px] font-bold text-[#333333]/60">
+                              Inactivo
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              title="Editar tipo"
+                              onClick={() => abrirEditarTipo(t)}
+                              className="rounded-lg p-1.5 text-[#2563EB] transition-colors hover:bg-[#2563EB]/10"
+                            >
+                              <span className="material-symbols-outlined text-[19px]">edit</span>
+                            </button>
+                            <Toggle
+                              activo={t.estado === 'A'}
+                              titulo={t.estado === 'A' ? 'Desactivar' : 'Activar'}
+                              onClick={() => void toggleTipo(t)}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-col items-center justify-between gap-3 bg-[#F5F5F5]/60 p-4 text-sm text-[#333333]/70 sm:flex-row">
+                <span>
+                  Mostrando <strong>{tipos.length}</strong> de <strong>{tTotal}</strong> tipos
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={tPage <= 1}
+                    onClick={() => setTPage((x) => Math.max(1, x - 1))}
+                    className="cursor-pointer rounded-lg bg-white px-3 py-1.5 shadow-sm transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    ← Anterior
+                  </button>
+                  <span>
+                    Página {tPage} de {tTotalPaginas}
+                  </span>
+                  <button
+                    disabled={tPage >= tTotalPaginas}
+                    onClick={() => setTPage((x) => x + 1)}
+                    className="cursor-pointer rounded-lg bg-white px-3 py-1.5 shadow-sm transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Siguiente →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {uModalTipo && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-0 backdrop-blur-xs sm:p-4">
+              <div className="flex max-h-[90vh] w-full flex-col overflow-y-auto bg-white shadow-2xl sm:max-w-lg sm:rounded-2xl">
+                <div className="sticky top-0 z-10 flex items-center justify-between bg-[#F5F5F5] px-6 py-4">
+                  <h2 className="text-xl font-bold text-[#7F1518]">
+                    {uModalTipo.editando ? 'Editar Tipo' : 'Nuevo Tipo'}
+                  </h2>
+                  <button
+                    onClick={() => setUModalTipo(null)}
+                    aria-label="Cerrar"
+                    className="rounded-lg p-2 transition-colors hover:bg-[#D9D9D9]"
+                  >
+                    <span className="material-symbols-outlined">close</span>
+                  </button>
+                </div>
+                <div className="flex flex-col gap-4 p-6">
+                  {uFormTipoError && (
+                    <div role="alert" className="rounded-lg border border-[#DC2626]/30 bg-[#DC2626]/10 p-3 text-sm">
+                      {uFormTipoError}
+                    </div>
+                  )}
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">
+                      Descripción <span className="text-[#A61E22]">*</span>
+                    </span>
+                    <input
+                      value={uFormTipo.descripcion}
+                      maxLength={80}
+                      onChange={(e) => setUFormTipo({ ...uFormTipo, descripcion: e.target.value })}
+                      placeholder="Ej. BOX VIP"
+                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22]"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">
+                      Recargo servicio %
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={uFormTipo.cargoServicio}
+                      onChange={(e) => setUFormTipo({ ...uFormTipo, cargoServicio: Number(e.target.value) })}
+                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22]"
+                    />
+                    <span className="text-[11px] leading-snug text-[#333333]/60">
+                      Se suma al total del pedido de mesas de este tipo. 0 = sin recargo.
+                    </span>
+                  </label>
+                </div>
+                <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-[#F5F5F5] bg-white px-6 py-4">
+                  <button
+                    onClick={() => setUModalTipo(null)}
+                    className="rounded-xl bg-[#F5F5F5] px-5 py-2.5 text-sm font-semibold transition-colors hover:bg-[#D9D9D9]"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => void guardarTipo()}
+                    disabled={uGuardandoTipo}
+                    className="flex items-center gap-2 rounded-xl bg-[#A61E22] px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[#7F1518] disabled:opacity-60"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">save</span>
+                    <span>{uGuardandoTipo ? 'Guardando…' : 'Guardar Tipo'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {uConfirmarTipo && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+              <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+                <h2 className="text-lg font-bold">Desactivar con mesas asociadas</h2>
+                <p className="mt-2 text-sm opacity-70">
+                  <strong>{uConfirmarTipo.descripcion}</strong> tiene {uConfirmarTipo.mesasAsociadas} mesa(s)
+                  asociada(s). Ya no aparecerá como opción al crear mesas.
+                </p>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    onClick={() => setUConfirmarTipo(null)}
+                    className="rounded-xl bg-[#F5F5F5] px-5 py-2.5 text-sm font-semibold hover:bg-[#D9D9D9]"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => void toggleTipo(uConfirmarTipo, true)}
+                    className="rounded-xl bg-[#A61E22] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#7F1518]"
+                  >
+                    Desactivar igual
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       {detalle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
@@ -975,11 +1348,15 @@ export function MesasPage() {
                   onChange={(e) => setForm({ ...form, tipoId: Number(e.target.value) })}
                   className="rounded-lg bg-[#F5F5F5] px-3 py-2.5 text-sm outline-none"
                 >
-                  {TIPOS_MESA.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
-                  ))}
+                  {tiposSel.length === 0 ? (
+                    <option value={0}>Sin tipos activos…</option>
+                  ) : (
+                    tiposSel.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.descripcion}
+                      </option>
+                    ))
+                  )}
                 </select>
               </label>
               <label className="flex flex-col gap-1.5">

@@ -140,3 +140,49 @@ export function cambiarEstadoCliente(id: number, estado: 'A' | 'I'): Promise<Cli
     body: JSON.stringify({ estado }),
   }).then(lanzar<Cliente>);
 }
+
+/* ---------- Identidad (proxy backend a Factiliza; el token nunca llega aquí) ---------- */
+
+const MAESTROS = `${import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1'}/maestros`;
+
+export interface DniConsultado {
+  tipo: 'DNI';
+  numero: string;
+  nombres: string;
+  apPaterno: string;
+  apMaterno: string;
+  fNacimiento?: string;
+  genero?: 'M' | 'F';
+  ubigeo?: string;
+}
+
+export interface RucConsultado {
+  tipo: 'RUC';
+  numero: string;
+  razonSocial: string;
+  direccion?: string;
+  ubigeo?: string;
+  estado: string;
+  condicion: string;
+  habilitado: boolean;
+}
+
+export function consultarDni(numero: string): Promise<DniConsultado> {
+  return fetch(`${MAESTROS}/dni/${encodeURIComponent(numero.trim())}`, { headers: headers() }).then(
+    lanzar<DniConsultado>,
+  );
+}
+
+export function consultarRuc(numero: string): Promise<RucConsultado> {
+  return fetch(`${MAESTROS}/ruc/${encodeURIComponent(numero.trim())}`, { headers: headers() }).then(
+    lanzar<RucConsultado>,
+  );
+}
+
+/** Ubigeo SUNAT 6 dígitos → distrito local (match exacto, nunca por nombre). */
+export function distritoPorUbigeo(ubigeo: string): Promise<{ id: number; nombre: string }> {
+  const q = new URLSearchParams({ ubigeo: ubigeo.trim() });
+  return fetch(`${MAESTROS}/distritos/por-ubigeo?${q.toString()}`, { headers: headers() }).then(
+    lanzar<{ id: number; nombre: string }>,
+  );
+}
