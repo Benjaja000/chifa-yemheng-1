@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   actualizarEmpleado,
   cambiarEstadoEmpleado,
@@ -7,13 +6,17 @@ import {
   listarCargos,
   listarContratos,
   listarDistritos,
+  listarDepartamentos,
+  listarProvincias,
   listarPersonal,
   listarTiposIdentidad,
+  consultarDni,
+  distritoPorUbigeo,
 } from './personal-service';
 import { GENERO_LABELS } from './personal-types';
 import type { Genero, Personal, PersonalForm } from './personal-types';
-import type { Maestro } from '../../../services/maestros';
-import { DistritoPicker } from '../../../components/distrito-picker';
+import type { Maestro, Provincia } from '../../../services/maestros';
+import { UbicacionPicker } from '../../../components/ubicacion-picker';
 
 const LIMITE = 20;
 
@@ -81,10 +84,24 @@ export function PersonalPage() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [distritos, setDistritos] = useState<Maestro[]>([]);
+  const [departamentos, setDepartamentos] = useState<Maestro[]>([]);
+  const [provincias, setProvincias] = useState<Provincia[]>([]);
   const [cargos, setCargos] = useState<Maestro[]>([]);
   const [contratos, setContratos] = useState<Maestro[]>([]);
   const [tiposDoc, setTiposDoc] = useState<Maestro[]>([]);
   const [cargandoMaestros, setCargandoMaestros] = useState(true);
+  const [consultando, setConsultando] = useState<null | 'dni'>(null);
+  const [avisoDoc, setAvisoDoc] = useState<string | null>(null);
+  const [refDistrito, setRefDistrito] = useState<string | null>(null);
+  const [ubicacionPrefill, setUbicacionPrefill] = useState<{
+    depId: number;
+    provId: number;
+    distId: number;
+    distName?: string;
+    depName?: string;
+    provName?: string;
+    token: number;
+  } | null>(null);
   const [errorMaestros, setErrorMaestros] = useState<string | null>(null);
   const [modal, setModal] = useState<null | { editando: Personal | null }>(null);
   const [form, setForm] = useState<PersonalForm>(VACIO);
@@ -114,18 +131,22 @@ export function PersonalPage() {
     setCargandoMaestros(true);
     setErrorMaestros(null);
     try {
-      const [d, c, ct, t] = await Promise.all([
+      const [d, dep, prov, c, ct, t] = await Promise.all([
         listarDistritos(),
+        listarDepartamentos(),
+        listarProvincias(),
         listarCargos(),
         listarContratos(),
         listarTiposIdentidad(),
       ]);
       setDistritos(d);
+      setDepartamentos(dep);
+      setProvincias(prov);
       setCargos(c);
       setContratos(ct);
       setTiposDoc(t);
     } catch {
-      setErrorMaestros('No fue posible cargar las listas (distritos, cargos, contratos, documentos).');
+      setErrorMaestros('No fue posible cargar las listas (ubicación, cargos, contratos, documentos).');
     } finally {
       setCargandoMaestros(false);
     }
@@ -143,6 +164,9 @@ export function PersonalPage() {
   const abrirNuevo = () => {
     setForm(VACIO);
     setFormError(null);
+    setAvisoDoc(null);
+    setRefDistrito(null);
+    setUbicacionPrefill(null);
     setModal({ editando: null });
   };
 
@@ -171,7 +195,72 @@ export function PersonalPage() {
       sueldo: p.sueldo,
     });
     setFormError(null);
+    setAvisoDoc(null);
+    setRefDistrito(null);
+    setUbicacionPrefill(null);
     setModal({ editando: p });
+  };
+
+  /** Preselecciona el distrito por ubigeo exacto. */
+  const aplicarUbigeo = async (ubigeo?: string) => {
+    if (!ubigeo) {
+      setRefDistrito('El documento no trae ubigeo: selecciona la ubicación.');
+      return;
+    }
+    try {
+      const d = await distritoPorUbigeo(ubigeo);
+      setForm((f) => ({ ...f, distritoId: d.id }));
+      setUbicacionPrefill({
+        depId: d.departamentoId,
+        provId: d.provinciaId,
+        distId: d.id,
+        distName: d.nombre,
+        depName: d.departamentoNombre,
+        provName: d.provinciaNombre,
+        token: Date.now(),
+      });
+      setRefDistrito(`Distrito según SUNAT: ${d.nombre}`);
+    } catch {
+      setRefDistrito(`Ubigeo SUNAT ${ubigeo} sin equivalencia local: selecciona la ubicación.`);
+    }
+  };
+
+  const mensajeIdentidad = (codigo: string): string => {
+    switch (codigo) {
+      case 'DOCUMENTO_NO_ENCONTRADO':
+        return 'No se encontró en RENIEC. Completa los datos manualmente.';
+      case 'IDENTIDAD_NO_CONFIGURADA':
+        return 'Consulta externa no configurada en el servidor. Completa manualmente.';
+      case 'IDENTIDAD_NO_DISPONIBLE':
+        return 'El servicio de consulta no respondió. Intenta de nuevo o completa manualmente.';
+      default:
+        return 'No se pudo consultar. Completa los datos manualmente.';
+    }
+  };
+
+  const onBuscarDocumento = async () => {
+    setConsultando('dni');
+    setAvisoDoc(null);
+    setRefDistrito(null);
+    setUbicacionPrefill(null);
+    try {
+      const d = await consultarDni(form.documento);
+      setForm((f) => ({
+        ...f,
+        documento: d.numero || f.documento,
+        nombres: d.nombres,
+        apPaterno: d.apPaterno,
+        apMaterno: d.apMaterno,
+        fNacimiento: d.fNacimiento ? d.fNacimiento.slice(0, 10) : f.fNacimiento,
+        genero: d.genero ?? f.genero,
+        direccion: d.direccion ?? f.direccion,
+      }));
+      await aplicarUbigeo(d.ubigeo);
+    } catch (e) {
+      setAvisoDoc(mensajeIdentidad((e as Error).message));
+    } finally {
+      setConsultando(null);
+    }
   };
 
   const validar = (): string | null => {
@@ -273,13 +362,6 @@ export function PersonalPage() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Link
-            to="/admin/personas"
-            className="flex items-center gap-2 rounded-xl border border-[#A61E22] px-5 py-2.5 text-sm font-semibold text-[#A61E22] transition-all hover:bg-[#A61E22]/10"
-          >
-            <span className="material-symbols-outlined text-[20px]">person_search</span>
-            <span>Ir a Personas</span>
-          </Link>
           <button
             onClick={abrirNuevo}
             className="flex items-center gap-2 rounded-xl bg-[#A61E22] px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[#7F1518]"
@@ -434,7 +516,6 @@ export function PersonalPage() {
                         <span className="rounded-full bg-[#F5F5F5] px-2.5 py-1 text-[11px] font-bold">
                           {p.cargo || '—'}
                         </span>
-                        <div className="mt-0.5 text-xs text-[#333333]/50">{p.area}</div>
                       </td>
                       <td className="px-4 py-4">{p.distrito || '—'}</td>
                       <td className="px-4 py-4">{p.turno || '—'}</td>
@@ -464,13 +545,6 @@ export function PersonalPage() {
                             titulo={p.estado === 'A' ? 'Cesar' : 'Reactivar'}
                             onClick={() => void toggleEstado(p)}
                           />
-                          <button
-                            title="Crear usuario (módulo Usuarios, futuro)"
-                            disabled
-                            className="cursor-not-allowed rounded-lg bg-[#F5F5F5] px-2.5 py-1.5 text-[11px] font-bold text-[#333333]/40"
-                          >
-                            Crear usuario
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -584,35 +658,6 @@ export function PersonalPage() {
                 </p>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Nombres *</span>
-                    <input
-                      value={form.nombres}
-                      maxLength={80}
-                      onChange={(e) => setForm({ ...form, nombres: e.target.value })}
-                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22]"
-                    />
-                  </label>
-                  <div className="grid grid-cols-2 gap-4">
-                    <label className="flex flex-col gap-1.5">
-                      <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Ap. Paterno</span>
-                      <input
-                        value={form.apPaterno}
-                        maxLength={80}
-                        onChange={(e) => setForm({ ...form, apPaterno: e.target.value })}
-                        className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1.5">
-                      <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Ap. Materno</span>
-                      <input
-                        value={form.apMaterno}
-                        maxLength={80}
-                        onChange={(e) => setForm({ ...form, apMaterno: e.target.value })}
-                        className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
-                      />
-                    </label>
-                  </div>
-                  <label className="flex flex-col gap-1.5">
                     <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Tipo Doc.</span>
                     <select
                       value={form.tipoDoc}
@@ -627,14 +672,105 @@ export function PersonalPage() {
                       ))}
                     </select>
                   </label>
-                  <label className="flex flex-col gap-1.5">
+                  <div className="flex flex-col gap-1.5">
                     <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Documento *</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={form.documento}
+                        maxLength={15}
+                        disabled={!!modal.editando}
+                        onChange={(e) => setForm({ ...form, documento: e.target.value })}
+                        className="w-full rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 font-mono text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22] disabled:opacity-60"
+                      />
+                      {!modal.editando && form.tipoDoc === 'DNI' && (
+                        <button
+                          type="button"
+                          onClick={() => void onBuscarDocumento()}
+                          disabled={consultando !== null || !/^\d{8}$/.test(form.documento.trim())}
+                          title="Consultar DNI en RENIEC"
+                          aria-label="Consultar DNI en RENIEC"
+                          className="shrink-0 rounded-lg bg-[#A61E22] px-3 py-2.5 text-white transition hover:bg-[#7F1518] disabled:opacity-40"
+                        >
+                          <span className="material-symbols-outlined text-lg">
+                            {consultando === 'dni' ? 'progress_activity' : 'search'}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <label className="flex flex-col gap-1.5 md:col-span-2">
+                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Nombres *</span>
                     <input
-                      value={form.documento}
-                      maxLength={15}
-                      disabled={!!modal.editando}
-                      onChange={(e) => setForm({ ...form, documento: e.target.value })}
-                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 font-mono text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22] disabled:opacity-60"
+                      value={form.nombres}
+                      maxLength={80}
+                      onChange={(e) => setForm({ ...form, nombres: e.target.value })}
+                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none focus:bg-white focus:ring-1 focus:ring-[#A61E22]"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Ap. Paterno</span>
+                    <input
+                      value={form.apPaterno}
+                      maxLength={80}
+                      onChange={(e) => setForm({ ...form, apPaterno: e.target.value })}
+                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Ap. Materno</span>
+                    <input
+                      value={form.apMaterno}
+                      maxLength={80}
+                      onChange={(e) => setForm({ ...form, apMaterno: e.target.value })}
+                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Género</span>
+                    <select
+                      value={form.genero}
+                      onChange={(e) => setForm({ ...form, genero: e.target.value as PersonalForm['genero'] })}
+                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
+                    >
+                      <option value="">—</option>
+                      {(Object.keys(GENERO_LABELS) as Genero[]).map((g) => (
+                        <option key={g} value={g}>
+                          {GENERO_LABELS[g]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">F. Nacimiento</span>
+                    <input
+                      type="date"
+                      value={form.fNacimiento}
+                      onChange={(e) => setForm({ ...form, fNacimiento: e.target.value })}
+                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
+                    />
+                  </label>
+                  <div className="flex flex-col gap-1.5 md:col-span-2">
+                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Ubicación</span>
+                    <UbicacionPicker
+                      value={form.distritoId}
+                      onChange={(id) => setForm({ ...form, distritoId: id })}
+                      departamentos={departamentos}
+                      provincias={provincias}
+                      distritos={distritos}
+                      cargando={cargandoMaestros}
+                      error={errorMaestros}
+                      onReintentar={() => void recargarMaestros()}
+                      prefillChain={ubicacionPrefill}
+                    />
+                    {refDistrito && <p className="text-[11px] text-[#666666]">{refDistrito}</p>}
+                  </div>
+                  <label className="flex flex-col gap-1.5 md:col-span-2">
+                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Dirección</span>
+                    <input
+                      value={form.direccion}
+                      maxLength={100}
+                      onChange={(e) => setForm({ ...form, direccion: e.target.value })}
+                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
@@ -656,53 +792,13 @@ export function PersonalPage() {
                       className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
                     />
                   </label>
-                  <label className="flex flex-col gap-1.5 md:col-span-2">
-                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Dirección</span>
-                    <input
-                      value={form.direccion}
-                      maxLength={100}
-                      onChange={(e) => setForm({ ...form, direccion: e.target.value })}
-                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
-                    />
-                  </label>
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Distrito</span>
-                    <DistritoPicker
-                      value={form.distritoId}
-                      onChange={(id) => setForm({ ...form, distritoId: id })}
-                      distritos={distritos}
-                      cargando={cargandoMaestros}
-                      error={errorMaestros}
-                      onReintentar={() => void recargarMaestros()}
-                    />
-                  </div>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">F. Nacimiento</span>
-                    <input
-                      type="date"
-                      value={form.fNacimiento}
-                      onChange={(e) => setForm({ ...form, fNacimiento: e.target.value })}
-                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Género</span>
-                    <select
-                      value={form.genero}
-                      onChange={(e) => setForm({ ...form, genero: e.target.value as PersonalForm['genero'] })}
-                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
-                    >
-                      <option value="">—</option>
-                      {(Object.keys(GENERO_LABELS) as Genero[]).map((g) => (
-                        <option key={g} value={g}>
-                          {GENERO_LABELS[g]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                 </div>
-              </div>
-              <div>
+                {avisoDoc && (
+                  <div role="alert" className="mt-3 rounded-lg border border-[#DC2626]/30 bg-[#DC2626]/10 p-3 text-sm">
+                    {avisoDoc}
+                  </div>
+                )}
+              </div>              <div>
                 <p className="mb-3 text-xs font-bold tracking-wider uppercase opacity-60">
                   2. Datos Laborales
                 </p>
@@ -771,13 +867,15 @@ export function PersonalPage() {
                   </label>
                   <label className="flex flex-col gap-1.5">
                     <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Fondo Pensión</span>
-                    <input
+                    <select
                       value={form.fondoPension}
-                      maxLength={3}
-                      onChange={(e) => setForm({ ...form, fondoPension: e.target.value.toUpperCase() })}
-                      placeholder="ONP / AFP"
-                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 font-mono text-sm outline-none"
-                    />
+                      onChange={(e) => setForm({ ...form, fondoPension: e.target.value })}
+                      className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
+                    >
+                      <option value="">—</option>
+                      <option value="ONP">ONP</option>
+                      <option value="AFP">AFP</option>
+                    </select>
                   </label>
                   <label className="flex flex-col gap-1.5">
                     <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">N.º Hijos</span>

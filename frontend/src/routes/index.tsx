@@ -6,6 +6,7 @@ import { MesasPage } from '../features/admin/mesas/mesas-page';
 import { PersonalPage } from '../features/admin/personal/personal-page';
 import { PersonasPage } from '../features/admin/personas/personas-page';
 import { ProductosPage } from '../features/admin/productos/productos-page';
+import { UnidadesPage } from '../features/admin/unidades/unidades-page';
 import { LoginPage } from '../features/auth/login/login-page';
 import { ClienteLoginPage } from '../features/cliente/login/cliente-login-page';
 import { AdminShell } from '../layouts/admin-shell';
@@ -58,6 +59,14 @@ export const router = createBrowserRouter([
         element: (
           <RoleGuard roles={['ADMINISTRADOR', 'SUPERVISOR']}>
             <ProductosPage />
+          </RoleGuard>
+        ),
+      },
+      {
+        path: 'unidades',
+        element: (
+          <RoleGuard roles={['ADMINISTRADOR', 'SUPERVISOR']}>
+            <UnidadesPage />
           </RoleGuard>
         ),
       },

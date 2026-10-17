@@ -38,6 +38,55 @@ export function listarDistritos(): Promise<Maestro[]> {
   return listar('distrito', 'id_distrito', 'd_distrito');
 }
 
+/** Departamentos con estado A (para cascada de ubicación). */
+export function listarDepartamentos(): Promise<Maestro[]> {
+  return listar('departamento', 'id_departamento', 'n_departamento');
+}
+
+/** Provincia con su departamento (para cascada de ubicación en frontend). */
+export interface Provincia extends Maestro {
+  departamentoId: number;
+}
+
+/** Provincias con estado A + FK a departamento. */
+export async function listarProvincias(): Promise<Provincia[]> {
+  const { data, error } = await supabase
+    .from('provincia')
+    .select('id_provincia, n_provincia, id_departamento')
+    .eq('estado', 'A')
+    .order('n_provincia');
+  if (error) {
+    throw new Error(`DB_LIST_FAIL: ${error.message}`);
+  }
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
+    id: Number(r['id_provincia']),
+    nombre: String(r['n_provincia'] ?? ''),
+    departamentoId: Number(r['id_departamento']),
+  }));
+}
+
+/** Distrito con su provincia (para derivar la cadena en frontend sin requests extra). */
+export interface Distrito extends Maestro {
+  provinciaId: number;
+}
+
+/** Distritos con estado A + FK a provincia. */
+export async function listarDistritosConProvincia(): Promise<Distrito[]> {
+  const { data, error } = await supabase
+    .from('distrito')
+    .select('id_distrito, d_distrito, id_provincia')
+    .eq('estado', 'A')
+    .order('d_distrito');
+  if (error) {
+    throw new Error(`DB_LIST_FAIL: ${error.message}`);
+  }
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
+    id: Number(r['id_distrito']),
+    nombre: String(r['d_distrito'] ?? ''),
+    provinciaId: Number(r['id_provincia']),
+  }));
+}
+
 /** Cargos con estado A (los reales de BD, sin inventados). */
 export function listarCargos(): Promise<Maestro[]> {
   return listar('cargo', 'id_cargo', 'n_cargo', 'area');

@@ -1,5 +1,4 @@
 import { leerToken } from '../../auth/login/auth-service';
-import { headerEquipo } from '../../../utils/equipo';
 import type { HacerPersonalForm, Persona, PersonaForm, PersonaLista, TipoDocPersona } from './personas-types';
 
 const BASE = `${import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1'}/personas`;
@@ -8,7 +7,6 @@ function headers(): HeadersInit {
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${leerToken() ?? ''}`,
-    ...headerEquipo(),
   };
 }
 

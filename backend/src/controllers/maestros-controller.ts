@@ -5,12 +5,24 @@ import { consultarDni, consultarRuc, distritoPorUbigeo } from '../services/ident
 import {
   cargosService,
   contratosService,
+  departamentosService,
   distritosService,
+  provinciasService,
   tiposIdentidadService,
 } from '../services/maestros-service.js';
 
 export async function getDistritos(_req: Request, res: Response): Promise<void> {
   res.json(await distritosService());
+}
+
+/** Departamentos activos (cascada de ubicación en formularios). */
+export async function getDepartamentos(_req: Request, res: Response): Promise<void> {
+  res.json(await departamentosService());
+}
+
+/** Provincias activas con su departamento (cascada de ubicación). */
+export async function getProvincias(_req: Request, res: Response): Promise<void> {
+  res.json(await provinciasService());
 }
 
 export async function getCargos(_req: Request, res: Response): Promise<void> {

@@ -1,5 +1,4 @@
 import { leerToken } from '../../auth/login/auth-service';
-import { headerEquipo } from '../../../utils/equipo';
 import type { Cliente, ClienteForm, ClienteLista, TipoCliente } from './clientes-types';
 
 const BASE = `${import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1'}/clientes`;
@@ -8,7 +7,6 @@ function headers(): HeadersInit {
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${leerToken() ?? ''}`,
-    ...headerEquipo(),
   };
 }
 
@@ -47,7 +45,8 @@ export function listarClientes(f: FiltrosClientes): Promise<ClienteLista> {
   return fetch(`${BASE}?${q.toString()}`, { headers: headers() }).then(lanzar<ClienteLista>);
 }
 
-export { listarDistritos } from '../../../services/maestros';
+export { listarDepartamentos, listarDistritos, listarProvincias } from '../../../services/maestros';
+export type { Provincia } from '../../../services/maestros';
 export { listarTiposIdentidad } from '../personal/personal-service';
 
 export function crearCliente(input: ClienteForm): Promise<Cliente> {
@@ -153,6 +152,10 @@ export interface DniConsultado {
   apMaterno: string;
   fNacimiento?: string;
   genero?: 'M' | 'F';
+  direccion?: string;
+  departamento?: string;
+  provincia?: string;
+  distrito?: string;
   ubigeo?: string;
 }
 
@@ -161,6 +164,10 @@ export interface RucConsultado {
   numero: string;
   razonSocial: string;
   direccion?: string;
+  tipoContribuyente?: string;
+  departamento?: string;
+  provincia?: string;
+  distrito?: string;
   ubigeo?: string;
   estado: string;
   condicion: string;
@@ -179,10 +186,20 @@ export function consultarRuc(numero: string): Promise<RucConsultado> {
   );
 }
 
-/** Ubigeo SUNAT 6 dígitos → distrito local (match exacto, nunca por nombre). */
-export function distritoPorUbigeo(ubigeo: string): Promise<{ id: number; nombre: string }> {
+/** Cadena de ubicación resuelta por ubigeo (para preseleccionar dep/prov/dist). */
+export interface UbigeoResuelto {
+  id: number;
+  nombre: string;
+  provinciaId: number;
+  provinciaNombre: string;
+  departamentoId: number;
+  departamentoNombre: string;
+}
+
+/** Ubigeo SUNAT 6 dígitos → distrito local + cadena (match exacto, nunca por nombre). */
+export function distritoPorUbigeo(ubigeo: string): Promise<UbigeoResuelto> {
   const q = new URLSearchParams({ ubigeo: ubigeo.trim() });
   return fetch(`${MAESTROS}/distritos/por-ubigeo?${q.toString()}`, { headers: headers() }).then(
-    lanzar<{ id: number; nombre: string }>,
+    lanzar<UbigeoResuelto>,
   );
 }

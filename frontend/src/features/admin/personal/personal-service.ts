@@ -1,9 +1,8 @@
 import { leerToken } from '../../auth/login/auth-service';
-import { headerEquipo } from '../../../utils/equipo';
 import type { Personal, PersonalForm, PersonalLista } from './personal-types';
 import type { Maestro } from '../../../services/maestros';
 
-export { listarDistritos } from '../../../services/maestros';
+export { listarDistritos, listarDepartamentos, listarProvincias } from '../../../services/maestros';
 
 const BASE = `${import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1'}/personal`;
 
@@ -11,7 +10,6 @@ function headers(): HeadersInit {
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${leerToken() ?? ''}`,
-    ...headerEquipo(),
   };
 }
 
@@ -166,3 +164,5 @@ export function cambiarEstadoEmpleado(id: number, estado: 'A' | 'I'): Promise<Pe
     body: JSON.stringify({ estado }),
   }).then(lanzar<Personal>);
 }
+
+export { consultarDni, distritoPorUbigeo } from '../../admin/clientes/clientes-service';

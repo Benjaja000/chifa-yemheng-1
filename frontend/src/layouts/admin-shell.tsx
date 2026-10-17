@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cambiarClaveRequest, leerUsuario } from '../features/auth/login/auth-service';
 import { useAuth } from '../features/auth/login/auth-context';
 import { useTheme } from '../theme/theme-context';
-import { EQUIPOS, getEquipo, setEquipo } from '../utils/equipo';
+// Equipo opcional retirado: auditoría usa IP por defecto.
 
 interface Modulo {
   to: string;
@@ -27,6 +27,7 @@ const GRUPOS: Grupo[] = [
     items: [
       { to: '/admin/productos', icono: 'restaurant_menu', label: 'Productos' },
       { to: '/admin/categorias', icono: 'category', label: 'Categorías' },
+      { to: '/admin/unidades', icono: 'straighten', label: 'Unidades' },
     ],
   },
   {
@@ -56,7 +57,7 @@ export function AdminShell() {
   const [verClave, setVerClave] = useState(false);
   const [verVista, setVerVista] = useState(false);
   const [movil, setMovil] = useState(false);
-  const [equipo, setEquipoSel] = useState<string>(() => getEquipo());
+  // equipo opcional retirado
   const menuRef = useRef<HTMLDivElement>(null);
 
   const salir = () => {
@@ -276,26 +277,6 @@ export function AdminShell() {
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#2a0d0e]">
             <h2 className="text-lg font-bold">Configuración de vista</h2>
             <p className="mt-1 text-sm opacity-60">Tema de la interfaz (se guarda en este equipo).</p>
-            <div className="mt-4 flex flex-col gap-1.5">
-              <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">
-                Equipo (opcional — auditoría pccre/pcmod)
-              </span>
-              <select
-                value={equipo}
-                onChange={(e) => {
-                  setEquipoSel(e.target.value);
-                  setEquipo(e.target.value);
-                }}
-                className="cursor-pointer rounded-xl bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none dark:bg-white/10"
-              >
-                <option value="">Sin equipo (usa IP)</option>
-                {EQUIPOS.map((q) => (
-                  <option key={q} value={q}>
-                    {q}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div className="mt-4 flex gap-2">
               <button
                 type="button"

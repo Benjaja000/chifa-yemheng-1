@@ -2,9 +2,11 @@ import { Router } from 'express';
 import {
   getCargos,
   getContratos,
+  getDepartamentos,
   getDistritos,
   getDistritoPorUbigeo,
   getDni,
+  getProvincias,
   getRuc,
   getTiposIdentidad,
 } from '../controllers/maestros-controller.js';
@@ -18,6 +20,16 @@ maestrosRouter.get(
   '/distritos',
   requirePermisos('EMP_VER', 'CLI_VER'),
   getDistritos,
+);
+maestrosRouter.get(
+  '/departamentos',
+  requirePermisos('EMP_VER', 'CLI_VER'),
+  getDepartamentos,
+);
+maestrosRouter.get(
+  '/provincias',
+  requirePermisos('EMP_VER', 'CLI_VER'),
+  getProvincias,
 );
 // Identidad (proxy Factiliza): el token nunca sale del backend.
 maestrosRouter.get('/dni/:numero', requirePermisos('EMP_VER', 'CLI_VER'), getDni);

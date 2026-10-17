@@ -1,6 +1,13 @@
 /** Tipos del módulo identidad (proxy Factiliza RENIEC/SUNAT vía maestros). */
 
-export interface DniNormalizado {
+/** Ubicación descriptiva devuelta por la fuente oficial (solo referencia, no se guarda). */
+export interface UbicacionOficial {
+  departamento?: string;
+  provincia?: string;
+  distrito?: string;
+}
+
+export interface DniNormalizado extends UbicacionOficial {
   tipo: 'DNI';
   numero: string;
   nombres: string;
@@ -8,14 +15,18 @@ export interface DniNormalizado {
   apMaterno: string;
   fNacimiento?: string;
   genero?: 'M' | 'F';
+  direccion?: string;
+  /** Código SUNAT de 6 dígitos; manda sobre `ubigeo_reniec`. */
   ubigeo?: string;
 }
 
-export interface RucNormalizado {
+export interface RucNormalizado extends UbicacionOficial {
   tipo: 'RUC';
   numero: string;
   razonSocial: string;
   direccion?: string;
+  tipoContribuyente?: string;
+  /** Código SUNAT de 6 dígitos. */
   ubigeo?: string;
   estado: string;
   condicion: string;
@@ -26,6 +37,11 @@ export interface RucNormalizado {
 export interface DistritoMatch {
   id: number;
   nombre: string;
+  /** Cadena de ubicación (para preseleccionar dep/prov/dist en cadena). */
+  provinciaId: number;
+  provinciaNombre: string;
+  departamentoId: number;
+  departamentoNombre: string;
 }
 
 export type IdentidadErrorCode =
