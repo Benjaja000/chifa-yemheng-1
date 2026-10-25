@@ -17,6 +17,10 @@
     "moduleDetection": "force",
     "noEmit": true,
 
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
     /* Linting */
     "noUnusedLocals": true,
     "noUnusedParameters": true,

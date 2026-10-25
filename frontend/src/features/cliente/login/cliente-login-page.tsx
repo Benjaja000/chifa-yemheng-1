@@ -1,8 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { clienteGoogleLogin, guardarSesionCliente } from './cliente-auth-service';
 
 const FONDO_LOCAL = '/img/fachada-yemheng.png';
 const SELLO = '/img/sello-yemheng.svg';
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: { client_id: string; callback: (r: { credential?: string }) => void }) => void;
+          renderButton: (el: HTMLElement, opts: Record<string, unknown>) => void;
+          prompt: () => void;
+        };
+      };
+    };
+  }
+}
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1';
 
 type EstadoQr = 'sin-mesa' | 'validando' | 'valida' | 'invalida' | 'sin-conexion';
@@ -31,6 +46,9 @@ export function ClienteLoginPage() {
   const [errorCam, setErrorCam] = useState<string | null>(null);
   const [estadoQr, setEstadoQr] = useState<EstadoQr>(mesa ? 'validando' : 'sin-mesa');
   const [ambienteQr, setAmbienteQr] = useState<string>('');
+  const [errorGoogle, setErrorGoogle] = useState<string | null>(null);
+  const [cargandoGoogle, setCargandoGoogle] = useState(false);
+  const googleBtnRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -72,6 +90,64 @@ export function ClienteLoginPage() {
       ctrl.abort();
     };
   }, [mesa]);
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+    if (!clientId) return;
+    let cancelado = false;
+    function init() {
+      if (cancelado || !window.google?.accounts?.id || !googleBtnRef.current) return;
+      window.google.accounts.id.initialize({
+        client_id: clientId!,
+        callback: async (resp: { credential?: string }) => {
+          if (!resp.credential) {
+            setErrorGoogle('No se pudo obtener la credencial de Google.');
+            return;
+          }
+          setCargandoGoogle(true);
+          setErrorGoogle(null);
+          try {
+            const sesion = await clienteGoogleLogin(resp.credential);
+            guardarSesionCliente(sesion);
+            const mesaParam = params.get('mesa');
+            const redirectTo = params.get('redirect');
+            if (redirectTo === 'comanda') {
+              window.location.href = '/cliente/comanda';
+            } else if (mesaParam) {
+              window.location.href = `/cliente/mesa/${encodeURIComponent(mesaParam)}`;
+            } else {
+              window.location.href = '/cliente/inicio';
+            }
+          } catch (e) {
+            setErrorGoogle((e as Error)?.message ?? 'No fue posible validar con Google. Reintente.');
+          } finally {
+            setCargandoGoogle(false);
+          }
+        },
+      });
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        type: 'standard',
+        theme: 'outline',
+        size: 'large',
+        text: 'continue_with',
+        shape: 'rectangular',
+        width: 360,
+      });
+    }
+    if (window.google?.accounts?.id) {
+      init();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => init();
+    document.head.appendChild(script);
+    return () => {
+      cancelado = true;
+    };
+  }, [params]);
+
   /** Móvil = táctil o UA móvil. PC nunca muestra el aviso de escaneo (CLI-LOGIN-P8). */
   const esMovil =
     typeof window !== 'undefined' &&
@@ -269,19 +345,23 @@ export function ClienteLoginPage() {
             )}
           </div>
 
-          {/* Tarjeta vino sólido */}
+          {/* Tarjeta estilo admin (glassmorphism) */}
           <div className="flex w-full justify-center lg:col-span-6 lg:justify-end xl:col-span-5">
-            <div className="relative w-full max-w-md space-y-5 overflow-hidden rounded-2xl bg-[#7F1518] p-6 shadow-[0_12px_45px_rgba(0,0,0,0.65)] sm:p-8">
+            <div className="relative w-full max-w-md space-y-5 overflow-hidden rounded-2xl border border-amber-500/30 bg-[#180907]/85 p-6 shadow-[0_12px_45px_rgba(0,0,0,0.65)] backdrop-blur-xl sm:p-8">
+              <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-[#b91c1c] via-[#d97707] to-[#b91c1c]" />
               <div className="space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 text-xs font-semibold tracking-widest text-[#ffdcc3] uppercase">
-                    <span className="material-symbols-outlined text-sm text-[#F2C94C]">account_circle</span>
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-xs font-semibold tracking-widest text-[#ffb77d] uppercase">
+                    <span className="material-symbols-outlined text-sm text-[#d97707]">lock</span>
                     Área de clientes
                   </span>
+                  <span className="rounded-full border border-[#d97707]/50 bg-[#d97707]/15 px-2 py-0.5 font-mono text-[10px] text-[#ffb77d]">
+                    SSL 256-BIT
+                  </span>
                 </div>
-                <h2 className="font-[Epilogue] text-2xl font-bold tracking-tight text-white">Iniciar Sesión</h2>
-                <p className="text-xs text-[#ffdcc3]/85">
-                  Ingresa con tu cuenta para pedir desde tu mesa
+                <h2 className="font-[Epilogue] text-2xl font-bold tracking-tight text-[#fff4e8]">Iniciar Sesión</h2>
+                <p className="text-xs text-[#e4beb9]/75">
+                  Acceso seguro al sistema de servicio y cocina
                 </p>
               </div>
 
@@ -337,19 +417,27 @@ export function ClienteLoginPage() {
 
               <form onSubmit={(e) => e.preventDefault()} className="relative space-y-4">
                 <div className="space-y-3">
-                  <button
-                    type="button"
-                    disabled
-                    className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-[#7F1518] shadow-md transition"
-                  >
-                    <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.9C6.2 7.1 8.9 5 12 5z" fill="#EA4335" />
-                      <path d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z" fill="#4285F4" />
-                      <path d="M5.3 14.7c-.2-.7-.4-1.5-.4-2.7s.1-2 .4-2.7L1.6 6.4C.6 8.3 0 10.1 0 12s.6 3.7 1.6 5.6l3.7-2.9z" fill="#FBBC05" />
-                      <path d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.1-6.7-5.3L1.6 16c1.9 3.7 5.8 7 10.4 7z" fill="#34A853" />
-                    </svg>
-                    <span>Continuar con Google / Gmail</span>
-                  </button>
+                  {import.meta.env.VITE_GOOGLE_CLIENT_ID ? (
+                    <div className="space-y-2">
+                      <div ref={googleBtnRef} className="flex w-full justify-center" />
+                      {cargandoGoogle && (
+                        <p className="text-center text-xs text-white/80">Validando con Google…</p>
+                      )}
+                      {errorGoogle && (
+                        <p className="rounded-lg border border-[#ff8f8f]/30 bg-[#551010]/85 px-3 py-2 text-center text-xs font-semibold text-[#ffb4ab]">
+                          {errorGoogle}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-[#7F1518] shadow-md transition"
+                    >
+                      <span>Configura VITE_GOOGLE_CLIENT_ID</span>
+                    </button>
+                  )}
                   <div className="flex items-center gap-2.5">
                     <span className="h-[1px] flex-1 bg-white/25" />
                     <span className="text-[11px] tracking-wider text-white/70 uppercase">o continúa con tu correo</span>
@@ -358,47 +446,41 @@ export function ClienteLoginPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label htmlFor="cli-user" className="flex items-center gap-1 text-xs font-semibold text-white">
-                    Correo electrónico <span className="text-[#F2C94C]">*</span>
+                  <label htmlFor="cli-user" className="block text-xs font-medium text-[#ffdcc3]">
+                    Correo electrónico <span className="text-[#ffb4ab]">*</span>
                   </label>
                   <div className="relative flex items-center">
-                    <span className="material-symbols-outlined pointer-events-none absolute left-3.5 text-lg text-[#7F1518]/50">
+                    <span className="material-symbols-outlined pointer-events-none absolute left-3.5 text-lg text-[#ffb77d]/70">
                       person
                     </span>
                     <input
                       id="cli-user"
                       type="email"
-                      value=""
-                      readOnly
-                      disabled
                       placeholder="tu.nombre@ejemplo.com"
-                      className="w-full cursor-not-allowed rounded-xl bg-white py-2.5 pr-4 pl-10 text-sm text-[#333333] shadow-inner transition outline-none placeholder:text-[#333333]/40"
+                      className="h-11 w-full rounded-lg border border-[#5b403d] bg-[#250d09]/90 pr-3.5 pl-10 text-sm text-[#fff4e8] shadow-inner transition-all outline-none placeholder:text-[#ab8985]/60 focus:border-[#d97707] focus:ring-1 focus:ring-[#d97707]"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label htmlFor="cli-pass" className="flex items-center gap-1 text-xs font-semibold text-white">
-                    Contraseña <span className="text-[#F2C94C]">*</span>
+                  <label htmlFor="cli-pass" className="block text-xs font-medium text-[#ffdcc3]">
+                    Contraseña <span className="text-[#ffb4ab]">*</span>
                   </label>
                   <div className="relative flex items-center">
-                    <span className="material-symbols-outlined pointer-events-none absolute left-3.5 text-lg text-[#7F1518]/50">
+                    <span className="material-symbols-outlined pointer-events-none absolute left-3.5 text-lg text-[#ffb77d]/70">
                       key
                     </span>
                     <input
                       id="cli-pass"
                       type={verClave ? 'text' : 'password'}
-                      value=""
-                      readOnly
-                      disabled
                       placeholder="••••••••••••"
-                      className="w-full cursor-not-allowed rounded-xl bg-white py-2.5 pr-11 pl-10 text-sm text-[#333333] shadow-inner transition outline-none placeholder:text-[#333333]/40"
+                      className="h-11 w-full rounded-lg border border-[#5b403d] bg-[#250d09]/90 pr-11 pl-10 text-sm text-[#fff4e8] shadow-inner transition-all outline-none placeholder:text-[#ab8985]/60 focus:border-[#d97707] focus:ring-1 focus:ring-[#d97707]"
                     />
                     <button
                       type="button"
                       aria-label={verClave ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                       onClick={() => setVerClave((v) => !v)}
-                      className="absolute right-3 rounded-lg p-1.5 text-[#7F1518]/60 transition-colors outline-none hover:bg-[#7F1518]/10 focus-visible:ring-2 focus-visible:ring-white/50"
+                      className="absolute right-3 flex items-center justify-center rounded p-1 text-[#ffb77d]/70 transition-colors hover:text-[#ffdcc3]"
                     >
                       <span className="material-symbols-outlined text-lg">
                         {verClave ? 'visibility_off' : 'visibility'}
@@ -407,25 +489,24 @@ export function ClienteLoginPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-0.5">
-                  <label className="flex cursor-not-allowed items-center gap-2">
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex cursor-pointer items-center gap-2 select-none">
                     <input
                       type="checkbox"
-                      checked={false}
-                      disabled
-                      className="h-4 w-4 cursor-not-allowed rounded border-white/40 bg-white accent-[#7F1518]"
+                      defaultChecked
+                      className="h-4 w-4 cursor-pointer rounded border-[#5b403d] bg-[#250d09] accent-[#b91c1c]"
                     />
-                    <span className="text-xs font-medium text-white/80">Recordarme</span>
+                    <span className="text-xs text-[#ffdcc3]/90">Recordarme</span>
                   </label>
+                  <span className="text-xs text-[#e4beb9]/70">¿Olvidaste tu contraseña? La gestiona tu administrador.</span>
                 </div>
 
                 <button
                   type="submit"
-                  disabled
-                  className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#F2C94C] px-4 py-3.5 text-xs font-bold tracking-wider text-[#7F1518] uppercase shadow-lg transition"
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#ff8f8f]/30 bg-[#b91c1c] text-xs font-semibold tracking-wider text-white shadow-[0_4px_16px_rgba(185,28,28,0.5)] transition-all duration-200 hover:bg-[#a01818] active:scale-[0.99]"
                 >
-                  <span>Iniciar sesión</span>
-                  <span className="material-symbols-outlined text-base">arrow_forward</span>
+                  <span>INICIAR SESIÓN</span>
+                  <span className="text-sm font-bold">→</span>
                 </button>
               </form>
             </div>

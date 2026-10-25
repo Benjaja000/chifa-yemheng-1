@@ -27,7 +27,6 @@ export const productoCreateSchema = z.object({
   imagen: z.string().max(200).optional().default(''),
   detalle: z.string().max(150).optional().default(''),
   afectoIgv: z.boolean().default(true),
-  codigo: z.string().max(20).optional(),
   estado: estadoSchema.default('A'),
 });
 

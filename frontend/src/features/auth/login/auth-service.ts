@@ -3,6 +3,7 @@ import type { LoginErrorCode, LoginForm, LoginResponse } from './login-types';
 
 const TOKEN_KEY = 'chifa.token';
 const USER_KEY = 'chifa.user';
+const PERMISOS_KEY = 'chifa.permisos';
 
 export async function loginRequest(input: LoginForm): Promise<LoginResponse> {
   let res: Response;
@@ -40,15 +41,30 @@ export async function cambiarClaveRequest(actual: string, nueva: string): Promis
 export function guardarSesion(data: LoginResponse): void {
   localStorage.setItem(TOKEN_KEY, data.token);
   localStorage.setItem(USER_KEY, JSON.stringify(data.usuario));
+  localStorage.setItem(PERMISOS_KEY, JSON.stringify(data.permisos ?? []));
 }
 
 export function limpiarSesion(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(PERMISOS_KEY);
 }
 
 export function leerToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
+}
+
+export function leerPermisos(): string[] {
+  const raw = localStorage.getItem(PERMISOS_KEY);
+  if (!raw) {
+    return [];
+  }
+  try {
+    const arr = JSON.parse(raw) as unknown;
+    return Array.isArray(arr) ? (arr as string[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 export function leerUsuario(): LoginResponse['usuario'] | null {

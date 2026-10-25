@@ -1,0 +1,53 @@
+import type { Request, Response } from 'express';
+import type { AuthenticatedRequest } from '../middlewares/auth-guard.js';
+import { z } from 'zod';
+import { listarMisEntregasService, getMiEntregaDetalleService, iniciarRutaRepartidorService, confirmarEntregaRepartidorService, actualizarUbicacionRepartidorService, getPorRendirService } from '../services/repartidor-service.js';
+import { getPc } from '../utils/auditoria.js';
+
+const ubicacionSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+});
+
+function sesion(req: Request): { id: number; logeo: string; pc: string } {
+  const user = (req as AuthenticatedRequest).user;
+  return { id: user.sub, logeo: user.logeo, pc: getPc(req) };
+}
+
+export async function getMisEntregas(req: Request, res: Response): Promise<void> {
+  const s = sesion(req);
+  const estado = req.query.estado as 'P' | 'R' | 'E' | 'C' | undefined;
+  const page = Number(req.query.page) || 1;
+  const limit = Number(req.query.limit) || 20;
+  res.json(await listarMisEntregasService(s.id, estado, page, limit));
+}
+
+export async function getMiEntrega(req: Request, res: Response): Promise<void> {
+  const s = sesion(req);
+  try { res.json(await getMiEntregaDetalleService(Number(req.params.id), s.id)); }
+  catch { res.status(404).json({ error: 'NOT_FOUND' }); }
+}
+
+export async function postIniciarRuta(req: Request, res: Response): Promise<void> {
+  const s = sesion(req);
+  try { res.json(await iniciarRutaRepartidorService(Number(req.params.id), s.id, s.logeo, s.pc)); }
+  catch { res.status(404).json({ error: 'NOT_FOUND' }); }
+}
+
+export async function postConfirmarEntrega(req: Request, res: Response): Promise<void> {
+  const s = sesion(req);
+  try { res.json(await confirmarEntregaRepartidorService(Number(req.params.id), s.id, s.logeo, s.pc)); }
+  catch { res.status(404).json({ error: 'NOT_FOUND' }); }
+}
+
+export async function postUbicacion(req: Request, res: Response): Promise<void> {
+  const parsed = ubicacionSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() }); return; }
+  try { await actualizarUbicacionRepartidorService(Number(req.params.id), parsed.data.lat, parsed.data.lng); res.json({ ok: true }); }
+  catch { res.status(404).json({ error: 'NOT_FOUND' }); }
+}
+
+export async function getPorRendir(req: Request, res: Response): Promise<void> {
+  const s = sesion(req);
+  res.json(await getPorRendirService(s.id));
+}

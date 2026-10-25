@@ -5,7 +5,6 @@ export type EstadoRegistro = 'A' | 'I';
 export interface Producto {
   id: number;
   nombre: string;
-  codigo: string | null;
   categoriaId: number;
   categoria: string;
   tipo: TipoProducto;
@@ -32,7 +31,6 @@ export interface ProductoLista {
 }
 
 export type ProductoErrorCode =
-  | 'YA_EXISTE'
   | 'NOT_FOUND'
   | 'CATEGORIA_INVALIDA'
   | 'VALIDATION_ERROR';

@@ -97,6 +97,7 @@ export function MesasPage() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<null | { editando: Mesa | null }>(null);
+  const [qrModal, setQrModal] = useState<Mesa | null>(null);
   const [form, setForm] = useState<MesaForm>(VACIO_MESA);
   const [formError, setFormError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -344,7 +345,7 @@ export function MesasPage() {
                     className="pointer-events-none absolute inset-0"
                     style={{
                       background:
-                        'linear-gradient(to bottom, rgba(0,0,0,0.18), transparent 30%, transparent 70%, rgba(0,0,0,0.22))',
+                        'linear-gradient(to bottom, rgba(0,0,0,0.10), transparent 30%, transparent 70%, rgba(0,0,0,0.14))',
                     }}
                   />
                   <div className="relative flex flex-wrap items-start justify-center gap-x-8 gap-y-6">
@@ -507,6 +508,13 @@ export function MesasPage() {
                           </td>
                           <td className="px-4 py-3.5">
                             <div className="flex items-center justify-end gap-2">
+                              <button
+                                title="Ver QR"
+                                onClick={() => setQrModal(m)}
+                                className="rounded-lg bg-[#2563EB]/10 px-2.5 py-1 text-xs font-semibold text-[#2563EB] transition-colors hover:bg-[#2563EB]/20"
+                              >
+                                QR
+                              </button>
                               <button
                                 title="Editar mesa"
                                 onClick={() => abrirEditar(m)}
@@ -1104,6 +1112,30 @@ export function MesasPage() {
           </div>
         </div>
       )}
+      {qrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-[#7F1518]">QR — Mesa {qrModal.numero}</h2>
+              <button onClick={() => setQrModal(null)} className="rounded-lg p-2 hover:bg-[#F5F5F5]">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="mt-4 flex flex-col items-center gap-3">
+              <div className="rounded-xl bg-white p-3 shadow-inner">
+                <QRCodeSVG value={`${(import.meta.env.VITE_PUBLIC_URL as string | undefined) ?? window.location.origin}/cliente/login?mesa=${encodeURIComponent(qrModal.qr ?? '')}`} size={180} />
+              </div>
+              <p className="text-center text-xs text-[#333333]/60">
+                Código: <span className="font-mono">{qrModal.qr ?? '—'}</span>
+              </p>
+              <p className="text-center text-[11px] text-[#333333]/50">
+                Imprime este QR y pégalo en la mesa. Al escanearlo se abre el login de clientes.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

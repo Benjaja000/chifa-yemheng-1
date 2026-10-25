@@ -16,10 +16,6 @@ interface Grupo {
   items: Modulo[];
 }
 
-/** Solo habilitados por ahora. Futuros se agregan cuando su change exista:
- * Cocina (/admin/cocina), Caja (/admin/caja), Delivery, Reservas,
- * Reportes, Auditoría, Usuarios y Roles.
- */
 const GRUPOS: Grupo[] = [
   { titulo: 'Principal', items: [{ to: '/admin', icono: 'dashboard', label: 'Dashboard' }] },
   {
@@ -31,13 +27,43 @@ const GRUPOS: Grupo[] = [
   },
   {
     titulo: 'Gestión de salón',
-    items: [{ to: '/admin/mesas', icono: 'table_restaurant', label: 'Mesas y Ambientes' }],
+    items: [
+      { to: '/admin/mesas', icono: 'table_restaurant', label: 'Mesas y Ambientes' },
+      { to: '/admin/reservas-admin', icono: 'event_seat', label: 'Reservas' },
+    ],
   },
   {
     titulo: 'Gestión de personas',
     items: [
       { to: '/admin/personal', icono: 'badge', label: 'Personal' },
       { to: '/admin/clientes', icono: 'groups', label: 'Clientes' },
+      { to: '/admin/empleados', icono: 'people', label: 'Empleados' },
+    ],
+  },
+  {
+    titulo: 'Operaciones',
+    items: [
+      { to: '/admin/pedidos', icono: 'point_of_sale', label: 'Pedidos' },
+      { to: '/admin/pedidos-delivery', icono: 'delivery_dining', label: 'Pedidos Delivery' },
+      { to: '/admin/delivery', icono: 'local_shipping', label: 'Delivery Staff' },
+      { to: '/admin/cocina', icono: 'kitchen', label: 'Cocina' },
+      { to: '/admin/mozo', icono: 'room_service', label: 'Mozo' },
+      { to: '/admin/caja', icono: 'point_of_sale', label: 'Caja' },
+    ],
+  },
+  {
+    titulo: 'Inventario y Compras',
+    items: [
+      { to: '/admin/inventario', icono: 'inventory_2', label: 'Inventario' },
+    ],
+  },
+  {
+    titulo: 'Administración',
+    items: [
+      { to: '/admin/usuarios', icono: 'admin_panel_settings', label: 'Usuarios y Roles' },
+      { to: '/admin/auditoria', icono: 'security', label: 'Auditoría' },
+      { to: '/admin/reportes', icono: 'bar_chart', label: 'Reportes' },
+      { to: '/admin/crud', icono: 'table_view', label: 'CRUD Genérico' },
     ],
   },
 ];
@@ -161,7 +187,7 @@ export function AdminShell() {
   );
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5] font-[Plus_Jakarta_Sans] text-[#333333] dark:bg-[#1b1200] dark:text-[#f5f5f5]">
+    <div className="staff min-h-screen bg-[#f5f5f5] font-[Plus_Jakarta_Sans] text-[#333333] dark:bg-[#1b1200] dark:text-[#f5f5f5]">
       <aside className="fixed top-0 left-0 z-50 hidden h-screen w-72 flex-col overflow-y-auto bg-[#7F1518] shadow-2xl lg:flex dark:bg-[#2a0d0e]">
         {sidebar}
       </aside>

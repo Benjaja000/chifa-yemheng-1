@@ -23,7 +23,7 @@ function sesion(req: Request): { id: number; logeo: string; pc: string } {
 
 function errorProducto(res: Response, err: unknown): void {
   if (err instanceof ProductoError) {
-    const status = err.code === 'NOT_FOUND' ? 404 : err.code === 'CATEGORIA_INVALIDA' ? 422 : 409;
+    const status = err.code === 'NOT_FOUND' ? 404 : 422;
     res.status(status).json({ error: err.code });
     return;
   }

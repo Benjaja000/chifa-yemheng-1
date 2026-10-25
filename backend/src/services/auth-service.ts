@@ -13,10 +13,10 @@ import type { ClaveInput, LoginInput } from '../schemas/auth.js';
 const RUTA_POR_TIPO: Record<string, string> = {
   ADMINISTRADOR: '/admin',
   SUPERVISOR: '/admin',
-  CAJERO: '/caja',
-  MOZO: '/mozo',
-  COCINA: '/cocina',
-  DELIVERY: '/repartidor',
+  CAJERO: '/admin/caja',
+  MOZO: '/admin/mozo',
+  COCINA: '/admin/cocina',
+  DELIVERY: '/admin/delivery',
   ALMACEN: '/admin',
 };
 

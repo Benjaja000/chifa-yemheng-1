@@ -4,12 +4,26 @@ import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 import { errorHandler, notFoundHandler } from './middlewares/error-handler.js';
 import { authRouter } from './routes/auth.js';
+import { auditoriaRouter } from './routes/auditoria.js';
+import { clienteAuthRouter } from './routes/cliente-auth.js';
+import { deliveryRouter } from './routes/delivery.js';
+import { seguimientoRouter } from './routes/delivery-seguimiento.js';
+import { clienteDeliveryRouter } from './routes/cliente-delivery.js';
+import { repartidorRouter } from './routes/repartidor.js';
+import { rendicionRouter } from './routes/rendiciones.js';
+import { inventarioRouter } from './routes/inventario.js';
+import { reportesRouter } from './routes/reportes.js';
+import { reservasRouter } from './routes/reservas.js';
+import { seguridadRouter } from './routes/seguridad.js';
+import { clientePedidosRouter } from './routes/cliente-pedidos.js';
 import { categoriasRouter } from './routes/categorias.js';
 import { clientesRouter } from './routes/clientes.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { healthRouter } from './routes/health.js';
+import { cajaRouter } from './routes/caja.js';
 import { maestrosRouter } from './routes/maestros.js';
 import { mesasRouter } from './routes/mesas.js';
+import { pedidosRouter } from './routes/pedidos.js';
 import { personalRouter } from './routes/personal.js';
 import { productosRouter } from './routes/productos.js';
 
@@ -29,12 +43,28 @@ export function createApp() {
   app.use('/api/v1/health', healthRouter);
   app.use('/api/v1/maestros', maestrosRouter);
   app.use('/api/v1/mesas', mesasRouter);
+  app.use('/api/v1/pedidos', pedidosRouter);
+  app.use('/api/v1/caja', cajaRouter);
   app.use('/api/v1/auth', authRouter);
+  app.use('/api/v1/cliente', clienteAuthRouter);
+  app.use('/api/v1/cliente/pedidos', clientePedidosRouter);
+  app.use('/api/v1/cliente/delivery', clienteDeliveryRouter);
+  app.use('/api/v1/repartidor/entregas', repartidorRouter);
+  app.use('/api/v1/delivery', deliveryRouter);
+  app.use('/api/v1/delivery/seguimiento', seguimientoRouter);
+  app.use('/api/v1/rendiciones', rendicionRouter);
   app.use('/api/v1/categorias', categoriasRouter);
   app.use('/api/v1/clientes', clientesRouter);
   app.use('/api/v1/dashboard', dashboardRouter);
   app.use('/api/v1/personal', personalRouter);
   app.use('/api/v1/productos', productosRouter);
+
+  app.use('/api/v1/auditoria', auditoriaRouter);
+  app.use('/api/v1/inventario', inventarioRouter);
+  app.use('/api/v1/reportes', reportesRouter);
+  app.use('/api/v1/reservas', reservasRouter);
+  app.use('/api/v1/seguridad', seguridadRouter);
+
 
   app.use(notFoundHandler);
   app.use(errorHandler);

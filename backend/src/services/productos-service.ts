@@ -11,7 +11,6 @@ import {
   auditar,
   categoriaActiva,
   crearProducto,
-  existeCodigo,
   listarProductos,
   obtenerProducto,
 } from '../repositories/productos-repository.js';
@@ -37,9 +36,6 @@ export async function crearService(
   if (!(await categoriaActiva(input.categoriaId))) {
     throw new ProductoError('CATEGORIA_INVALIDA');
   }
-  if (input.codigo?.trim() && (await existeCodigo(input.codigo.trim()))) {
-    throw new ProductoError('YA_EXISTE');
-  }
   const prod = await crearProducto(input, logeo, pc);
   await auditar(idUsuario, 'CREAR_PRODUCTO', prod.id, prod.nombre);
   return prod;
@@ -58,11 +54,6 @@ export async function actualizarService(
   }
   if (input.categoriaId !== undefined && !(await categoriaActiva(input.categoriaId))) {
     throw new ProductoError('CATEGORIA_INVALIDA');
-  }
-  if (input.codigo !== undefined && input.codigo?.trim()) {
-    if (await existeCodigo(input.codigo.trim(), id)) {
-      throw new ProductoError('YA_EXISTE');
-    }
   }
   const prod = await actualizarProducto(id, input, logeo, pc);
   if (!prod) {

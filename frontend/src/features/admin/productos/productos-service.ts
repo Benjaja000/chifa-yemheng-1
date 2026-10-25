@@ -69,34 +69,6 @@ export function cambiarEstadoProducto(id: number, estado: 'A' | 'I'): Promise<Pr
   }).then(lanzar<Producto>);
 }
 
-/**
- * Códigos existentes con el prefijo dado (barrido paginado: la API no filtra por código).
- * Sirve para sugerir el siguiente correlativo en el modal.
- */
-export async function listarCodigosConPrefijo(prefijo: string): Promise<string[]> {
-  const LIM = 100;
-  const pre = prefijo.toUpperCase();
-  const codigos: string[] = [];
-  let page = 1;
-  let total = Number.POSITIVE_INFINITY;
-  let leidos = 0;
-  while (leidos < total) {
-    const res = await listarProductos({ page, limit: LIM, nombre: '', categoria: '', estado: '', disponible: '' });
-    total = res.total;
-    leidos += res.data.length;
-    for (const p of res.data) {
-      if (p.codigo && p.codigo.toUpperCase().startsWith(pre)) {
-        codigos.push(p.codigo);
-      }
-    }
-    if (res.data.length === 0) {
-      break;
-    }
-    page += 1;
-  }
-  return codigos;
-}
-
 export interface CategoriaOpcion {
   id: number;
   nombre: string;

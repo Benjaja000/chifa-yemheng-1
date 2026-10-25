@@ -1,0 +1,564 @@
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { Empty, Skeleton } from '../../../components/ui';
+import type { Reserva, EstadoReserva } from './reservas-types';
+import { ESTADO_RESERVA } from './reservas-types';
+import { listarReservas, crearReserva, confirmarReserva, anularReserva } from './reservas-service';
+import { ESTADO_RESERVA as ER } from './reservas-types';
+import { PageHeader } from '../../../components/ui';
+import type { FiltrosReservas } from './reservas-service';
+
+const LIMITE = 20;
+
+export function AdminReservasPage() {
+  const [page, setPage] = useState(1);
+  const [tab, setTab] = useState<'lista' | 'calendario'>('lista');
+  const [filtros, setFiltros] = useState<FiltrosReservas>({ page: 1, limit: LIMITE, fecha: '', mesaId: '', estado: '' });
+  const [datos, setDatos] = useState<Reserva[]>([]);
+  const [total, setTotal] = useState(0);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [modal, setModal] = useState(false);
+  const [form, setForm] = useState({ clienteId: 0, mesaId: 0, fecha: '', hora: '', comensales: 1, observacion: '' });
+  const [guardando, setGuardando] = useState(false);
+  const [modalConfirmar, setModalConfirmar] = useState<{ id: number; mesaId?: number; observacion?: string } | null>(null);
+  const [modalAnular, setModalAnular] = useState<{ id: number } | null>(null);
+  const [modalAtender, setModalAtender] = useState<{ id: number } | null>(null);
+  const [fCalendario, setFCalendario] = useState<Date>(new Date());
+
+  const cargar = async () => {
+    setCargando(true);
+    setError(null);
+    try {
+      const res = await listarReservas(filtros);
+      setDatos(res.data);
+      setTotal(res.total);
+    } catch {
+      setError('No fue posible cargar las reservas.');
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  useEffect(() => { void cargar(); }, [filtros.fecha, filtros.mesaId, filtros.estado, filtros.page, tab]);
+
+  const totalPaginas = Math.max(1, Math.ceil(total / LIMITE));
+  const totalDiasMes = new Date(fCalendario.getFullYear(), fCalendario.getMonth() + 1, 0).getDate();
+
+  const setCalendarioAnterior = () => {
+    setFCalendario(new Date(fCalendario.getFullYear(), fCalendario.getMonth() - 1, 1));
+  };
+  const setCalendarioSiguiente = () => {
+    setFCalendario(new Date(fCalendario.getFullYear(), fCalendario.getMonth() + 1, 1));
+  };
+
+  const kpis = [
+    { titulo: 'Hoy', numero: '0', tipo: 'default', subtitle: 'Reservas del día' },
+    { titulo: 'Pendientes', numero: total > 0 ? String(datos.filter((r) => r.estado === 'P').length) : '0', tipo: 'warn', subtitle: 'Por confirmar' },
+    { titulo: 'Confirmadas', numero: total > 0 ? String(datos.filter((r) => r.estado === 'C').length) : '0', tipo: 'ok', subtitle: 'Mesa asignada' },
+    { titulo: 'Anuladas', numero: total > 0 ? String(datos.filter((r) => r.estado === 'X').length) : '0', tipo: 'bad', subtitle: 'Canceladas' },
+  ];
+
+  const colorEstado = (e: EstadoReserva) => ER[e] === 'Confirmada' ? 'bg-green-100 text-green-700' : ER[e] === 'Atendida' ? 'bg-blue-100 text-blue-700' : ER[e] === 'Cancelada' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700';
+
+  const handleCrear = async () => {
+    if (!form.clienteId || !form.fecha || !form.hora) {
+      setError('Cliente, fecha y hora son obligatorios.');
+      return;
+    }
+    setGuardando(true);
+    try {
+      await crearReserva({
+        clienteId: form.clienteId,
+        mesaId: form.mesaId || undefined,
+        fecha: form.fecha,
+        hora: form.hora,
+        comensales: form.comensales,
+        observacion: form.observacion || undefined,
+      });
+      setModal(false);
+      setForm({ clienteId: 0, mesaId: 0, fecha: '', hora: '', comensales: 1, observacion: '' });
+      await cargar();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const handleConfirmar = async (id: number) => {
+    setModalConfirmar({ id, mesaId: undefined, observacion: undefined });
+  };
+
+  const handleConfirmarGuardar = async (id: number) => {
+    try { await confirmarReserva(id); await cargar(); }
+    catch { setError('No se pudo confirmar.'); }
+    setModalConfirmar(null);
+  };
+
+  const handleAnular = async (id: number) => {
+    setModalAnular({ id });
+  };
+
+  const handleAnularEjecutar = async (id: number) => {
+    try { await anularReserva(id); await cargar(); }
+    catch { setError('No se pudo anular.'); }
+    setModalAnular(null);
+  };
+
+  const handleAtender = async (id: number) => {
+    setModalAtender({ id });
+  };
+
+  const handleAtenderEjecutar = async (id: number) => {
+    try { await confirmarReserva(id); await cargar(); }
+    catch { setError('No se pudo atender.'); }
+    setModalAtender(null);
+  };
+
+  return (
+    <div className="y-shell" style={{ padding: '24px 16px 140px', maxWidth: 1240, margin: '0 auto' }}>
+      <PageHeader
+        title="Reservas"
+        sub="Gestión operativa de mesas y clientes"
+        right={
+          <button
+            onClick={() => setModal(true)}
+            className="rounded-lg bg-[#A61E22] px-4 py-2 text-sm font-semibold text-white hover:bg-[#7F1518]"
+          >
+            + Nueva Reserva
+          </button>
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 md:gap-2">
+        {kpis.map((k) => (
+          <motion.div
+            key={k.titulo}
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 280, damping: 14 }}
+            className="rounded-xl bg-white p-5 shadow-sm hover:bg-[#F5F5F5] transition-colors"
+            style={{ minHeight: '80px' }}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[#333333]/60 uppercase tracking-wider">{k.titulo}</span>
+              <span className="text-[20px] font-bold text-[#7F1518]">{k.numero}</span>
+            </div>
+            <p className="mt-1 text-xs text-[#333333]/50">{k.subtitle}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2 mt-3">
+        <button
+          onClick={() => setTab('lista')}
+          className={tab === 'lista' ? 'rounded-lg bg-[#A61E22] px-3 py-1.5 text-xs font-semibold text-white shadow-sm' : 'rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-[#333333]/60 shadow-sm hover:bg-[#F5F5F5]'}
+        >
+          Lista
+        </button>
+        <button
+          onClick={() => setTab('calendario')}
+          className={tab === 'calendario' ? 'rounded-lg bg-[#A61E22] px-3 py-1.5 text-xs font-semibold text-white shadow-sm' : 'rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-[#333333]/60 shadow-sm hover:bg-[#F5F5F5]'}
+        >
+          Calendario
+        </button>
+      </div>
+
+      <div className="mt-6 rounded-xl bg-white shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-[#F5F5F5]">
+          <h2 className="font-d text-xl font-medium text-[#7F1518]" style={{ margin: 0 }}>
+            {total > 0 ? 'Reservas' : 'No hay reservas registradas'}
+          </h2>
+          <div className="flex gap-2">
+            <select
+              value={filtros.estado}
+              onChange={(e) => setFiltros({ ...filtros, estado: e.target.value as '' | EstadoReserva, page: 1 })}
+              className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm outline-none"
+            >
+              <option value="">Todos los estados</option>
+              {(Object.keys(ESTADO_RESERVA) as ('P' | 'C' | 'A' | 'X')[]).map((k) => (
+                <option key={k} value={k}>{ESTADO_RESERVA[k]}</option>
+              ))}
+            </select>
+            <select
+              value={filtros.mesaId}
+              onChange={(e) => setFiltros({ ...filtros, mesaId: e.target.value === '' ? '' : Number(e.target.value), page: 1 })}
+              className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm outline-none"
+            >
+              <option value="">Todas las mesas</option>
+              {/* Aquí cargaríamos lista de mesas, omitido por brevedad */}
+            </select>
+            <input
+              type="date"
+              value={filtros.fecha}
+              onChange={(e) => setFiltros({ ...filtros, fecha: e.target.value, page: 1 })}
+              className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="p-4">{error && <div className="rounded-lg bg-red-100 p-3 text-sm text-red-700">{error} <button onClick={() => setError(null)} className="ml-2 underline">Cerrar</button></div>}</div>
+
+        {cargando ? (
+          <Skeleton className="h-64" />
+        ) : total === 0 ? (
+          <Empty
+            title="Sin reservas registradas"
+            sub="Reservas pendientes, confirmadas o canceladas"
+          />
+        ) : tab === 'lista' ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[#F5F5F5] text-left text-xs uppercase tracking-wider text-[#333333]/60">
+                  <th className="px-3 py-2">ID</th>
+                  <th className="px-3 py-2">Cliente</th>
+                  <th className="px-3 py-2">Mesa</th>
+                  <th className="px-3 py-2">Fecha</th>
+                  <th className="px-3 py-2">Hora</th>
+                  <th className="px-3 py-2">Comensales</th>
+                  <th className="px-3 py-2">Estado</th>
+                  <th className="px-3 py-2">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F5F5F5]">
+                {datos.map((r) => (
+                  <tr key={r.id} className="hover:bg-[#F5F5F5]">
+                    <td className="px-3 py-2">{r.id}</td>
+                    <td className="px-3 py-2">{r.cliente}</td>
+                    <td className="px-3 py-2">{r.mesa || '—'}</td>
+                    <td className="px-3 py-2">{r.fecha}</td>
+                    <td className="px-3 py-2">{r.hora}</td>
+                    <td className="px-3 py-2">{r.comensales}</td>
+                    <td className="px-3 py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${colorEstado(r.estado)}`}>
+                        {ESTADO_RESERVA[r.estado]}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 flex gap-1">
+                      {r.estado === 'P' && (
+                        <button
+                          onClick={() => handleConfirmar(r.id)}
+                          className="rounded bg-yellow-100 px-2 py-1 text-xs text-yellow-700 hover:bg-yellow-200"
+                        >
+                          Confirmar
+                        </button>
+                      )}
+                      {r.estado === 'C' && (
+                        <div className="flex gap-1">
+                          <span className="rounded bg-green-100 px-2 py-1 text-xs font-bold text-green-700">
+                            Mesa {r.mesa ?? '—'} asignada
+                          </span>
+                          <button
+                            onClick={() => handleAtender(r.id)}
+                            className="rounded bg-green-100 px-2 py-1 text-xs text-green-700 hover:bg-green-200"
+                          >
+                            Atender
+                          </button>
+                        </div>
+                      )}
+                      {r.estado === 'C' && (
+                        <button
+                          onClick={() => handleAnular(r.id)}
+                          className="rounded bg-red-100 px-2 py-1 text-xs text-red-700 hover:bg-red-200"
+                        >
+                          Anular
+                        </button>
+                      )}
+                      {r.estado === 'A' && (
+                        <button
+                          onClick={() => handleAnular(r.id)}
+                          className="rounded bg-red-100 px-2 py-1 text-xs text-red-700 hover:bg-red-200"
+                        >
+                          Anular
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : tab === 'calendario' ? (
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-d text-xl font-medium text-[#7F1518]">Calendario de Reservas</h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCalendarioAnterior()}
+                  className="rounded-lg bg-[#F5F5F5] px-3 py-1.5 text-sm font-semibold hover:bg-[#D9D9D9]"
+                >
+                  ←
+                </button>
+                <span className="text-sm text-[#333333]/60">
+                  {fCalendario.toLocaleDateString('es-PE', { month: 'long', year: 'numeric' })}
+                </span>
+                <button
+                  onClick={() => setCalendarioSiguiente()}
+                  className="rounded-lg bg-[#F5F5F5] px-3 py-1.5 text-sm font-semibold hover:bg-[#D9D9D9]"
+                >
+                  →
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+              {Array.from({ length: totalDiasMes }).map((_, i) => {
+                const dia = i + 1;
+                const reservasDia = datos.filter((r) => {
+                  const rFecha = new Date(r.fecha);
+                  return rFecha.getDate() === dia && rFecha.getMonth() === fCalendario.getMonth();
+                });
+                return (
+                  <div
+                    key={dia}
+                    className="rounded-xl bg-white p-3 shadow-sm hover:bg-[#F5F5F5] cursor-pointer transition-colors"
+                    onClick={() => setFiltros({ ...filtros, fecha: `${fCalendario.getFullYear()}-${String(fCalendario.getMonth() + 1).padStart(2, '0')}-${String(fCalendario.getDate()).padStart(2, '0')}`, page: 1 })}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-[#7F1518]">{dia}</span>
+                      <span className="text-xs text-[#333333]/60">{reservasDia.length} res.</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div>Ver datos</div>
+        )}
+
+        <div className="flex items-center justify-between p-4 bg-[#F5F5F5]/60">
+          <span className="text-sm">Página {page} de {totalPaginas}</span>
+          <div className="flex gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((x) => Math.max(1, x - 1))}
+              className="rounded-lg bg-white px-3 py-1.5 shadow-sm transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              ← Anterior
+            </button>
+            <button
+              disabled={page >= totalPaginas}
+              onClick={() => setPage((x) => x + 1)}
+              className="rounded-lg bg-white px-3 py-1.5 shadow-sm transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Siguiente →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {modal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between border-b border-[#F5F5F5] px-6 py-4">
+              <div>
+                <h2 className="text-xl font-bold text-[#7F1518]">Nueva Reserva</h2>
+              </div>
+              <button
+                onClick={() => setModal(false)}
+                aria-label="Cerrar"
+                className="rounded-lg p-2 transition-colors hover:bg-[#D9D9D9]"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <form className="flex flex-col gap-4 p-6">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs font-bold uppercase opacity-60">Cliente ID *</span>
+                    <input
+                      type="number"
+                      value={form.clienteId}
+                      onChange={(e) => setForm({ ...form, clienteId: Number(e.target.value) })}
+                      className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+                <div>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs font-bold uppercase opacity-60">Mesa ID</span>
+                    <input
+                      type="number"
+                      value={form.mesaId}
+                      onChange={(e) => setForm({ ...form, mesaId: Number(e.target.value) || 0 })}
+                      className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs font-bold uppercase opacity-60">Fecha *</span>
+                    <input
+                      type="date"
+                      value={form.fecha}
+                      onChange={(e) => setForm({ ...form, fecha: e.target.value })}
+                      className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+                <div>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs font-bold uppercase opacity-60">Hora *</span>
+                    <input
+                      type="time"
+                      value={form.hora}
+                      onChange={(e) => setForm({ ...form, hora: e.target.value })}
+                      className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-bold uppercase opacity-60">Comensales</span>
+                  <input
+                    type="number"
+                    value={form.comensales}
+                    onChange={(e) => setForm({ ...form, comensales: Number(e.target.value) }) }
+                    className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm"
+                  />
+                </label>
+                <div>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs font-bold uppercase opacity-60">Observación</span>
+                    <textarea
+                      value={form.observacion || ''}
+                      onChange={(e) => setForm({ ...form, observacion: e.target.value }) }
+                      className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm resize-none"
+                      rows={3}
+                      placeholder="Cumpleaños, mesa cerca a la ventana..."
+                    />
+                  </label>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-4">
+                <button
+                  onClick={() => setModal(false)}
+                  className="rounded-xl bg-[#F5F5F5] px-5 py-2.5 text-sm font-semibold hover:bg-[#D9D9D9]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => void handleCrear()}
+                  disabled={guardando}
+                  className="rounded-xl bg-[#A61E22] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#7F1518] disabled:opacity-60"
+                >
+                  {guardando ? 'Guardando…' : 'Crear'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {modalConfirmar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between border-b border-[#F5F5F5] px-6 py-4">
+              <div>
+                <h2 className="text-xl font-bold text-[#7F1518]">Confirmar Reserva #{modalConfirmar.id}</h2>
+              </div>
+              <button
+                onClick={() => setModalConfirmar(null)}
+                aria-label="Cerrar"
+                className="rounded-lg p-2 transition-colors hover:bg-[#D9D9D9]"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <form className="grid grid-cols-2 gap-4 p-6">
+              <div>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-bold uppercase opacity-60">Mesa *</span>
+                  <select
+                    id="mesaConfirmar"
+                    className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm outline-none"
+                  >
+                    <option value="">Seleccione mesa</option>
+                    {/* Llenar con mesas libres via API */}
+                  </select>
+                </label>
+              </div>
+              <div>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-bold uppercase opacity-60">Observación</span>
+                  <textarea
+                    className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm resize-none"
+                    rows={3}
+                    placeholder="Observación de confirmación..."
+                  />
+                </label>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setModalConfirmar(null)}
+                  className="rounded-xl bg-[#F5F5F5] px-5 py-2.5 text-sm font-semibold hover:bg-[#D9D9D9]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => void handleConfirmarGuardar(modalConfirmar.id)}
+                  disabled={!modalConfirmar.id}
+                  className="rounded-xl bg-[#A61E22] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#7F1518] disabled:opacity-60"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {modalAnular && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="text-xl font-bold text-[#7F1518]">Anular Reserva #{modalAnular.id}</h2>
+            <p className="mt-2 text-sm opacity-70">¿Estás seguro de anular esta reserva?</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setModalAnular(null)}
+                className="rounded-xl bg-[#F5F5F5] px-5 py-2.5 text-sm font-semibold hover:bg-[#D9D9D9]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => void handleAnularEjecutar(modalAnular.id)}
+                className="rounded-xl bg-[#A61E22] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#7F1518]"
+              >
+                Anular
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalAtender && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="text-xl font-bold text-[#7F1518]">Atender Reserva #{modalAtender.id}</h2>
+            <p className="mt-2 text-sm opacity-70">¿Marcar esta reserva como Atendida (cliente llegó a la mesa)?</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setModalAtender(null)}
+                className="rounded-xl bg-[#F5F5F5] px-5 py-2.5 text-sm font-semibold hover:bg-[#D9D9D9]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => void handleAtenderEjecutar(modalAtender.id)}
+                className="rounded-xl bg-[#A61E22] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#7F1518]"
+              >
+                Atender
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

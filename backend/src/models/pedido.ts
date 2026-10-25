@@ -1,0 +1,77 @@
+/** Tipos del módulo pedidos (pedido/detalle_pedido/estado_pedido/tipo_pedido). */
+export type EstadoPedido = 'A' | 'I';
+
+export interface Pedido {
+  id: number;
+  numero: string;
+  clienteId: number | null;
+  mesaId: number | null;
+  tipoId: number;
+  tipo: string;
+  estadoId: number;
+  estado: string;
+  usuarioId: number;
+  empleadoId: number | null;
+  fecha: string;
+  fechaCierre: string | null;
+  comensales: number;
+  subtotal: number;
+  descuento: number;
+  servicio: number;
+  igv: number;
+  total: number;
+  facturado: 'S' | 'N';
+  anulado: 'S' | 'N';
+  motivoAnulacion: string | null;
+  observacion: string | null;
+  estadoRegistro: EstadoPedido;
+  detalles?: DetallePedido[];
+}
+
+export interface DetallePedido {
+  id: number;
+  pedidoId: number;
+  productoId: number;
+  producto: string;
+  cantidad: number;
+  precioUnitario: number;
+  descuento: number;
+  subTotal: number;
+  notaCocina: string | null;
+  estadoPreparacion: 'P' | 'E' | 'S' | 'A';
+  esCortesia: 'S' | 'N';
+  fechaSolicitud: string;
+  fechaAtencion: string | null;
+  clienteId: number | null;
+  estadoRegistro: EstadoPedido;
+}
+
+export interface PedidoLista {
+  data: Pedido[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export type PedidoErrorCode =
+  | 'YA_EXISTE'
+  | 'NOT_FOUND'
+  | 'TIPO_INVALIDO'
+  | 'MESA_OCUPADA'
+  | 'PEDIDO_FACTURADO'
+  | 'PEDIDO_ANULADO'
+  | 'PRODUCTO_NO_DISPONIBLE'
+  | 'NO_PARTICIPANTE'
+  | 'NO_COMANDA_ACTIVA'
+  | 'MESA_POR_COBRAR'
+  | 'YA_POR_COBRAR'
+  | 'VALIDATION_ERROR';
+
+export class PedidoError extends Error {
+  readonly code: PedidoErrorCode;
+
+  constructor(code: PedidoErrorCode) {
+    super(code);
+    this.code = code;
+  }
+}

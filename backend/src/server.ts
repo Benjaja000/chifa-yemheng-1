@@ -1,6 +1,11 @@
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 
+process.on('unhandledRejection', (reason) => {
+  // eslint-disable-next-line no-console
+  console.error('[unhandledRejection]', reason);
+});
+
 const app = createApp();
 
 app.listen(env.PORT, () => {

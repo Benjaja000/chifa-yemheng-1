@@ -1,20 +1,69 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
-import { CategoriasPage } from '../features/admin/categorias/categorias-page';
-import { ClientesPage } from '../features/admin/clientes/clientes-page';
-import { DashboardPage } from '../features/admin/dashboard/dashboard-page';
-import { MesasPage } from '../features/admin/mesas/mesas-page';
-import { PersonalPage } from '../features/admin/personal/personal-page';
-import { ProductosPage } from '../features/admin/productos/productos-page';
-import { LoginPage } from '../features/auth/login/login-page';
-import { ClienteLoginPage } from '../features/cliente/login/cliente-login-page';
+import { AuthGuard, PublicGuard, RoleGuard, AreaGuard, ClienteAuthGuard, ClientePublicGuard } from './guards';
+import { RouteError } from '../shared/ui/route-error';
 import { AdminShell } from '../layouts/admin-shell';
+import ClientLayout from '../layouts/client-layout';
 import { PublicShell } from '../layouts/public-shell';
-import { AuthGuard, PublicGuard, RoleGuard } from './guards';
+import RepartidorLayout from '../layouts/repartidor-layout';
+
+// Auth
+import { LoginPage } from '../features/auth/login/login-page';
+import { RepartidorLoginPage } from '../features/repartidor/login-page';
+import { ClienteLoginPage } from '../features/cliente/login/cliente-login-page';
+
+// Landing
+import LandingPage from '../features/landing/landing-page';
+
+// Admin Pages
+import { DashboardPage } from '../features/admin/dashboard/dashboard-page';
+import { CategoriasPage } from '../features/admin/categorias/categorias-page';
+import { ProductosPage } from '../features/admin/productos/productos-page';
+import { ClientesPage } from '../features/admin/clientes/clientes-page';
+import { PersonalPage } from '../features/admin/personal/personal-page';
+import { MesasPage } from '../features/admin/mesas/mesas-page';
+import { AdminReportesPage } from '../features/admin/reportes/reportes-page';
+import { AdminAuditoriaPage } from '../features/admin/auditoria/auditoria-page';
+import { AdminUsuariosPage } from '../features/admin/usuarios/usuarios-page';
+import { AdminInventarioPage } from '../features/admin/inventario/inventario-page';
+import { AdminEmpleadosPage } from '../features/admin/empleados/empleados-page';
+import { AdminCrudPage } from '../features/admin/crud/crud-page';
+import { AdminReservasPage } from '../features/admin/reservas-admin/reservas-admin-page';
+import { PedidosDeliveryPage } from '../features/admin/pedidos-delivery/PedidosDeliveryPage';
+import { AdminPedidosPage } from '../features/admin/pedidos/pedidos-page';
+
+// Staff Pages
+import { StaffMozoPage } from '../features/staff/mozo/mozo-page';
+import { StaffCajaPage } from '../features/staff/caja/caja-page';
+import { StaffDeliveryPage } from '../features/staff/delivery/delivery-page';
+import { StaffCocinaPage } from '../features/staff/cocina/cocina-page';
+
+// Repartidor Pages
+import { MisEntregasPage } from '../features/repartidor/mis-entregas/mis-entregas-page';
+import { EntregaDetallePage } from '../features/repartidor/entrega-detalle/entrega-detalle-page';
+import { PorRendirPage } from '../features/repartidor/por-rendir/por-rendir-page';
+
+// Cliente Pages
+import { ClienteHubPage } from '../features/cliente/inicio/cliente-hub-page';
+import { ClienteMenuPage } from '../features/cliente/menu/menu-page';
+import { ClienteComandaPage } from '../features/cliente/comanda/comanda-page';
+import { ClientePerfilPage } from '../features/cliente/perfil/perfil-page';
+import { ClienteHistorialPage } from '../features/cliente/historial/historial-page';
+import { ClienteReservasPage } from '../features/cliente/reservas/reservas-page';
+import { ClienteReservaNuevaPage } from '../features/cliente/reservas/reserva-nueva-page';
+import { ClienteDeliveryPage } from '../features/cliente/delivery/delivery-page';
+import { ClientePedidoTrackingPage } from '../features/cliente/pedido/pedido-tracking-page';
+import { ClienteMiConsumoPage } from '../features/cliente/consumo/mi-consumo-page';
+import { ClienteResetClavePage } from '../features/cliente/reset/reset-clave-page';
+import MesaQrPage from '../features/cliente/mesa/mesa-qr-page';
+
+
 
 export const router = createBrowserRouter([
+  // 1. AUTH PÚBLICO
   {
     path: '/auth',
     element: <PublicShell />,
+    errorElement: <RouteError />,
     children: [
       {
         path: 'login',
@@ -24,67 +73,180 @@ export const router = createBrowserRouter([
           </PublicGuard>
         ),
       },
+      {
+        path: 'repartidor-login',
+        element: (
+          <PublicGuard>
+            <RepartidorLoginPage />
+          </PublicGuard>
+        ),
+      },
     ],
   },
+
+  // 2. CLIENTE (ClientLayout + ClienteAuthGuard)
   {
-    // Login cliente PRUEBA (add-cliente-login-prueba): página visual sin
-    // guards a propósito (PublicGuard rebotaría a /admin con sesión staff).
-    path: '/cliente',
-    element: <PublicShell />,
-    children: [{ path: 'login', element: <ClienteLoginPage /> }],
+    path: '/',
+    element: <ClientLayout />,
+    errorElement: <RouteError />,
+    children: [
+      {
+        index: true,
+        element: <LandingPage />,
+      },
+      {
+        path: 'cliente/login',
+        element: <ClientePublicGuard><ClienteLoginPage /></ClientePublicGuard>,
+      },
+      {
+        path: 'cliente/mesa/:id',
+        element: <MesaQrPage />,
+      },
+      {
+        path: 'cliente/inicio',
+        element: <ClienteAuthGuard><ClienteHubPage /></ClienteAuthGuard>,
+      },
+      {
+        path: 'cliente/menu',
+        element: <ClienteAuthGuard><ClienteMenuPage /></ClienteAuthGuard>,
+      },
+      {
+        path: 'cliente/comanda',
+        element: <ClienteAuthGuard><ClienteComandaPage /></ClienteAuthGuard>,
+      },
+      {
+        path: 'cliente/mi-consumo',
+        element: <ClienteAuthGuard><ClienteMiConsumoPage /></ClienteAuthGuard>,
+      },
+      {
+        path: 'cliente/perfil',
+        element: <ClienteAuthGuard><ClientePerfilPage /></ClienteAuthGuard>,
+      },
+      {
+        path: 'cliente/historial',
+        element: <ClienteAuthGuard><ClienteHistorialPage /></ClienteAuthGuard>,
+      },
+      {
+        path: 'cliente/reservas',
+        element: <ClienteAuthGuard><ClienteReservasPage /></ClienteAuthGuard>,
+      },
+      {
+        path: 'cliente/reservar',
+        element: <ClienteAuthGuard><ClienteReservaNuevaPage /></ClienteAuthGuard>,
+      },
+      {
+        path: 'cliente/delivery',
+        element: <ClienteAuthGuard><ClienteDeliveryPage /></ClienteAuthGuard>,
+      },
+      {
+        path: 'cliente/pedido/:id',
+        element: <ClienteAuthGuard><ClientePedidoTrackingPage /></ClienteAuthGuard>,
+      },
+      {
+        path: 'cliente/restablecer',
+        element: <ClientePublicGuard><ClienteResetClavePage /></ClientePublicGuard>,
+      },
+    ],
   },
+
+  // 3. ADMIN (AuthGuard en el padre; cada ruta hija valida su rol/área)
   {
     path: '/admin',
-    element: (
-      <AuthGuard>
-        <RoleGuard roles={['ADMINISTRADOR', 'SUPERVISOR']}>
-          <AdminShell />
-        </RoleGuard>
-      </AuthGuard>
-    ),
+    element: <AuthGuard><AdminShell /></AuthGuard>,
+    errorElement: <RouteError />,
     children: [
       { index: true, element: <DashboardPage /> },
       {
         path: 'categorias',
-        element: (
-          <RoleGuard roles={['ADMINISTRADOR', 'SUPERVISOR']}>
-            <CategoriasPage />
-          </RoleGuard>
-        ),
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><CategoriasPage /></RoleGuard>,
       },
       {
         path: 'productos',
-        element: (
-          <RoleGuard roles={['ADMINISTRADOR', 'SUPERVISOR']}>
-            <ProductosPage />
-          </RoleGuard>
-        ),
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><ProductosPage /></RoleGuard>,
       },
       {
         path: 'clientes',
-        element: (
-          <RoleGuard roles={['ADMINISTRADOR', 'SUPERVISOR', 'CAJERO']}>
-            <ClientesPage />
-          </RoleGuard>
-        ),
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','CAJERO']}><ClientesPage /></RoleGuard>,
       },
       {
         path: 'personal',
-        element: (
-          <RoleGuard roles={['ADMINISTRADOR', 'GERENTE']}>
-            <PersonalPage />
-          </RoleGuard>
-        ),
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','GERENTE']}><PersonalPage /></RoleGuard>,
       },
       {
         path: 'mesas',
-        element: (
-          <RoleGuard roles={['ADMINISTRADOR', 'SUPERVISOR']}>
-            <MesasPage />
-          </RoleGuard>
-        ),
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><MesasPage /></RoleGuard>,
+      },
+      {
+        path: 'cocina',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','COCINA']}><AreaGuard area="COCINA"><StaffCocinaPage /></AreaGuard></RoleGuard>,
+      },
+      {
+        path: 'mozo',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','MOZO']}><AreaGuard area="MOZO"><StaffMozoPage /></AreaGuard></RoleGuard>,
+      },
+      {
+        path: 'caja',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','CAJERO']}><AreaGuard area="CAJA"><StaffCajaPage /></AreaGuard></RoleGuard>,
+      },
+      {
+        path: 'delivery',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','DELIVERY','CAJERO','MOZO']}><StaffDeliveryPage /></RoleGuard>,
+      },
+      {
+        path: 'pedidos',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','MOZO','CAJERO','COCINA']}><AdminPedidosPage /></RoleGuard>,
+      },
+      {
+        path: 'pedidos-delivery',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','DELIVERY','CAJERO','MOZO']}><PedidosDeliveryPage /></RoleGuard>,
+      },
+      {
+        path: 'reportes',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','CAJERO']}><AdminReportesPage /></RoleGuard>,
+      },
+      {
+        path: 'auditoria',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><AdminAuditoriaPage /></RoleGuard>,
+      },
+      {
+        path: 'usuarios',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><AdminUsuariosPage /></RoleGuard>,
+      },
+      {
+        path: 'inventario',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','ALMACEN']}><AdminInventarioPage /></RoleGuard>,
+      },
+      {
+        path: 'empleados',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><AdminEmpleadosPage /></RoleGuard>,
+      },
+      {
+        path: 'crud',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><AdminCrudPage /></RoleGuard>,
+      },
+      {
+        path: 'reservas-admin',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','MOZO','CAJERO']}><AdminReservasPage /></RoleGuard>,
       },
     ],
   },
+
+  // 4. REPARTIDOR (RepartidorLayout + AuthGuard + RoleGuard REPARTIDOR)
+  {
+    path: '/repartidor/login',
+    element: <PublicGuard><RepartidorLoginPage /></PublicGuard>,
+    errorElement: <RouteError />,
+  },
+  {
+    path: '/repartidor',
+    element: <AuthGuard><RoleGuard roles={['REPARTIDOR']}><RepartidorLayout /></RoleGuard></AuthGuard>,
+    errorElement: <RouteError />,
+    children: [
+      { path: 'mis-entregas', element: <RoleGuard roles={['REPARTIDOR']}><MisEntregasPage /></RoleGuard> },
+      { path: 'entrega/:id', element: <RoleGuard roles={['REPARTIDOR']}><EntregaDetallePage /></RoleGuard> },
+      { path: 'por-rendir', element: <RoleGuard roles={['REPARTIDOR']}><PorRendirPage /></RoleGuard> },
+    ],
+  },
+
   { path: '*', element: <Navigate to="/auth/login" replace /> },
-]);
+])

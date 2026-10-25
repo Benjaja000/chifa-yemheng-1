@@ -2,3 +2,7 @@ node_modules/
 dist/
 .env
 *.local
+.secrets/
+authorize-gmail/
+.env
+.env.*

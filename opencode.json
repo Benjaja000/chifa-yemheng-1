@@ -15,5 +15,20 @@
       "url": "https://mcp.supabase.com/mcp?project_ref=jslpzwdtaggfclnbmrmt&features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching",
       "enabled": true
     }
+  },
+  "provider": {
+    "nvidia": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "NVIDIA NIM",
+      "options": {
+        "baseURL": "https://integrate.api.nvidia.com/v1",
+        "apiKey": "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"
+      },
+      "models": {
+        "deepseek-ai/deepseek-v3.1": {
+          "name": "DeepSeek V3.1"
+        }
+      }
+    }
   }
 }

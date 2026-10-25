@@ -4,11 +4,10 @@ import {
   cambiarEstadoProducto,
   crearProducto,
   listarCategoriasActivas,
-  listarCodigosConPrefijo,
   listarProductos,
 } from './productos-service';
 import type { CategoriaOpcion } from './productos-service';
-import { prefijoParaCategoria, requiereTiempo, siguienteCodigo, TIPOS, UNIDADES } from './productos-types';
+import { requiereTiempo, TIPOS, UNIDADES } from './productos-types';
 import type { Producto, ProductoForm, TipoProducto } from './productos-types';
 
 const LIMITE = 20;
@@ -28,7 +27,6 @@ const VACIO: ProductoForm = {
   imagen: '',
   detalle: '',
   afectoIgv: true,
-  codigo: '',
   estado: 'A',
 };
 
@@ -49,7 +47,6 @@ export function ProductosPage() {
   const [form, setForm] = useState<ProductoForm>(VACIO);
   const [formError, setFormError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
-  const [sugiriendo, setSugiriendo] = useState(false);
 
   const cargar = async () => {
     setCargando(true);
@@ -99,37 +96,14 @@ export function ProductosPage() {
       imagen: p.imagen ?? '',
       detalle: p.detalle ?? '',
       afectoIgv: p.afectoIgv,
-      codigo: p.codigo ?? '',
       estado: p.estado,
     });
     setFormError(null);
     setModal({ editando: p });
   };
 
-  /** Sugiere el siguiente código libre del prefijo de la categoría (no pisa lo escrito). */
-  const sugerirCodigo = async (categoriaId: number, forzar = false) => {
-    if (!forzar && form.codigo.trim()) {
-      return;
-    }
-    const cat = categorias.find((c) => c.id === categoriaId);
-    if (!cat) {
-      return;
-    }
-    setSugiriendo(true);
-    try {
-      const prefijo = prefijoParaCategoria(cat.nombre);
-      const existentes = await listarCodigosConPrefijo(prefijo);
-      setForm((f) => ({ ...f, codigo: siguienteCodigo(prefijo, existentes) }));
-    } catch {
-      setFormError('No se pudo sugerir el código. Escríbalo manual.');
-    } finally {
-      setSugiriendo(false);
-    }
-  };
-
   const cambiarCategoria = (id: number) => {
     setForm({ ...form, categoriaId: id });
-    void sugerirCodigo(id);
   };
 
   const cambiarTipo = (tipo: TipoProducto) => {
@@ -152,7 +126,7 @@ export function ProductosPage() {
     setGuardando(true);
     setFormError(null);
     try {
-      const payload = { ...form, nombre: form.nombre.trim(), codigo: form.codigo.trim() };
+      const payload = { ...form, nombre: form.nombre.trim() };
       if (modal?.editando) {
         await actualizarProducto(modal.editando.id, payload);
       } else {
@@ -163,11 +137,9 @@ export function ProductosPage() {
     } catch (e) {
       const codigo = (e as Error).message;
       setFormError(
-        codigo === 'YA_EXISTE'
-          ? 'Ya existe un producto con ese código.'
-          : codigo === 'CATEGORIA_INVALIDA'
-            ? 'La categoría no existe o está inactiva.'
-            : 'No se pudo guardar. Reintente.',
+        codigo === 'CATEGORIA_INVALIDA'
+          ? 'La categoría no existe o está inactiva.'
+          : 'No se pudo guardar. Reintente.',
       );
     } finally {
       setGuardando(false);
@@ -321,7 +293,7 @@ export function ProductosPage() {
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-[#F5F5F5] text-[11px] tracking-wider text-[#333333]/60 uppercase">
                     <th className="w-16 px-4 py-3 text-center">Foto</th>
-                    <th className="px-4 py-3">Nombre &amp; Código</th>
+                    <th className="px-4 py-3">Nombre</th>
                     <th className="px-4 py-3">Categoría</th>
                     <th className="px-4 py-3 text-right">Precio</th>
                     <th className="px-4 py-3">Stock</th>
@@ -353,7 +325,7 @@ export function ProductosPage() {
                       <td className="px-4 py-3">
                         <div className="font-semibold">{p.nombre}</div>
                         <div className="font-mono text-[11px] text-[#333333]/50">
-                          {p.codigo ? `REF: ${p.codigo}` : `ID: ${p.id}`}
+                          ID: {p.id}
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -613,33 +585,7 @@ export function ProductosPage() {
                     </span>
                   )}
                 </label>
-                <label className="flex flex-col gap-1.5">
-                  <span className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-wider uppercase opacity-60">
-                    <span>
-                      Código <span className="normal-case opacity-70">(opcional, único)</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void sugerirCodigo(form.categoriaId, true)}
-                      disabled={sugiriendo || !form.categoriaId}
-                      className="rounded-md bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold normal-case text-[#A61E22] transition-colors hover:bg-[#A61E22] hover:text-white disabled:opacity-50"
-                    >
-                      {sugiriendo ? 'Buscando…' : 'Autocompletar'}
-                    </button>
-                  </span>
-                  <input
-                    value={form.codigo}
-                    maxLength={20}
-                    onChange={(e) => setForm({ ...form, codigo: e.target.value })}
-                    placeholder="Ej. CHF009"
-                    className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 font-mono text-sm outline-none"
-                  />
-                  <span className="text-[11px] leading-snug text-[#333333]/60">
-                    Prefijo por familia + número: SOP sopas · CHF chifa · ENT entradas · PLF fondo
-                    · CRI criollos · MAR marinos · BEO/BEF/BEC bebidas · LIC licores · POS postres
-                    · INS insumos. Vacío = se muestra el ID. Si repites uno verás “Ya existe…”.
-                  </span>
-                </label>
+
                 <label className="flex flex-col gap-1.5 md:col-span-2">
                   <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Detalle</span>
                   <textarea

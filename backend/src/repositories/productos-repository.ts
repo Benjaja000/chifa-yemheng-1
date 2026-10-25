@@ -6,7 +6,6 @@ import { createAudit, updateAudit } from '../utils/auditoria.js';
 interface ProductoRow {
   id_producto: number;
   n_producto: string;
-  codigo: string | null;
   id_categoriaproducto: number;
   categoria_producto: { n_categoriaproducto: string } | null;
   tipo_producto: string;
@@ -26,13 +25,12 @@ interface ProductoRow {
 }
 
 const SELECT =
-  'id_producto, n_producto, codigo, id_categoriaproducto, categoria_producto(n_categoriaproducto), tipo_producto, precio, costo, id_unidad, unidad_medida(n_unidad), stock_actual, stock_minimo, controla_stock, tiempo_preparacion, disponible, imagen, detalle, afecto_igv, estado';
+  'id_producto, n_producto, id_categoriaproducto, categoria_producto(n_categoriaproducto), tipo_producto, precio, costo, id_unidad, unidad_medida(n_unidad), stock_actual, stock_minimo, controla_stock, tiempo_preparacion, disponible, imagen, detalle, afecto_igv, estado';
 
 function mapRow(row: ProductoRow): Producto {
   return {
     id: row.id_producto,
     nombre: row.n_producto,
-    codigo: row.codigo,
     categoriaId: row.id_categoriaproducto,
     categoria: row.categoria_producto?.n_categoriaproducto ?? '',
     tipo: (row.tipo_producto ?? 'P') as Producto['tipo'],
@@ -102,21 +100,6 @@ export async function obtenerProducto(id: number): Promise<Producto | null> {
   return mapRow(data as unknown as ProductoRow);
 }
 
-export async function existeCodigo(codigo: string, excluirId?: number): Promise<boolean> {
-  let query = supabase
-    .from('producto')
-    .select('id_producto', { count: 'exact', head: true })
-    .eq('codigo', codigo);
-  if (excluirId !== undefined) {
-    query = query.neq('id_producto', excluirId);
-  }
-  const { count, error } = await query;
-  if (error) {
-    throw new Error(`DB_EXISTS_FAIL: ${error.message}`);
-  }
-  return (count ?? 0) > 0;
-}
-
 export async function categoriaActiva(id: number): Promise<boolean> {
   const { data, error } = await supabase
     .from('categoria_producto')
@@ -148,7 +131,6 @@ export async function crearProducto(input: ProductoCreate, usucre: string, pc = 
       imagen: input.imagen || null,
       detalle: input.detalle || null,
       afecto_igv: sn(input.afectoIgv),
-      codigo: input.codigo?.trim() ? input.codigo.trim() : null,
       estado: input.estado,
       ...createAudit(usucre, pc),
     })
@@ -208,9 +190,6 @@ export async function actualizarProducto(
   }
   if (input.afectoIgv !== undefined) {
     patch['afecto_igv'] = sn(input.afectoIgv);
-  }
-  if (input.codigo !== undefined) {
-    patch['codigo'] = input.codigo?.trim() ? input.codigo.trim() : null;
   }
   if (input.estado !== undefined) {
     patch['estado'] = input.estado;

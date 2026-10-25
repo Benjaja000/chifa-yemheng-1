@@ -1,0 +1,43 @@
+/** Tipos del módulo inventario (MOVIMIENTO_INVENTARIO, RECETA). */
+export type TipoMovimiento = 'E' | 'S' | 'A' | 'M';
+export type TipoProductoInv = 'P' | 'B' | 'I';
+
+export interface MovimientoInventario {
+  id: number;
+  productoId: number;
+  producto: string;
+  tipo: TipoMovimiento;
+  cantidad: number;
+  costo: number;
+  motivo: string | null;
+  fecha: string;
+  usuarioId: number | null;
+}
+
+export interface MovimientoLista {
+  data: MovimientoInventario[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export interface Receta {
+  id: number;
+  productoId: number;
+  producto: string;
+  insumoId: number;
+  insumo: string;
+  cantidad: number;
+  unidad: string;
+}
+
+export type InventarioErrorCode = 'NOT_FOUND' | 'PRODUCTO_INVALIDO' | 'INSUMO_INVALIDO' | 'VALIDATION_ERROR';
+
+export class InventarioError extends Error {
+  readonly code: InventarioErrorCode;
+
+  constructor(code: InventarioErrorCode) {
+    super(code);
+    this.code = code;
+  }
+}

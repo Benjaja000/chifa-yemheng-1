@@ -28,32 +28,32 @@ WHERE e.Descripcion = 'LIBRE'
                   WHERE m.ID_Ambiente = a.ID_Ambiente AND m.Numero = v.Numero);
 
 /* ---------- PRODUCTO: platos y bebidas chifa (+20) ---------- */
-INSERT INTO PRODUCTO (ID_CategoriaProducto, ID_Unidad, Codigo, N_Producto, Detalle,
+INSERT INTO PRODUCTO (ID_CategoriaProducto, ID_Unidad, N_Producto, Detalle,
                       Precio, Costo, Tipo_Producto, Tiempo_Preparacion)
-SELECT c.ID_CategoriaProducto, u.ID_Unidad, v.Codigo, v.N_Producto, v.Detalle,
+SELECT c.ID_CategoriaProducto, u.ID_Unidad, v.N_Producto, v.Detalle,
        v.Precio, v.Costo, v.Tipo, v.Tiempo
 FROM (VALUES
-  ('SOPAS ORIENTALES','TAZON','SOP001','Sopa Wantán','Wantán, pollo y verduras chinas',12.00,4.00,'P',12),
-  ('SOPAS ORIENTALES','TAZON','SOP002','Min Pao','Sopa con min pao relleno de chancho',14.00,5.00,'P',15),
-  ('SOPAS ORIENTALES','TAZON','SOP003','Sopa de Pollo Oriental','Pollo, kion y sillao',13.00,4.50,'P',15),
-  ('PLATOS CHIFA','PORCION','CHF001','Tallarín Saltado de Pollo','Salteado al wok con verduras',30.00,11.00,'P',18),
-  ('PLATOS CHIFA','PORCION','CHF002','Tallarín Saltado de Carne','Lomo fino salteado al wok',32.00,12.00,'P',18),
-  ('PLATOS CHIFA','PORCION','CHF003','Arroz Chaufa Especial','Pollo, chancho, huevo y sillao',34.00,12.00,'P',18),
-  ('PLATOS CHIFA','PORCION','CHF004','Chi Jau Kay','Pollo crocante en salsa de ostión',36.00,13.00,'P',20),
-  ('PLATOS CHIFA','PORCION','CHF005','Kam Lu Wantán','Chancho agridulce con wantán frito',34.00,12.00,'P',20),
-  ('PLATOS CHIFA','PORCION','CHF006','Pollo Ti Pa Kay','Pollo dorado en salsa ti pa kay',35.00,13.00,'P',20),
-  ('PLATOS CHIFA','PORCION','CHF007','Chaufa de Mariscos','Arroz chaufa con mariscos',38.00,15.00,'P',20),
-  ('PLATOS CHIFA','PORCION','CHF008','Aeropuerto','Chaufa con tallarín y tortilla',32.00,11.00,'P',18),
-  ('ENTRADAS','PORCION','ENT003','Wantán Frito','8 unidades con salsa de tamarindo',12.00,3.50,'P',10),
-  ('ENTRADAS','PORCION','ENT004','Enrollado Primavera','2 unidades con salsa agridulce',13.00,4.00,'P',10),
-  ('BEBIDAS ORIENTALES','TAZA','BEO001','Té Jazmín','Taza de té de jazmín',6.00,1.50,'B',3),
-  ('BEBIDAS ORIENTALES','TAZA','BEO002','Té Verde','Taza de té verde',6.00,1.50,'B',3),
-  ('BEBIDAS FRIAS','BOTELLA','BEF004','Inca Kola 1LT','Botella familiar',10.00,5.50,'B',1),
-  ('BEBIDAS FRIAS','BOTELLA','BEF005','Agua Mineral 625ml','Botella personal',4.00,2.00,'B',1)
-) AS v(Categoria, Unidad, Codigo, N_Producto, Detalle, Precio, Costo, Tipo, Tiempo)
+  ('SOPAS ORIENTALES','TAZON','Sopa Wantán','Wantán, pollo y verduras chinas',12.00,4.00,'P',12),
+  ('SOPAS ORIENTALES','TAZON','Min Pao','Sopa con min pao relleno de chancho',14.00,5.00,'P',15),
+  ('SOPAS ORIENTALES','TAZON','Sopa de Pollo Oriental','Pollo, kion y sillao',13.00,4.50,'P',15),
+  ('PLATOS CHIFA','PORCION','Tallarín Saltado de Pollo','Salteado al wok con verduras',30.00,11.00,'P',18),
+  ('PLATOS CHIFA','PORCION','Tallarín Saltado de Carne','Lomo fino salteado al wok',32.00,12.00,'P',18),
+  ('PLATOS CHIFA','PORCION','Arroz Chaufa Especial','Pollo, chancho, huevo y sillao',34.00,12.00,'P',18),
+  ('PLATOS CHIFA','PORCION','Chi Jau Kay','Pollo crocante en salsa de ostión',36.00,13.00,'P',20),
+  ('PLATOS CHIFA','PORCION','Kam Lu Wantán','Chancho agridulce con wantán frito',34.00,12.00,'P',20),
+  ('PLATOS CHIFA','PORCION','Pollo Ti Pa Kay','Pollo dorado en salsa ti pa kay',35.00,13.00,'P',20),
+  ('PLATOS CHIFA','PORCION','Chaufa de Mariscos','Arroz chaufa con mariscos',38.00,15.00,'P',20),
+  ('PLATOS CHIFA','PORCION','Aeropuerto','Chaufa con tallarín y tortilla',32.00,11.00,'P',18),
+  ('ENTRADAS','PORCION','Wantán Frito','8 unidades con salsa de tamarindo',12.00,3.50,'P',10),
+  ('ENTRADAS','PORCION','Enrollado Primavera','2 unidades con salsa agridulce',13.00,4.00,'P',10),
+  ('BEBIDAS ORIENTALES','TAZA','Té Jazmín','Taza de té de jazmín',6.00,1.50,'B',3),
+  ('BEBIDAS ORIENTALES','TAZA','Té Verde','Taza de té verde',6.00,1.50,'B',3),
+  ('BEBIDAS FRIAS','BOTELLA','Inca Kola 1LT','Botella familiar',10.00,5.50,'B',1),
+  ('BEBIDAS FRIAS','BOTELLA','Agua Mineral 625ml','Botella personal',4.00,2.00,'B',1)
+) AS v(Categoria, Unidad, N_Producto, Detalle, Precio, Costo, Tipo, Tiempo)
   INNER JOIN CATEGORIA_PRODUCTO c ON c.N_CategoriaProducto = v.Categoria
   INNER JOIN UNIDAD_MEDIDA u ON u.N_Unidad = v.Unidad
-ON CONFLICT (Codigo) DO NOTHING;
+WHERE NOT EXISTS (SELECT 1 FROM PRODUCTO p WHERE p.N_Producto = v.N_Producto);
 
 /* Stock para embotellados nuevos */
 UPDATE PRODUCTO SET Controla_Stock = 'S', Stock_Actual = 24, Stock_Minimo = 6

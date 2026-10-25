@@ -1,0 +1,23 @@
+import { Router } from 'express';
+import {
+  getClienteComandaActiva,
+  getClientePedidoDetalle,
+  getClientePedidosActivos,
+  patchClienteCuenta,
+  postClienteDetalle,
+  postClientePedido,
+  postClienteRecalcular,
+} from '../controllers/cliente-pedidos-controller.js';
+import { clienteAuthGuard } from '../middlewares/cliente-auth-guard.js';
+
+export const clientePedidosRouter = Router();
+
+clientePedidosRouter.use(clienteAuthGuard);
+// GET /comanda debe registrarse antes de /:id para no colisionar.
+clientePedidosRouter.get('/activos', getClientePedidosActivos);
+clientePedidosRouter.get('/comanda', getClienteComandaActiva);
+clientePedidosRouter.get('/:id', getClientePedidoDetalle);
+clientePedidosRouter.post('/', postClientePedido);
+clientePedidosRouter.post('/:id/detalles', postClienteDetalle);
+clientePedidosRouter.post('/:id/recalcular', postClienteRecalcular);
+clientePedidosRouter.patch('/cuenta', patchClienteCuenta);

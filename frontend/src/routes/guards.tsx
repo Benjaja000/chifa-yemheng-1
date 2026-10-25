@@ -1,41 +1,163 @@
 import { Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/login/auth-context';
+import { leerPermisos } from '../features/auth/login/auth-service';
+import { useClienteAuth } from '../features/cliente/auth/cliente-auth-context';
 
-/** PublicGuard: si ya hay sesión, fuera del login. */
+/** Valida JWT y retorna payload si válido, null si inválido/expirado. */
+function validateToken(token: string | null): { exp?: number; tipo?: string } | null {
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1] ?? '')) as { exp?: number; tipo?: string };
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+      return null; // expirado
+    }
+    return payload;
+  } catch {
+    return null; // token malformed
+  }
+}
+
+/** PublicGuard: si ya hay sesión staff VÁLIDA, fuera del login (sincrónico). */
 export function PublicGuard({ children }: { children: ReactNode }) {
   const { token, usuario } = useAuth();
-  if (token && usuario) {
+  const payload = validateToken(token);
+  if (payload && usuario) {
     return <Navigate to="/admin" replace />;
   }
   return <>{children}</>;
 }
 
-/** AuthGuard: exige JWT (logout automático si inválido/expirado). */
+/** AuthGuard: exige JWT staff VÁLIDO. */
 export function AuthGuard({ children }: { children: ReactNode }) {
   const { token, logout } = useAuth();
-  if (!token) {
-    return <Navigate to="/auth/login" replace />;
-  }
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1] ?? '')) as { exp?: number };
-    if (payload.exp && payload.exp * 1000 < Date.now()) {
+  const navigate = useNavigate();
+  const payload = validateToken(token);
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    if (!payload) {
       logout();
-      return <Navigate to="/auth/login" replace />;
+      navigate('/auth/login', { replace: true });
+    } else {
+      setAuthorized(true);
     }
-  } catch {
-    logout();
-    return <Navigate to="/auth/login" replace />;
+  }, [payload, logout, navigate]);
+
+  if (!authorized) return null;
+  return <>{children}</>;
+}
+
+/** RoleGuard: exige tipo de usuario permitido con token VÁLIDO. */
+export function RoleGuard({ roles, children }: { roles: string[]; children: ReactNode }) {
+  const { token, usuario } = useAuth();
+  const navigate = useNavigate();
+  const payload = validateToken(token);
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    if (!payload) {
+      navigate('/auth/login', { replace: true });
+    } else {
+      const tipo = (usuario?.tipo ?? payload.tipo ?? '').toUpperCase();
+      if (!roles.map((r) => r.toUpperCase()).includes(tipo)) {
+        navigate('/auth/login', { replace: true });
+      } else {
+        setAuthorized(true);
+      }
+    }
+  }, [payload, usuario?.tipo, roles, navigate]);
+
+  if (!authorized) return null;
+  return <>{children}</>;
+}
+
+/** RepartidorGuard: exige rol REPARTIDOR con token VÁLIDO. */
+export function RepartidorGuard({ children }: { children: ReactNode }) {
+  const { token, usuario } = useAuth();
+  const navigate = useNavigate();
+  const payload = validateToken(token);
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    if (!payload) {
+      navigate('/auth/login', { replace: true });
+    } else {
+      const esRepartidor = (usuario?.tipo ?? payload.tipo ?? '').toUpperCase() === 'REPARTIDOR';
+      if (!esRepartidor) {
+        navigate('/auth/login', { replace: true });
+      } else {
+        setAuthorized(true);
+      }
+    }
+  }, [payload, usuario?.tipo, navigate]);
+
+  if (!authorized) return null;
+  return <>{children}</>;
+}
+
+/** Matriz área → permisos (BR-ACC-036, spec permisos/areas). */
+const AREA_PERMISOS: Record<string, string[]> = {
+  MESAS: ['MESA_VER', 'MESA_CREAR', 'MESA_EDITAR', 'MESA_ELIMINAR', 'TMESA_VER', 'TMESA_CREAR', 'TMESA_EDITAR', 'TMESA_ELIMINAR'],
+  MOZO: ['PED_VER', 'PED_REGISTRAR', 'PED_ANULAR', 'PED_COCINA', 'PED_DESCUENTO'],
+  COCINA: ['PED_COCINA', 'PED_VER'],
+  CAJA: ['CAJA_APERTURA', 'CAJA_CIERRE', 'CAJA_ARQUEO', 'CAJA_RENDICION', 'CAJ_APERTURAR', 'CAJ_CERRAR', 'CAJ_EGRESO', 'VEN_COBRAR', 'VEN_EMITIR', 'VEN_NOTACREDITO'],
+  SEGURIDAD: ['EMP_VER', 'EMP_CREAR', 'EMP_EDITAR', 'EMP_ELIMINAR', 'PER_VER', 'PER_CREAR', 'PER_EDITAR', 'PER_ELIMINAR', 'AUD_VER'],
+};
+
+/** AreaGuard: si el usuario no tiene ninguno de los permisos del área, redirige. */
+export function AreaGuard({ area, children }: { area: keyof typeof AREA_PERMISOS | string; children: ReactNode }) {
+  const { token } = useAuth();
+  const navigate = useNavigate();
+  const payload = validateToken(token);
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    if (!payload) {
+      navigate('/auth/login', { replace: true });
+    } else {
+      const permisos = leerPermisos();
+      const requeridos = AREA_PERMISOS[area] ?? [];
+      if (permisos.length > 0 && requeridos.length > 0 && !requeridos.some((p) => permisos.includes(p))) {
+        navigate('/admin', { replace: true });
+      } else {
+        setAuthorized(true);
+      }
+    }
+  }, [payload, area, navigate]);
+
+  if (!authorized) return null;
+  return <>{children}</>;
+}
+
+/** ClientePublicGuard: si ya hay sesión cliente VÁLIDA, fuera del login (sincrónico). */
+export function ClientePublicGuard({ children }: { children: ReactNode }) {
+  const { token, cliente } = useClienteAuth();
+  const payload = validateToken(token);
+  if (payload && cliente) {
+    return <Navigate to="/cliente/inicio" replace />;
   }
   return <>{children}</>;
 }
 
-/** RoleGuard: exige tipo de usuario permitido. */
-export function RoleGuard({ roles, children }: { roles: string[]; children: ReactNode }) {
-  const { usuario } = useAuth();
-  const tipo = (usuario?.tipo ?? '').toUpperCase();
-  if (!roles.map((r) => r.toUpperCase()).includes(tipo)) {
-    return <Navigate to="/auth/login" replace />;
-  }
+/** ClienteAuthGuard: exige JWT cliente VÁLIDO. */
+export function ClienteAuthGuard({ children }: { children: ReactNode }) {
+  const { token, logoutCliente } = useClienteAuth();
+  const navigate = useNavigate();
+  const payload = validateToken(token);
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    if (!payload) {
+      void logoutCliente();
+      navigate('/cliente/login', { replace: true });
+    } else {
+      setAuthorized(true);
+    }
+  }, [payload, logoutCliente, navigate]);
+
+  if (!authorized) return null;
   return <>{children}</>;
 }

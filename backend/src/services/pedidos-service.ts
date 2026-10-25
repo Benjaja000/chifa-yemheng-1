@@ -1,0 +1,162 @@
+import type { Pedido, PedidoLista } from '../models/pedido.js';
+import { PedidoError } from '../models/pedido.js';
+import type { DetalleAdd, PedidoAbrir, PedidoQuery } from '../schemas/pedido.js';
+import {
+  agregarDetalle as repoAgregar,
+  anularPedido as repoAnular,
+  auditar,
+  cambiarPreparacion as repoCambiarPrep,
+  idEstadoMesaPorNombre,
+  listarPedidos as repoListar,
+  listarPedidosCocina,
+  obtenerEstadoMesa,
+  obtenerPedido as repoObtener,
+  abrirPedido as repoAbrir,
+  pedidosAbiertosPorMesa,
+  pedirCuentaMesa,
+  recalcularPedido as repoRecalcular,
+} from '../repositories/pedidos-repository.js';
+
+export function listarService(q: PedidoQuery): Promise<PedidoLista> {
+  return repoListar(q);
+}
+
+/** Pedidos activos con detalle para cocina (KDS), con envoltorio paginado (spec). */
+export async function cocinaService(): Promise<PedidoLista> {
+  const data = await listarPedidosCocina();
+  return { data, page: 1, limit: data.length || 100, total: data.length };
+}
+
+export async function obtenerService(id: number): Promise<Pedido> {
+  const p = await repoObtener(id);
+  if (!p) {
+    throw new PedidoError('NOT_FOUND');
+  }
+  return p;
+}
+
+export async function abrirService(
+  input: PedidoAbrir,
+  idUsuario: number,
+  _logeo: string,
+  _pc = '',
+): Promise<Pedido> {
+  const result = await repoAbrir(
+    input.tipo,
+    idUsuario,
+    input.mesa ?? null,
+    input.cliente ?? null,
+    input.empleado ?? null,
+    input.comensales ?? 1,
+    input.obs ?? '',
+  );
+  await auditar(idUsuario, 'ABRIR_PEDIDO', result.id, `Pedido ${result.numero}`);
+  const pedido = await repoObtener(result.id);
+  if (!pedido) {
+    throw new PedidoError('NOT_FOUND');
+  }
+  return pedido;
+}
+
+export async function agregarDetalleService(
+  pedidoId: number,
+  input: DetalleAdd,
+  idUsuario: number,
+  _logeo: string,
+  _pc = '',
+): Promise<Pedido> {
+  const pedido = await repoObtener(pedidoId);
+  if (!pedido) {
+    throw new PedidoError('NOT_FOUND');
+  }
+  if (pedido.facturado === 'S' || pedido.anulado === 'S') {
+    throw new PedidoError('PEDIDO_FACTURADO');
+  }
+  await repoAgregar(pedidoId, input.producto, input.cantidad, input.nota ?? '', input.descuento ?? 0);
+  await repoRecalcular(pedidoId);
+  await auditar(idUsuario, 'AGREGAR_DETALLE', pedidoId, `Producto ${input.producto} x${input.cantidad}`);
+  const updated = await repoObtener(pedidoId);
+  if (!updated) {
+    throw new PedidoError('NOT_FOUND');
+  }
+  return updated;
+}
+
+export async function recalcularService(pedidoId: number): Promise<Pedido> {
+  const pedido = await repoObtener(pedidoId);
+  if (!pedido) {
+    throw new PedidoError('NOT_FOUND');
+  }
+  await repoRecalcular(pedidoId);
+  const updated = await repoObtener(pedidoId);
+  if (!updated) {
+    throw new PedidoError('NOT_FOUND');
+  }
+  return updated;
+}
+
+export async function pedirCuentaStaffService(
+  pedidoId: number,
+  idUsuario: number,
+  _logeo: string,
+  _pc = '',
+): Promise<{ ok: true; pedidoId: number; estado: string }> {
+  const pedido = await repoObtener(pedidoId);
+  if (!pedido) {
+    throw new PedidoError('NOT_FOUND');
+  }
+  if (pedido.mesaId === null) {
+    throw new PedidoError('VALIDATION_ERROR');
+  }
+  if (pedido.facturado === 'S') {
+    throw new PedidoError('PEDIDO_FACTURADO');
+  }
+  if (pedido.anulado === 'S') {
+    throw new PedidoError('PEDIDO_ANULADO');
+  }
+  const estadoMesa = await obtenerEstadoMesa(pedido.mesaId);
+  if (estadoMesa.descripcion === 'POR COBRAR') {
+    throw new PedidoError('YA_POR_COBRAR');
+  }
+  const idPorCobrar = await idEstadoMesaPorNombre('POR COBRAR');
+  if (!idPorCobrar) {
+    throw new PedidoError('VALIDATION_ERROR');
+  }
+  await pedirCuentaMesa(pedido.mesaId, idPorCobrar);
+  await auditar(idUsuario, 'PEDIR_CUENTA_STAFF', pedidoId, `Mesa ${pedido.mesaId}`);
+  return { ok: true as const, pedidoId, estado: 'POR COBRAR' };
+}
+
+export async function anularService(
+  pedidoId: number,
+  idUsuario: number,
+  motivo: string,
+  _pc = '',
+): Promise<void> {
+  const pedido = await repoObtener(pedidoId);
+  if (!pedido) {
+    throw new PedidoError('NOT_FOUND');
+  }
+  if (pedido.facturado === 'S') {
+    throw new PedidoError('PEDIDO_FACTURADO');
+  }
+  if (pedido.anulado === 'S') {
+    throw new PedidoError('PEDIDO_ANULADO');
+  }
+  await repoAnular(pedidoId, idUsuario, motivo);
+  await auditar(idUsuario, 'ANULAR_PEDIDO', pedidoId, motivo);
+}
+
+export async function cambiarPreparacionService(
+  detalleId: number,
+  estado: string,
+  idUsuario: number,
+  _pc = '',
+): Promise<void> {
+  await repoCambiarPrep(detalleId, estado);
+  await auditar(idUsuario, 'CAMBIAR_PREPARACION', detalleId, estado);
+}
+
+export async function pedidosAbiertosPorMesaService(mesaId: number): Promise<Pedido[]> {
+  return pedidosAbiertosPorMesa(mesaId);
+}

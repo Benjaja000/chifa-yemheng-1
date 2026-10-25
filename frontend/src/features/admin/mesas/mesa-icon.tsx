@@ -58,7 +58,7 @@ export function MesaIcon({ numero, estado, color, tipo, capacidad, atenuado, min
         height: vertical ? sillaW : sillaH,
         backgroundColor: color,
         borderRadius: 4,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+        boxShadow: '0 1px 3px rgba(166,30,34,0.12)',
         opacity: atenuado ? 0.35 : 1,
       }}
     />
@@ -88,24 +88,24 @@ export function MesaIcon({ numero, estado, color, tipo, capacidad, atenuado, min
             width: tablero,
             height: tablero,
             borderRadius: redonda ? '50%' : 12,
-            background: 'radial-gradient(circle at 35% 30%, #A9713B, #7A4E1F 72%)',
-            border: '3px solid rgba(0,0,0,0.18)',
-            boxShadow: '0 3px 8px rgba(0,0,0,0.35)',
+            background: 'radial-gradient(circle at 35% 30%, #d9b872, #a67c52 72%)',
+            border: '3px solid rgba(0,0,0,0.08)',
+            boxShadow: '0 3px 8px rgba(166,30,34,0.12)',
             opacity: atenuado ? 0.6 : 1,
           }}
         >
           {!mini && (
             <span
-              className="leading-none font-bold text-white"
-              style={{ fontSize: 17, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}
+              className="leading-none font-bold text-[#1b1c1c]"
+              style={{ fontSize: 17, textShadow: '0 1px 3px rgba(0,0,0,0.15)' }}
             >
               {numero}
             </span>
           )}
           {glifo && (
             <span
-              className="material-symbols-outlined text-white"
-              style={{ fontSize: mini ? 16 : 22, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}
+              className="material-symbols-outlined text-[#1b1c1c]"
+              style={{ fontSize: mini ? 16 : 22, textShadow: '0 1px 3px rgba(0,0,0,0.15)' }}
             >
               {glifo}
             </span>

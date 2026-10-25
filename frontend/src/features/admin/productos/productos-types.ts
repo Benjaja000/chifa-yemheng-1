@@ -4,7 +4,7 @@ export type EstadoRegistro = 'A' | 'I';
 export interface Producto {
   id: number;
   nombre: string;
-  codigo: string | null;
+
   categoriaId: number;
   categoria: string;
   tipo: TipoProducto;
@@ -45,7 +45,6 @@ export interface ProductoForm {
   imagen: string;
   detalle: string;
   afectoIgv: boolean;
-  codigo: string;
   estado: EstadoRegistro;
 }
 
@@ -54,34 +53,6 @@ export const TIPOS: { valor: TipoProducto; label: string }[] = [
   { valor: 'B', label: 'Bebida' },
   { valor: 'I', label: 'Insumo' },
 ];
-
-/**
- * Prefijo de código por categoría (convención de seeds: prefijo de familia + número).
- * Categoría nueva = acordar prefijo de 3 letras y agregarlo aquí.
- */
-export const PREFIJO_POR_CATEGORIA: Record<string, string> = {
-  'SOPAS ORIENTALES': 'SOP',
-  'PLATOS CHIFA': 'CHF',
-  ENTRADAS: 'ENT',
-  'PLATOS DE FONDO': 'PLF',
-  CRIOLLOS: 'CRI',
-  MARINOS: 'MAR',
-  'BEBIDAS FRIAS': 'BEF',
-  'BEBIDAS ORIENTALES': 'BEO',
-  'BEBIDAS CALIENTES': 'BEC',
-  LICORES: 'LIC',
-  POSTRES: 'POS',
-  INSUMOS: 'INS',
-};
-
-export function prefijoParaCategoria(nombre: string): string {
-  const fijo = PREFIJO_POR_CATEGORIA[(nombre ?? '').toUpperCase()];
-  if (fijo) {
-    return fijo;
-  }
-  const letras = (nombre ?? '').toUpperCase().replace(/[^A-Z]/g, '');
-  return (letras.slice(0, 3) || 'PRD').padEnd(3, 'X');
-}
 
 /** Solo el Preparado lleva cocción; Bebida e Insumo no aplican. */
 export function requiereTiempo(tipo: TipoProducto): boolean {
