@@ -1,6 +1,6 @@
 import { supabase } from '../config/supabase.js';
 import type { Delivery, DeliveryLista } from '../models/delivery.js';
-import type { DeliveryCreate, DeliveryQuery } from '../schemas/delivery.js';
+import type { DeliveryCreate, DeliveryQuery, ParametrosNegocioUpdate, TarifaUpsert } from '../schemas/delivery.js';
 import { createAudit, updateAudit } from '../utils/auditoria.js';
 
 interface DeliveryRow {
@@ -31,6 +31,13 @@ interface DistritoGPSRow {
   radio_km: number | null;
   costo_base: number | null;
   recargo_km: number | null;
+}
+
+interface ConfiguracionNegocioRow {
+  lat_local: number | null;
+  lng_local: number | null;
+  direccion_local: string | null;
+  radio_cobertura_km: number | null;
 }
 
 const SELECT = 'id_pedidodelivery, id_pedido, id_distrito, distrito(d_distrito), direccion_entrega, referencia, telefono_contacto, id_empleado, repartidor:empleado(persona(nombre, ap_paterno)), costo_envio, situacion, feccre';
@@ -135,13 +142,14 @@ export async function entregarDelivery(id: number, usumod: string, pc = ''): Pro
 export interface SugerirCostoResult {
   distanciaKm: number | null;
   fueraRadio: boolean;
+  dentroCobertura: boolean;
   costoSugerido: number;
 }
 
 export async function sugerirCosto(lat: number | null, lng: number | null, distritoId: number): Promise<SugerirCostoResult> {
   const { data: distrito, error } = await supabase
     .from('distrito')
-    .select('id_distrito, d_distrito, lat_ref, lng_ref, radio_km, costo_base, recargo_km')
+    .select('id_distrito, costo_base, radio_km, recargo_km')
     .eq('id_distrito', distritoId)
     .single();
 
@@ -149,30 +157,40 @@ export async function sugerirCosto(lat: number | null, lng: number | null, distr
   if (!distrito) throw new Error('DISTRITO_NOT_FOUND');
 
   const d = distrito as unknown as DistritoGPSRow;
+  const costoBase = Number(d.costo_base ?? 0);
+  const radioKm = Number(d.radio_km ?? 0);
+  // Recargo por km fuera de radio: dato de negocio (distrito.recargo_km), nunca constante (BR-GPS-002).
+  const recargoKm = Number(d.recargo_km ?? 0);
 
-  // Sin GPS (BR-GPS-001) o sin centroide del distrito: sugerir solo costo_base.
-  if (lat === null || lng === null || d.lat_ref === null || d.lng_ref === null) {
+  const { data: cfg, error: cfgError } = await supabase
+    .from('configuracion_negocio')
+    .select('lat_local, lng_local, radio_cobertura_km')
+    .eq('id', 1)
+    .maybeSingle();
+  if (cfgError) throw new Error(`DB_CONFIG_FAIL: ${cfgError.message}`);
+
+  const local = cfg as unknown as ConfiguracionNegocioRow | null;
+
+  // Sin GPS del cliente (BR-GPS-001) o sin punto del local: sugerir solo costo_base.
+  if (lat === null || lng === null || !local || local.lat_local === null || local.lng_local === null) {
     return {
       distanciaKm: null,
       fueraRadio: false,
-      costoSugerido: Number(d.costo_base ?? 0),
+      dentroCobertura: true,
+      costoSugerido: costoBase,
     };
   }
 
   const { data: distancia, error: distError } = await supabase.rpc('haversine_km', {
-    lat1: lat,
-    lng1: lng,
-    lat2: d.lat_ref,
-    lng2: d.lng_ref,
+    lat1: local.lat_local,
+    lng1: local.lng_local,
+    lat2: lat,
+    lng2: lng,
   });
 
   if (distError) throw new Error(`HAVERSINE_FAIL: ${distError.message}`);
 
   const distanciaKm = Number(distancia ?? 0);
-  const radioKm = Number(d.radio_km ?? 0);
-  const costoBase = Number(d.costo_base ?? 0);
-  // Recargo por km fuera de radio: dato de negocio (distrito.recargo_km), nunca constante (BR-GPS-002).
-  const recargoKm = Number(d.recargo_km ?? 0);
 
   let costoSugerido = costoBase;
   let fueraRadio = false;
@@ -182,9 +200,90 @@ export async function sugerirCosto(lat: number | null, lng: number | null, distr
     costoSugerido += (distanciaKm - radioKm) * recargoKm;
   }
 
+  // Limite duro de cobertura (BR-GPS-003): dato de negocio, nunca constante. NULL/0 = sin limite.
+  const radioCobertura = Number(local.radio_cobertura_km ?? 0);
+  const dentroCobertura = radioCobertura <= 0 ? true : distanciaKm <= radioCobertura;
+
   return {
     distanciaKm: Number(distanciaKm.toFixed(2)),
     fueraRadio,
+    dentroCobertura,
     costoSugerido: Number(costoSugerido.toFixed(2)),
+  };
+}
+
+export interface ParametrosNegocioResult {
+  latLocal: number | null;
+  lngLocal: number | null;
+  direccionLocal: string | null;
+  radioCoberturaKm: number | null;
+}
+
+export interface TarifaDistritoResult {
+  distritoId: number;
+  distrito: string;
+  costoBase: number;
+  radioKm: number;
+  recargoKm: number;
+}
+
+export async function getParametrosNegocio(): Promise<ParametrosNegocioResult> {
+  const { data, error } = await supabase
+    .from('configuracion_negocio')
+    .select('lat_local, lng_local, direccion_local, radio_cobertura_km')
+    .eq('id', 1)
+    .maybeSingle();
+  if (error) throw new Error(`DB_CONFIG_FAIL: ${error.message}`);
+  const c = data as unknown as ConfiguracionNegocioRow | null;
+  return {
+    latLocal: c?.lat_local ?? null,
+    lngLocal: c?.lng_local ?? null,
+    direccionLocal: c?.direccion_local ?? null,
+    radioCoberturaKm: c?.radio_cobertura_km ?? null,
+  };
+}
+
+export async function upsertParametrosNegocio(input: ParametrosNegocioUpdate, usumod: string, pc = ''): Promise<ParametrosNegocioResult> {
+  const patch: Record<string, unknown> = { ...updateAudit(usumod, pc) };
+  if (input.latLocal !== undefined) patch['lat_local'] = input.latLocal;
+  if (input.lngLocal !== undefined) patch['lng_local'] = input.lngLocal;
+  if (input.direccionLocal !== undefined) patch['direccion_local'] = input.direccionLocal;
+  if (input.radioCoberturaKm !== undefined) patch['radio_cobertura_km'] = input.radioCoberturaKm;
+  const { error } = await supabase.from('configuracion_negocio').update(patch).eq('id', 1);
+  if (error) throw new Error(`DB_UPDATE_FAIL: ${error.message}`);
+  return getParametrosNegocio();
+}
+
+export async function listarTarifasDistrito(): Promise<TarifaDistritoResult[]> {
+  const { data, error } = await supabase
+    .from('distrito')
+    .select('id_distrito, d_distrito, costo_base, radio_km, recargo_km')
+    .order('d_distrito', { ascending: true });
+  if (error) throw new Error(`DB_LIST_FAIL: ${error.message}`);
+  return ((data ?? []) as unknown as DistritoGPSRow[]).map((r) => ({
+    distritoId: r.id_distrito,
+    distrito: r.d_distrito,
+    costoBase: Number(r.costo_base ?? 0),
+    radioKm: Number(r.radio_km ?? 0),
+    recargoKm: Number(r.recargo_km ?? 0),
+  }));
+}
+
+export async function upsertTarifaDistrito(distritoId: number, input: TarifaUpsert, usumod: string, pc = ''): Promise<TarifaDistritoResult> {
+  const { data, error } = await supabase
+    .from('distrito')
+    .update({ costo_base: input.costoBase, radio_km: input.radioKm, recargo_km: input.recargoKm, ...updateAudit(usumod, pc) })
+    .eq('id_distrito', distritoId)
+    .select('id_distrito, d_distrito, costo_base, radio_km, recargo_km')
+    .maybeSingle();
+  if (error) throw new Error(`DB_UPDATE_FAIL: ${error.message}`);
+  if (!data) throw new Error('DISTRITO_NOT_FOUND');
+  const r = data as unknown as DistritoGPSRow;
+  return {
+    distritoId: r.id_distrito,
+    distrito: r.d_distrito,
+    costoBase: Number(r.costo_base ?? 0),
+    radioKm: Number(r.radio_km ?? 0),
+    recargoKm: Number(r.recargo_km ?? 0),
   };
 }

@@ -104,5 +104,8 @@ export function MapLeaflet({ pins, readonly = false, center, zoom = 15, onClick,
     }
   }, [pins, zoom]);
 
-  return <div ref={mapRef} className={`w-full ${className}`} style={{ height }} />;
+  // `relative isolate z-0` crea un contexto de apilamiento propio:
+  // los z-index internos de Leaflet (panes 400-700, controles 1000) quedan
+  // confinados y NO se superponen a modales, menús ni barras fijas de la app.
+  return <div ref={mapRef} className={`relative isolate z-0 w-full ${className}`} style={{ height }} />;
 }

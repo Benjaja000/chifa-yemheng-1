@@ -32,8 +32,25 @@ export const sugerirCostoQuerySchema = z.object({
 export const sugerirCostoResponseSchema = z.object({
   distanciaKm: z.number().nullable(),
   fueraRadio: z.boolean(),
+  dentroCobertura: z.boolean(),
   costoSugerido: z.number(),
 });
+
+export const parametrosNegocioUpdateSchema = z.object({
+  latLocal: z.number().min(-90).max(90).nullable().optional(),
+  lngLocal: z.number().min(-180).max(180).nullable().optional(),
+  direccionLocal: z.string().max(200).nullable().optional(),
+  radioCoberturaKm: z.number().min(0).nullable().optional(),
+});
+
+export const tarifaUpsertSchema = z.object({
+  costoBase: z.number().min(0),
+  radioKm: z.number().positive(),
+  recargoKm: z.number().min(0),
+});
+
+export type ParametrosNegocioUpdate = z.infer<typeof parametrosNegocioUpdateSchema>;
+export type TarifaUpsert = z.infer<typeof tarifaUpsertSchema>;
 
 export type DeliveryQuery = z.infer<typeof deliveryQuerySchema>;
 export type DeliveryCreate = z.infer<typeof deliveryCreateSchema>;

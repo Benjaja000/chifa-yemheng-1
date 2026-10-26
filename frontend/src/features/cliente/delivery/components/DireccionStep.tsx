@@ -32,20 +32,23 @@ interface DireccionStepProps {
   onPrev: () => void;
 }
 
-// Nominatim geocoder gratuito (OpenStreetMap)
-const geocodeAddress = async (address: string): Promise<{ lat: number; lng: number } | null> => {
+// Nominatim search: varias coincidencias para autocompletar direcciones
+const buscarSugerencias = async (query: string): Promise<Array<{ etiqueta: string; lat: number; lng: number }>> => {
   try {
-    const encoded = encodeURIComponent(address);
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`, {
-      headers: { 'User-Agent': 'ChifaYemheng/1.0' }
-    });
-    if (!response.ok) throw new Error('Geocoding failed');
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`,
+      { headers: { 'User-Agent': 'ChifaYemheng/1.0', 'Accept-Language': 'es' } }
+    );
+    if (!response.ok) return [];
     const data = await response.json();
-    if (data.length === 0) return null;
-    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    return (data as Array<{ display_name: string; lat: string; lon: string }>).map(d => ({
+      etiqueta: d.display_name,
+      lat: parseFloat(d.lat),
+      lng: parseFloat(d.lon),
+    }));
   } catch (error) {
-    console.error('Geocoding error:', error);
-    return null;
+    console.error('Error buscando sugerencias:', error);
+    return [];
   }
 };
 
@@ -89,9 +92,12 @@ export function DireccionStep(props: DireccionStepProps) {
   const [gpsLoading, setGpsLoading] = useState(false);
   const [costoSugerido, setCostoSugerido] = useState<number | null>(null);
   const [fueraRadio, setFueraRadio] = useState(false);
-  const [geocoding, setGeocoding] = useState(false);
+  const [dentroCobertura, setDentroCobertura] = useState(true);
   const [mapPins, setMapPins] = useState<{ lat: number; lng: number; label?: string; color?: 'blue' | 'red' | 'green' }[]>([]);
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [sugerencias, setSugerencias] = useState<Array<{ etiqueta: string; lat: number; lng: number }>>([]);
+  const [verSugerencias, setVerSugerencias] = useState(false);
+  const [buscandoDir, setBuscandoDir] = useState(false);
   const isAutoSelecting = useRef(false);
 
   useEffect(() => {
@@ -125,6 +131,7 @@ export function DireccionStep(props: DireccionStepProps) {
     if (!distritoId) {
       setCostoSugerido(null);
       setFueraRadio(false);
+      setDentroCobertura(true);
       return;
     }
     let cancel = false;
@@ -134,6 +141,7 @@ export function DireccionStep(props: DireccionStepProps) {
         if (cancel) return;
         setCostoSugerido(result.costoSugerido);
         setFueraRadio(result.fueraRadio);
+        setDentroCobertura(result.dentroCobertura);
         onCostoChange(result.costoSugerido);
       } catch (error) {
         console.error('Error sugiriendo costo por distrito:', error);
@@ -142,6 +150,45 @@ export function DireccionStep(props: DireccionStepProps) {
     return () => { cancel = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [distritoId]);
+
+  // Autocompletado de direccion con debounce (mínimo 4 caracteres).
+  useEffect(() => {
+    const q = direccion.trim();
+    if (q.length < 4) {
+      setSugerencias([]);
+      return;
+    }
+    const t = window.setTimeout(async () => {
+      setBuscandoDir(true);
+      try {
+        setSugerencias(await buscarSugerencias(q));
+      } finally {
+        setBuscandoDir(false);
+      }
+    }, 400);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [direccion]);
+
+  const aplicarSugerencia = async (s: { etiqueta: string; lat: number; lng: number }) => {
+    setVerSugerencias(false);
+    setSugerencias([]);
+    onDireccionChange(s.etiqueta);
+    onGpsChange(s.lat, s.lng);
+    setMapPins([{ lat: s.lat, lng: s.lng, label: 'Tu ubicación', color: 'blue' }]);
+    setMapCenter([s.lat, s.lng]);
+    if (distritoId) {
+      try {
+        const result = await api.sugerirCosto(distritoId, s.lat, s.lng);
+        setCostoSugerido(result.costoSugerido);
+        setFueraRadio(result.fueraRadio);
+        setDentroCobertura(result.dentroCobertura);
+        onCostoChange(result.costoSugerido);
+      } catch (error) {
+        console.error('Error sugiriendo costo desde sugerencia:', error);
+      }
+    }
+  };
 
   const cargarDepartamentos = async () => {
     try {
@@ -296,6 +343,7 @@ export function DireccionStep(props: DireccionStepProps) {
           const result = await api.sugerirCosto(distritoParaCosto.id_distrito, latitude, longitude);
           setCostoSugerido(result.costoSugerido);
           setFueraRadio(result.fueraRadio);
+          setDentroCobertura(result.dentroCobertura);
           onCostoChange(result.costoSugerido);
         } catch (error) {
           console.error('Error sugiriendo costo:', error);
@@ -309,50 +357,44 @@ export function DireccionStep(props: DireccionStepProps) {
     }
   };
 
-  const handleSugerirCosto = async () => {
-    if (!distritoId) return;
-    setGeocoding(true);
-    try {
-      let lat: number | undefined;
-      let lng: number | undefined;
-
-      // Intentar geocodificar la dirección usando Nominatim (gratis)
-      const direccionLimpia = direccion.trim();
-      if (direccionLimpia) {
-        const geo = await geocodeAddress(direccionLimpia);
-        if (geo) {
-          lat = geo.lat;
-          lng = geo.lng;
-        }
-      }
-
-      // Sugerir costo con coordenadas si las tenemos, o solo con distritoId
-      const result = await api.sugerirCosto(distritoId, lat, lng);
-      setCostoSugerido(result.costoSugerido);
-      setFueraRadio(result.fueraRadio);
-      onCostoChange(result.costoSugerido);
-    } catch (error) {
-      console.error('Error sugiriendo costo:', error);
-      alert('Error al sugerir costo. Verifica tu conexión e intenta con GPS.');
-    } finally {
-      setGeocoding(false);
-    }
-  };
-
   const canNext = direccion.trim() !== '' && distritoId !== null;
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="relative">
         <label className="block text-sm font-medium text-gray-700 mb-1">Dirección de entrega *</label>
         <input
           type="text"
           value={direccion}
-          onChange={e => onDireccionChange(e.target.value)}
+          onChange={e => {
+            onDireccionChange(e.target.value);
+            setVerSugerencias(true);
+          }}
+          onFocus={() => setVerSugerencias(true)}
+          onBlur={() => window.setTimeout(() => setVerSugerencias(false), 200)}
           placeholder="Av. Los Incas 123, Urb. El Bosque"
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           required
         />
+        {verSugerencias && (buscandoDir || sugerencias.length > 0) ? (
+          <ul className="absolute z-40 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+            {buscandoDir ? <li className="px-3 py-2 text-xs text-gray-500">Buscando…</li> : null}
+            {sugerencias.map((s, i) => (
+              <li key={`${s.lat}-${s.lng}-${i}`}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    void aplicarSugerencia(s);
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                >
+                  {s.etiqueta}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -463,18 +505,11 @@ export function DireccionStep(props: DireccionStepProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Costo de envío (sugerido) *</label>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              value={costoEnvio}
-              readOnly
-              disabled
-              className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-700"
-            />
-            <span className="text-gray-500">S/</span>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Costo de envío (automático) *</label>
+          <div className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-700">
+            S/ {costoEnvio.toFixed(2)}
           </div>
-          <p className="text-xs text-gray-500 mt-1">Sugerido según el distrito. Un operador puede ajustarlo al confirmar.</p>
+          <p className="text-xs text-gray-500 mt-1">Calculado automáticamente según tu distrito y ubicación. No es editable.</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">GPS</label>
@@ -487,34 +522,26 @@ export function DireccionStep(props: DireccionStepProps) {
             >
               {gpsLoading ? 'Obteniendo...' : 'Usar mi ubicación'}
             </Button>
-            <Button variant="outline" onClick={handleSugerirCosto} disabled={geocoding || !distritoId}>
-              {geocoding ? 'Geocodificando...' : 'Sugerir'}
-            </Button>
           </div>
         </div>
       </div>
 
       {costoSugerido !== null && (
-        <div className={`p-3 rounded-lg ${fueraRadio ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
+        <div className={`p-3 rounded-lg ${!dentroCobertura ? 'bg-red-50 border-red-200' : fueraRadio ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
           <div className="flex items-center justify-between">
             <div>
               <span className="font-medium">Costo de envío sugerido: </span>
-              <Badge variant={fueraRadio ? 'warning' : 'success'}>S/ {costoSugerido.toFixed(2)}</Badge>
-              {fueraRadio && <span className="ml-2 text-sm text-yellow-700">(Fuera de radio de cobertura)</span>}
+              <Badge variant={!dentroCobertura || fueraRadio ? 'warning' : 'success'}>S/ {costoSugerido.toFixed(2)}</Badge>
+              {!dentroCobertura && <span className="ml-2 text-sm text-red-700">(No llegamos a esta zona)</span>}
+              {dentroCobertura && fueraRadio && <span className="ml-2 text-sm text-yellow-700">(Fuera de radio de cobertura)</span>}
             </div>
           </div>
         </div>
       )}
 
-      {geocoding && (
-        <div className="p-3 rounded-lg bg-blue-50 border-blue-200 mb-4">
-          <p className="text-sm text-blue-800">Geocodificando dirección con OpenStreetMap (Nominatim)...</p>
-        </div>
-      )}
-
       <div className="flex justify-between pt-4">
         <Button variant="secondary" onClick={onPrev}>Anterior</Button>
-        <Button onClick={onNext} disabled={!canNext} size="lg">
+        <Button onClick={onNext} disabled={!canNext || !dentroCobertura} size="lg">
           Continuar a Confirmar
         </Button>
       </div>

@@ -56,7 +56,6 @@ class ApiClient {
     distritoId: number;
     referencia?: string;
     telefono?: string;
-    costoEnvio: number;
     latCliente?: number;
     lngCliente?: number;
     metodoDigital: 'YAPE' | 'PLIN' | 'TARJETA' | 'TRANSFERENCIA';
@@ -73,7 +72,7 @@ class ApiClient {
       params.set('lat', String(lat));
       params.set('lng', String(lng));
     }
-    return this.request<{ distanciaKm: number | null; fueraRadio: boolean; costoSugerido: number }>(
+    return this.request<{ distanciaKm: number | null; fueraRadio: boolean; dentroCobertura: boolean; costoSugerido: number }>(
       `/cliente/delivery/sugerir-costo?${params.toString()}`
     );
   }

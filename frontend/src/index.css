@@ -1,4 +1,4 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -2301,6 +2301,23 @@ body {
 .y-btn-hero:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ============ Leaflet: apilamiento contenido ============ */
+/* Los panes y controles de Leaflet usan z-index altos (400-1000). Al aislar
+   el contenedor en su propio contexto de apilamiento, el mapa deja de tapar
+   modales, menús, cabeceras y la navegación inferior. */
+.leaflet-container {
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
+  background: var(--surface-low);
+}
+
+/* Los controles de zoom se mantienen por debajo de modales y menús (z-50). */
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 30;
 }
 
 /* ============ Utilidades compartidas ============ */

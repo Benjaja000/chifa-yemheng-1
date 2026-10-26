@@ -23,7 +23,7 @@ export interface DeliveryLista {
   total: number;
 }
 
-export type DeliveryErrorCode = 'NOT_FOUND' | 'PEDIDO_INVALIDO' | 'VALIDATION_ERROR';
+export type DeliveryErrorCode = 'NOT_FOUND' | 'PEDIDO_INVALIDO' | 'VALIDATION_ERROR' | 'FUERA_DE_COBERTURA';
 
 export class DeliveryError extends Error {
   readonly code: DeliveryErrorCode;

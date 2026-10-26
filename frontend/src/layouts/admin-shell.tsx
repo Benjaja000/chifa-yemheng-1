@@ -47,6 +47,7 @@ const GRUPOS: Grupo[] = [
       { to: '/admin/pedidos', icono: 'point_of_sale', label: 'Pedidos' },
       { to: '/admin/pedidos-delivery', icono: 'delivery_dining', label: 'Pedidos Delivery' },
       { to: '/admin/delivery', icono: 'local_shipping', label: 'Delivery Staff' },
+      { to: '/admin/parametros-delivery', icono: 'pin_drop', label: 'Parámetros Delivery' },
       { to: '/admin/cocina', icono: 'kitchen', label: 'Cocina' },
       { to: '/admin/mozo', icono: 'room_service', label: 'Mozo' },
       { to: '/admin/caja', icono: 'point_of_sale', label: 'Caja' },

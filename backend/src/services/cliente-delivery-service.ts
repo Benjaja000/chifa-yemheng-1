@@ -11,13 +11,15 @@ export async function crearDeliveryClienteService(input: {
   distritoId: number;
   referencia?: string;
   telefono?: string;
-  costoEnvio: number;
   latCliente?: number;
   lngCliente?: number;
   metodoDigital: 'YAPE' | 'PLIN' | 'TARJETA' | 'TRANSFERENCIA';
 }, usucre: string, pc?: string): Promise<Delivery> {
-  try { return await crearDeliveryCliente(input, usucre, pc); }
-  catch (err) { throw err; }
+  // El monto de envio es autoridad del servidor: nunca se acepta el valor del cliente (BR-GPS-001/002).
+  const { costoSugerido, dentroCobertura } = await sugerirCosto(input.latCliente ?? null, input.lngCliente ?? null, input.distritoId);
+  // Limite duro de entrega para el cliente (BR-GPS-003); el staff puede forzar desde su propio flujo.
+  if (!dentroCobertura) throw new DeliveryError('FUERA_DE_COBERTURA');
+  return crearDeliveryCliente({ ...input, costoEnvio: costoSugerido }, usucre, pc);
 }
 
 export async function sugerirCostoClienteService(lat: number | null, lng: number | null, distritoId: number): Promise<SugerirCostoResult> {

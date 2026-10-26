@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import type { ClienteAuthenticatedRequest } from '../middlewares/cliente-auth-guard.js';
 import { z } from 'zod';
 import { crearDeliveryClienteService, sugerirCostoClienteService, getDeliveryDetalleClienteService, getDeliveryUbicacionClienteService } from '../services/cliente-delivery-service.js';
+import { DeliveryError } from '../models/delivery.js';
 import { getPc } from '../utils/auditoria.js';
 
 const clienteDeliveryCreateSchema = z.object({
@@ -15,7 +16,6 @@ const clienteDeliveryCreateSchema = z.object({
   distritoId: z.number().int().positive(),
   referencia: z.string().max(200).optional(),
   telefono: z.string().max(20).optional(),
-  costoEnvio: z.number().min(0),
   latCliente: z.number().min(-90).max(90).optional(),
   lngCliente: z.number().min(-180).max(180).optional(),
   metodoDigital: z.enum(['YAPE', 'PLIN', 'TARJETA', 'TRANSFERENCIA']),
@@ -40,7 +40,9 @@ export async function postClienteDelivery(req: Request, res: Response): Promise<
     const delivery = await crearDeliveryClienteService({ ...parsed.data, clienteId: s.id }, s.logeo, s.pc);
     res.status(201).json({ idPedidoDelivery: delivery.id, situacion: delivery.estado, costoEnvio: delivery.costo });
   } catch (e) {
-    if (e instanceof Error && e.message.includes('VALIDATION')) {
+    if (e instanceof DeliveryError && e.code === 'FUERA_DE_COBERTURA') {
+      res.status(409).json({ error: 'FUERA_DE_COBERTURA' });
+    } else if (e instanceof Error && e.message.includes('VALIDATION')) {
       res.status(400).json({ error: 'VALIDATION_ERROR', details: e.message });
     } else {
       res.status(500).json({ error: 'SERVER_ERROR' });

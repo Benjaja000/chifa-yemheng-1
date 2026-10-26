@@ -1,5 +1,5 @@
-import type { DeliveryAsignar, DeliveryCreate, DeliveryQuery, SugerirCostoQuery } from '../schemas/delivery.js';
-import { asignarRepartidor, crearDelivery, despacharDelivery, entregarDelivery, listarDelivery, sugerirCosto } from '../repositories/delivery-repository.js';
+import type { DeliveryAsignar, DeliveryCreate, DeliveryQuery, ParametrosNegocioUpdate, SugerirCostoQuery, TarifaUpsert } from '../schemas/delivery.js';
+import { asignarRepartidor, crearDelivery, despacharDelivery, entregarDelivery, listarDelivery, sugerirCosto, getParametrosNegocio, upsertParametrosNegocio, listarTarifasDistrito, upsertTarifaDistrito } from '../repositories/delivery-repository.js';
 import { DeliveryError } from '../models/delivery.js';
 import { pushService } from './push-service.js';
 import { supabase } from '../config/supabase.js';
@@ -68,3 +68,7 @@ export async function entregarService(id: number, usumod: string, pc?: string) {
   return r;
 }
 export async function sugerirCostoService(q: SugerirCostoQuery) { return sugerirCosto(q.lat ?? null, q.lng ?? null, q.distrito); }
+export async function getParametrosService() { return getParametrosNegocio(); }
+export async function updateParametrosService(input: ParametrosNegocioUpdate, usumod: string, pc?: string) { return upsertParametrosNegocio(input, usumod, pc); }
+export async function listarTarifasService() { return listarTarifasDistrito(); }
+export async function upsertTarifaService(distritoId: number, input: TarifaUpsert, usumod: string, pc?: string) { return upsertTarifaDistrito(distritoId, input, usumod, pc); }

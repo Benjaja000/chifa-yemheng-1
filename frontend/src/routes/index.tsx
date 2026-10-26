@@ -29,6 +29,7 @@ import { AdminInventarioPage } from '../features/admin/inventario/inventario-pag
 import { AdminEmpleadosPage } from '../features/admin/empleados/empleados-page';
 import { AdminCrudPage } from '../features/admin/crud/crud-page';
 import { AdminReservasPage } from '../features/admin/reservas-admin/reservas-admin-page';
+import { ParametrosDeliveryPage } from '../features/admin/parametros-delivery/parametros-delivery-page';
 import { PedidosDeliveryPage } from '../features/admin/pedidos-delivery/PedidosDeliveryPage';
 import { AdminPedidosPage } from '../features/admin/pedidos/pedidos-page';
 
@@ -232,6 +233,10 @@ export const router = createBrowserRouter([
       {
         path: 'reservas-admin',
         element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','MOZO','CAJERO']}><AdminReservasPage /></RoleGuard>,
+      },
+      {
+        path: 'parametros-delivery',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><ParametrosDeliveryPage /></RoleGuard>,
       },
     ],
   },

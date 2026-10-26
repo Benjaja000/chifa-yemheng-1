@@ -75,7 +75,6 @@ export function DeliveryWizard({ onCreated }: { onCreated?: (idPedidoDelivery: n
         distritoId: state.distritoId,
         referencia: state.referencia,
         telefono: state.telefono,
-        costoEnvio: state.costoEnvio,
         latCliente: state.latCliente,
         lngCliente: state.lngCliente,
         metodoDigital: state.metodoDigital,
