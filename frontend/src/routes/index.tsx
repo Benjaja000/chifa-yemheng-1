@@ -18,6 +18,7 @@ import LandingPage from '../features/landing/landing-page';
 import { DashboardPage } from '../features/admin/dashboard/dashboard-page';
 import { CategoriasPage } from '../features/admin/categorias/categorias-page';
 import { ProductosPage } from '../features/admin/productos/productos-page';
+import { UnidadesPage } from '../features/admin/unidades/unidades-page';
 import { ClientesPage } from '../features/admin/clientes/clientes-page';
 import { PersonalPage } from '../features/admin/personal/personal-page';
 import { MesasPage } from '../features/admin/mesas/mesas-page';
@@ -163,6 +164,10 @@ export const router = createBrowserRouter([
       {
         path: 'productos',
         element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><ProductosPage /></RoleGuard>,
+      },
+      {
+        path: 'unidades',
+        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><UnidadesPage /></RoleGuard>,
       },
       {
         path: 'clientes',

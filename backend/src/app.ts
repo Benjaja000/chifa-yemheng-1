@@ -26,6 +26,9 @@ import { mesasRouter } from './routes/mesas.js';
 import { pedidosRouter } from './routes/pedidos.js';
 import { personalRouter } from './routes/personal.js';
 import { productosRouter } from './routes/productos.js';
+import { tiposMesaRouter } from './routes/tipos-mesa.js';
+import { unidadesRouter } from './routes/unidades.js';
+import { ventasRouter } from './routes/ventas.js';
 
 export function createApp() {
   const app = express();
@@ -49,7 +52,7 @@ export function createApp() {
   app.use('/api/v1/cliente', clienteAuthRouter);
   app.use('/api/v1/cliente/pedidos', clientePedidosRouter);
   app.use('/api/v1/cliente/delivery', clienteDeliveryRouter);
-  app.use('/api/v1/repartidor/entregas', repartidorRouter);
+  app.use('/api/v1/repartidor', repartidorRouter);
   app.use('/api/v1/delivery', deliveryRouter);
   app.use('/api/v1/delivery/seguimiento', seguimientoRouter);
   app.use('/api/v1/rendiciones', rendicionRouter);
@@ -58,6 +61,9 @@ export function createApp() {
   app.use('/api/v1/dashboard', dashboardRouter);
   app.use('/api/v1/personal', personalRouter);
   app.use('/api/v1/productos', productosRouter);
+  app.use('/api/v1/unidades', unidadesRouter);
+  app.use('/api/v1/tipos-mesa', tiposMesaRouter);
+  app.use('/api/v1/ventas', ventasRouter);
 
   app.use('/api/v1/auditoria', auditoriaRouter);
   app.use('/api/v1/inventario', inventarioRouter);

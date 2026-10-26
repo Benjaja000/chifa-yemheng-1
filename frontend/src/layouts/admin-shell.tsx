@@ -23,6 +23,7 @@ const GRUPOS: Grupo[] = [
     items: [
       { to: '/admin/productos', icono: 'restaurant_menu', label: 'Productos' },
       { to: '/admin/categorias', icono: 'category', label: 'Categorías' },
+      { to: '/admin/unidades', icono: 'straighten', label: 'Unidades' },
     ],
   },
   {

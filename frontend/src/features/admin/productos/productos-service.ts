@@ -4,6 +4,7 @@ import type { Producto, ProductoForm, ProductoLista } from './productos-types';
 
 const BASE = `${import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1'}/productos`;
 const BASE_CAT = `${import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1'}/categorias`;
+const BASE_UNI = `${import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1'}/unidades`;
 
 function headers(): HeadersInit {
   return {
@@ -76,6 +77,13 @@ export interface CategoriaOpcion {
 
 export async function listarCategoriasActivas(): Promise<CategoriaOpcion[]> {
   const res = await fetch(`${BASE_CAT}?limit=100&estado=A`, { headers: headers() }).then(
+    lanzar<{ data: { id: number; nombre: string }[] }>,
+  );
+  return res.data;
+}
+
+export async function listarUnidadesActivas(): Promise<{ id: number; nombre: string }[]> {
+  const res = await fetch(`${BASE_UNI}?limit=100&estado=A`, { headers: headers() }).then(
     lanzar<{ data: { id: number; nombre: string }[] }>,
   );
   return res.data;

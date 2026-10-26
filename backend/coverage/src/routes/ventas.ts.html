@@ -3,7 +3,7 @@
 <html lang="en">
 
 <head>
-    <title>Code coverage report for src/routes/personas.ts</title>
+    <title>Code coverage report for src/routes/ventas.ts</title>
     <meta charset="utf-8" />
     <link rel="stylesheet" href="../../prettify.css" />
     <link rel="stylesheet" href="../../base.css" />
@@ -19,13 +19,13 @@
 <body>
 <div class='wrapper'>
     <div class='pad1'>
-        <h1><a href="../../index.html">All files</a> / <a href="index.html">src/routes</a> personas.ts</h1>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">src/routes</a> ventas.ts</h1>
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>10/10</span>
+                <span class='fraction'>4/4</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>10/10</span>
+                <span class='fraction'>4/4</span>
             </div>
         
             
@@ -81,63 +81,42 @@
 <a name='L16'></a><a href='#L16'>16</a>
 <a name='L17'></a><a href='#L17'>17</a>
 <a name='L18'></a><a href='#L18'>18</a>
-<a name='L19'></a><a href='#L19'>19</a>
-<a name='L20'></a><a href='#L20'>20</a>
-<a name='L21'></a><a href='#L21'>21</a>
-<a name='L22'></a><a href='#L22'>22</a>
-<a name='L23'></a><a href='#L23'>23</a>
-<a name='L24'></a><a href='#L24'>24</a>
-<a name='L25'></a><a href='#L25'>25</a>
-<a name='L26'></a><a href='#L26'>26</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L19'></a><a href='#L19'>19</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { Router } from 'express';
-import {
-  buscarPersona,
-  getPersona,
-  getPersonas,
-  postConvertir,
-  postHacerCliente,
-  postHacerPersonal,
-  postPersona,
-  putPersona,
-} from '../controllers/personas-controller.js';
+import { getNotasCredito, postNotaCredito } from '../controllers/ventas-controller.js';
 import { authGuard } from '../middlewares/auth-guard.js';
 import { requirePermisos } from '../middlewares/permission-guard.js';
 &nbsp;
-export const personasRouter = Router();
+export const ventasRouter = Router();
 &nbsp;
-personasRouter.use(authGuard);
-personasRouter.get('/buscar', requirePermisos('PER_VER'), buscarPersona);
-personasRouter.get('/', requirePermisos('PER_VER'), getPersonas);
-personasRouter.get('/:id', requirePermisos('PER_VER'), getPersona);
-personasRouter.post('/', requirePermisos('PER_CREAR'), postPersona);
-personasRouter.put('/:id', requirePermisos('PER_CREAR'), putPersona);
-personasRouter.post('/:id/hacer-personal', requirePermisos('PER_ASIGNAR'), postHacerPersonal);
-personasRouter.post('/:id/hacer-cliente', requirePermisos('PER_ASIGNAR'), postHacerCliente);
-personasRouter.post('/:id/convertir', requirePermisos('PER_ASIGNAR'), postConvertir);
+ventasRouter.use(authGuard);
+ventasRouter.get(
+  '/:id/nota-credito',
+  requirePermisos('VEN_NOTACREDITO', 'VEN_VER', 'VEN_COBRAR'),
+  getNotasCredito,
+);
+ventasRouter.post(
+  '/:id/nota-credito',
+  requirePermisos('VEN_NOTACREDITO'),
+  postNotaCredito,
+);
 &nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
@@ -145,7 +124,7 @@ personasRouter.post('/:id/convertir', requirePermisos('PER_ASIGNAR'), postConver
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-24T15:49:41.013Z
+                at 2026-10-25T23:07:29.863Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

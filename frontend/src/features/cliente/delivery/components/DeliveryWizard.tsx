@@ -11,7 +11,7 @@ type Step = 'carta' | 'direccion' | 'confirmar';
 
 interface WizardState {
   step: Step;
-  items: Array<{ productoId: number; cantidad: number; nota?: string; descuento?: number }>;
+  items: Array<{ productoId: number; cantidad: number; precioUnit: number; nombre?: string; nota?: string; descuento?: number }>;
   direccion: string;
   distritoId: number | null;
   referencia: string;
@@ -25,7 +25,7 @@ interface WizardState {
 const STEPS: Step[] = ['carta', 'direccion', 'confirmar'];
 const STEP_LABELS = { carta: 'Carta', direccion: 'Dirección', confirmar: 'Confirmar' };
 
-export function DeliveryWizard() {
+export function DeliveryWizard({ onCreated }: { onCreated?: (idPedidoDelivery: number) => void }) {
   const navigate = useNavigate();
   const [state, setState] = useState<WizardState>({
     step: 'carta',
@@ -70,7 +70,7 @@ export function DeliveryWizard() {
     setLoading(true);
     try {
       const result = await api.crearDelivery({
-        items: state.items,
+        items: state.items.map(i => ({ productoId: i.productoId, cantidad: i.cantidad, nota: i.nota, descuento: i.descuento })),
         direccion: state.direccion,
         distritoId: state.distritoId,
         referencia: state.referencia,
@@ -81,7 +81,8 @@ export function DeliveryWizard() {
         metodoDigital: state.metodoDigital,
       });
       toast({ title: '¡Pedido creado!', description: `Delivery #${result.idPedidoDelivery} creado` });
-      navigate(`/cliente/delivery/${result.idPedidoDelivery}`);
+      if (onCreated) onCreated(result.idPedidoDelivery);
+      else navigate(`/cliente/pedido/${result.idPedidoDelivery}`);
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } finally {

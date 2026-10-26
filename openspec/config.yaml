@@ -25,21 +25,26 @@ context: |
   BR-DER-030 (pago único), BR-RES-015 (anular solo no-facturado).
   GPS opcional con fallback manual (BR-GPS-001/002). Seed permisos: openspec/database/permiso_modulo.sql.
   Prohibido: UUID, Supabase Auth, created_at/deleted_at, reglas paralelas sin código BR-* del catálogo
-  (openspec/docs/REGLAS_DE_NEGOCIO.md). Prohibido hardcodear datos de negocio en backend/frontend
-  (cifras, nombres, pcts, fallbacks inventados): toda cifra viene de BD/Supabase; en vacío/error
-  devolver 0/[] con estado vacío en UI, nunca inventar (skeletons visuales sí permitidos). Convenciones: carpetas/archivos kebab-case,
+  (openspec/docs/REGLAS_DE_NEGOCIO.md). Prohibido hardcodear datos de negocio en backend/frontend/BD/UI.
+  Lista no exhaustiva de lo PROHIBIDO hardcodear (todo debe venir de BD/Supabase o de un endpoint):
+  precios de productos, costos de envío/tarifas por distrito, porcentajes (IGV, cargo servicio, recargo por km),
+  distritos/zonas, horarios de atención, teléfonos, textos de negocio, listas fijas y fallbacks inventados.
+  Si falta el dato: devolver 0/[]/null con estado vacío en UI, nunca inventar (skeletons visuales sí permitidos).
+  Toda cifra o parámetro de negocio debe ser parametrizable (tabla/columna/config) y declarar su origen.
+  Convenciones: carpetas/archivos kebab-case,
   clases/componentes/interfaces PascalCase, vars/funcs camelCase, consts UPPER_SNAKE_CASE,
   TS strict + noAny. Detalle largo: openspec/docs/general/00-stack-tecnologico.md.
 
 # Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+rules:
+  proposal:
+    - Toda cifra, tarifa, porcentaje, distrito u horario citado debe indicar su origen (tabla/campo/endpoint); prohibido dejar valores literales sin fuente.
+    - Incluir sección "Non-goals" y la lista de BR-* afectados.
+  design:
+    - Documentar los parámetros de negocio como datos configurables (tabla/columna/config), no como constantes en código.
+  tasks:
+    - Incluir siempre una tarea de verificación por grep de hardcode (cifras, nombres, pcts, distritos, horarios) en las rutas/archivos afectados.
+    - Cada tarea de cifra debe citar su fuente (tabla/campo/endpoint).
 
 # Per-operation guidance (optional)
 # Add advisory guidance for how apply and archive work should be conducted.

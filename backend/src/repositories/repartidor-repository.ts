@@ -139,16 +139,18 @@ export async function getPorRendir(empleadoId: number): Promise<PorRendirItem[]>
         id_cliente,
         cliente:cliente!inner(
           persona:persona!inner(nombre, ap_paterno)
+        ),
+        venta:venta!inner(
+          pago_venta:pago_venta!inner(
+            monto,
+            metodo_pago:metodo_pago!inner(afecta_efectivo)
+          )
         )
-      ),
-      pago_venta:pago_venta!inner(
-        metodo_pago,
-        monto
       )
     `)
     .eq('id_empleado', empleadoId)
     .eq('situacion', 'E')
-    .eq('pago_venta.metodo_pago', 'EFECTIVO');
+    .eq('pedido.venta.pago_venta.metodo_pago.afecta_efectivo', 'S');
 
   if (error) throw new Error(`POR_RENDIR_FAIL: ${error.message}`);
 
@@ -159,7 +161,7 @@ export async function getPorRendir(empleadoId: number): Promise<PorRendirItem[]>
       ? `${row.pedido.cliente.persona.nombre} ${row.pedido.cliente.persona.ap_paterno ?? ''}`.trim()
       : 'Sin cliente',
     direccion: row.direccion_entrega,
-    total: Number(row.pago_venta?.[0]?.monto ?? 0) + Number(row.costo_envio ?? 0),
+    total: Number(row.pedido?.venta?.[0]?.pago_venta?.[0]?.monto ?? 0) + Number(row.costo_envio ?? 0),
     fechaEntrega: row.f_entrega,
   }));
 }

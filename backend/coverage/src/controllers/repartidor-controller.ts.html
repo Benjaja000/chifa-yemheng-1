@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">3.33% </span>
+                <span class="strong">33.33% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>1/30</span>
+                <span class='fraction'>10/30</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">66.66% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/6</span>
+                <span class='fraction'>4/6</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">42.85% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/7</span>
+                <span class='fraction'>3/7</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">4.34% </span>
+                <span class="strong">43.47% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>1/23</span>
+                <span class='fraction'>10/23</span>
             </div>
         
             
@@ -121,25 +121,25 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -165,8 +165,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import type { Request, Response } from 'express';
 import type { AuthenticatedRequest } from '../middlewares/auth-guard.js';
 import { z } from 'zod';
@@ -178,17 +178,17 @@ const ubicacionSchema = z.object({
   lng: z.number().min(-180).max(180),
 });
 &nbsp;
-function <span class="fstat-no" title="function not covered" >sesion(r</span>eq: Request): { id: number; logeo: string; pc: string } {
-  const user = (<span class="cstat-no" title="statement not covered" >req as AuthenticatedRequest).user;</span>
-<span class="cstat-no" title="statement not covered" >  return { id: user.sub, logeo: user.logeo, pc: getPc(req) };</span>
+function sesion(req: Request): { id: number; logeo: string; pc: string } {
+  const user = (req as AuthenticatedRequest).user;
+  return { id: user.sub, logeo: user.logeo, pc: getPc(req) };
 }
 &nbsp;
-export async function <span class="fstat-no" title="function not covered" >getMisEntregas(r</span>eq: Request, res: Response): Promise&lt;void&gt; {
-  const s = <span class="cstat-no" title="statement not covered" >sesion(req);</span>
-  const estado = <span class="cstat-no" title="statement not covered" >req.query.estado as 'P' | 'R' | 'E' | 'C' | undefined;</span>
-  const page = <span class="cstat-no" title="statement not covered" >Number(req.query.page) || 1;</span>
-  const limit = <span class="cstat-no" title="statement not covered" >Number(req.query.limit) || 20;</span>
-<span class="cstat-no" title="statement not covered" >  res.json(await listarMisEntregasService(s.id, estado, page, limit));</span>
+export async function getMisEntregas(req: Request, res: Response): Promise&lt;void&gt; {
+  const s = sesion(req);
+  const estado = req.query.estado as 'P' | 'R' | 'E' | 'C' | undefined;
+  const page = Number(req.query.page) || 1;
+  const limit = Number(req.query.limit) || 20;
+  res.json(await listarMisEntregasService(s.id, estado, page, limit));
 }
 &nbsp;
 export async function <span class="fstat-no" title="function not covered" >getMiEntrega(r</span>eq: Request, res: Response): Promise&lt;void&gt; {
@@ -216,9 +216,9 @@ export async function <span class="fstat-no" title="function not covered" >postU
   catch { <span class="cstat-no" title="statement not covered" >res.status(404).json({ error: 'NOT_FOUND' }); }</span>
 }
 &nbsp;
-export async function <span class="fstat-no" title="function not covered" >getPorRendir(r</span>eq: Request, res: Response): Promise&lt;void&gt; {
-  const s = <span class="cstat-no" title="statement not covered" >sesion(req);</span>
-<span class="cstat-no" title="statement not covered" >  res.json(await getPorRendirService(s.id));</span>
+export async function getPorRendir(req: Request, res: Response): Promise&lt;void&gt; {
+  const s = sesion(req);
+  res.json(await getPorRendirService(s.id));
 }</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
@@ -226,7 +226,7 @@ export async function <span class="fstat-no" title="function not covered" >getPo
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-24T15:49:41.013Z
+                at 2026-10-25T23:07:29.863Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

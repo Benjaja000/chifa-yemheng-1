@@ -30,8 +30,12 @@ export async function postRendicion(req: Request, res: Response): Promise<void> 
   const parsed = rendicionRegistrarSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() }); return; }
   const s = sesion(req);
-  try { res.status(201).json(await registrarRendicionService(parsed.data, s.logeo, s.pc)); }
-  catch (e: any) { res.status(400).json({ error: 'RENDICION_ERROR', details: e.message }); }
+  try {
+    res.status(201).json(await registrarRendicionService(parsed.data, s.id));
+  } catch (e: any) {
+    const conflicto = ['PEDIDO_YA_RENDIDO', 'CAJA_NO_ABIERTA'].includes(e.message);
+    res.status(conflicto ? 409 : 400).json({ error: e.message, details: e.message });
+  }
 }
 
 export async function patchValidarRendicion(req: Request, res: Response): Promise<void> {

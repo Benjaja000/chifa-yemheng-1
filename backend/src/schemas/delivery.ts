@@ -24,8 +24,8 @@ export const deliveryAsignarSchema = z.object({
 });
 
 export const sugerirCostoQuerySchema = z.object({
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
   distrito: z.coerce.number().int().positive(),
 });
 

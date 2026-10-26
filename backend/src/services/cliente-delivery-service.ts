@@ -20,7 +20,7 @@ export async function crearDeliveryClienteService(input: {
   catch (err) { throw err; }
 }
 
-export async function sugerirCostoClienteService(lat: number, lng: number, distritoId: number): Promise<SugerirCostoResult> {
+export async function sugerirCostoClienteService(lat: number | null, lng: number | null, distritoId: number): Promise<SugerirCostoResult> {
   return sugerirCosto(lat, lng, distritoId);
 }
 

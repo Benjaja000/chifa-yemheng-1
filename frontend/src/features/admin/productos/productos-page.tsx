@@ -5,9 +5,10 @@ import {
   crearProducto,
   listarCategoriasActivas,
   listarProductos,
+  listarUnidadesActivas,
 } from './productos-service';
 import type { CategoriaOpcion } from './productos-service';
-import { requiereTiempo, TIPOS, UNIDADES } from './productos-types';
+import { requiereTiempo, TIPOS } from './productos-types';
 import type { Producto, ProductoForm, TipoProducto } from './productos-types';
 
 const LIMITE = 20;
@@ -43,6 +44,7 @@ export function ProductosPage() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [categorias, setCategorias] = useState<CategoriaOpcion[]>([]);
+  const [unidades, setUnidades] = useState<{ id: number; nombre: string }[]>([]);
   const [modal, setModal] = useState<null | { editando: Producto | null }>(null);
   const [form, setForm] = useState<ProductoForm>(VACIO);
   const [formError, setFormError] = useState<string | null>(null);
@@ -52,13 +54,15 @@ export function ProductosPage() {
     setCargando(true);
     setError(null);
     try {
-      const [res, cats] = await Promise.all([
+      const [res, cats, unis] = await Promise.all([
         listarProductos({ page, limit: LIMITE, nombre: busqueda, categoria, estado, disponible }),
         listarCategoriasActivas(),
+        listarUnidadesActivas(),
       ]);
       setDatos(res.data);
       setTotal(res.total);
       setCategorias(cats);
+      setUnidades(unis);
     } catch {
       setError('No fue posible cargar los productos.');
     } finally {
@@ -540,9 +544,9 @@ export function ProductosPage() {
                     onChange={(e) => setForm({ ...form, unidadId: Number(e.target.value) })}
                     className="rounded-lg bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none"
                   >
-                    {UNIDADES.map((u) => (
+                    {unidades.map((u) => (
                       <option key={u.id} value={u.id}>
-                        {u.label}
+                        {u.nombre}
                       </option>
                     ))}
                   </select>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { clienteGoogleLogin, guardarSesionCliente } from './cliente-auth-service';
+import { codigoQrCanonico } from '../../../lib/utils';
 
 const FONDO_LOCAL = '/img/fachada-yemheng.png';
 const SELLO = '/img/sello-yemheng.svg';
@@ -63,7 +64,7 @@ export function ClienteLoginPage() {
     setEstadoQr('validando');
     setAmbienteQr('');
     const ctrl = new AbortController();
-    fetch(`${API_URL}/mesas/by-qr?codigo=${encodeURIComponent(mesa)}`, { signal: ctrl.signal })
+    fetch(`${API_URL}/mesas/by-qr?codigo=${encodeURIComponent(codigoQrCanonico(mesa))}`, { signal: ctrl.signal })
       .then((res) => {
         if (cancelado) return;
         if (res.ok) {

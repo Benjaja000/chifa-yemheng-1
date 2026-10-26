@@ -123,7 +123,7 @@ export function ClienteComandaPage() {
                 <rect x="38" y="42" width="124" height="276" rx="16" fill="var(--surface-low)" />
                 
                 {/* Marco QR en la pantalla */}
-                <rect x="62" y="88" width="76" height="76" rx="8" fill="var(--surface-lowest)" stroke="var(--primary)" stroke-width="2" />
+                <rect x="62" y="88" width="76" height="76" rx="8" fill="var(--surface-lowest)" stroke="var(--primary)" strokeWidth="2" />
                 
                 {/* Patrón QR simulado */}
                 <g fill="var(--primary)">
@@ -158,15 +158,14 @@ export function ClienteComandaPage() {
                 
                 {/* Botón inferior */}
                 <rect x="90" y="318" width="20" height="4" rx="2" fill="var(--cocoa)" opacity="0.3" />
+                <defs>
+                  <linearGradient id="scanGradient" x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox">
+                    <stop offset="0%" stopColor="var(--primary)" stopOpacity="0" />
+                    <stop offset="50%" stopColor="var(--primary)" stopOpacity="1" />
+                    <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
               </svg>
-
-              <defs>
-                <linearGradient id="scanGradient" x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox">
-                  <stop offset="0%" stop-color="var(--primary)" stop-opacity="0" />
-                  <stop offset="50%" stop-color="var(--primary)" stop-opacity="1" />
-                  <stop offset="100%" stop-color="var(--primary)" stop-opacity="0" />
-                </linearGradient>
-              </defs>
             </div>
 
             <div className="y-qr-actions">

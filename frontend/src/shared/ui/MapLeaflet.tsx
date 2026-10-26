@@ -24,6 +24,11 @@ export function MapLeaflet({ pins, readonly = false, center, zoom = 15, onClick,
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.Marker[]>([]);
+  const onClickRef = useRef(onClick);
+
+  useEffect(() => {
+    onClickRef.current = onClick;
+  });
 
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
@@ -46,8 +51,8 @@ export function MapLeaflet({ pins, readonly = false, center, zoom = 15, onClick,
 
     mapInstanceRef.current = map;
 
-    if (onClick) {
-      map.on('click', onClick);
+    if (onClickRef.current) {
+      map.on('click', onClickRef.current);
     }
 
     return () => {
@@ -55,7 +60,13 @@ export function MapLeaflet({ pins, readonly = false, center, zoom = 15, onClick,
       map.remove();
       mapInstanceRef.current = null;
     };
-  }, [readonly, center, zoom, onClick]);
+  }, [readonly, zoom]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !center) return;
+    map.setView(center, zoom);
+  }, [center, zoom]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -88,10 +99,10 @@ export function MapLeaflet({ pins, readonly = false, center, zoom = 15, onClick,
     });
 
     if (pins.length > 0) {
-      const group = L.featureGroup(markersRef.current as L.Layer[]);
-      map.fitBounds(group.getBounds().pad(0.1));
+      const firstPin = pins[0];
+      map.setView([firstPin.lat, firstPin.lng], zoom);
     }
-  }, [pins]);
+  }, [pins, zoom]);
 
   return <div ref={mapRef} className={`w-full ${className}`} style={{ height }} />;
 }

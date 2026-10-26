@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Ico } from '@/components/Icon';
 import { toast } from '@/shared/ui/use-toast';
+import { api } from '@/shared/services/api-client';
 
 export function RendicionPage() {
-  // Estado de la rendición
-  const [repartidorId] = useState<number | null>(null);
+  const [repartidorId, setRepartidorId] = useState<string>('');
   const [repartidorNombre] = useState<string>('');
   const [pedidosEfectivo, setPedidosEfectivo] = useState<any[]>([]);
+  const [montoEntregado, setMontoEntregado] = useState<number | ''>('');
+  const [observaciones, setObservaciones] = useState<string>('');
+  const [idRendicion, setIdRendicion] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
 
   // KPIs de la rendición
   const [esperado, setEsperado] = useState<number>(0);
@@ -14,25 +18,9 @@ export function RendicionPage() {
   const [diferencia, setDiferencia] = useState<number>(0);
   const [clasificacion, setClasificacion] = useState<'CUADRADO' | 'SOBRANTE' | 'FALTANTE'>('CUADRADO');
 
-  // Observaciones
-  const [observaciones, setObservaciones] = useState<string>('');
-
-  useEffect(() => {
-    // Cargar pedidos E efectivo pendientes para el repartidor
-    // En producción: fetch /api/v1/repartidor/:id/pedidos-efectivo-pendientes
-    const mockPedidos = [
-      { id: 1, pedidoId: 101, cliente: 'Mesa 08', total: 45.50, metodo: 'Efectivo', fecha: '2024-01-15', registrado: false },
-      { id: 2, pedidoId: 102, cliente: 'Mesa 12', total: 62.00, metodo: 'Efectivo', fecha: '2024-01-15', registrado: false },
-      { id: 3, pedidoId: 103, cliente: 'Mesa 05', total: 38.20, metodo: 'Efectivo', fecha: '2024-01-15', registrado: false },
-    ];
-
-    setPedidosEfectivo(mockPedidos);
-    calcularKPIs();
-  }, [repartidorId]);
-
   const calcularKPIs = () => {
-    const totalEsperado = pedidosEfectivo.reduce((sum, d) => sum + d.total, 0);
-    const totalEntregado = pedidosEfectivo.filter(d => d.registrado).reduce((sum, d) => sum + d.total, 0) || 0;
+    const totalEsperado = pedidosEfectivo.reduce((sum, d) => sum + Number(d.total ?? 0), 0);
+    const totalEntregado = pedidosEfectivo.filter(d => d.registrado).reduce((sum, d) => sum + Number(d.total ?? 0), 0) || 0;
     const diff = totalEsperado - totalEntregado;
 
     setEsperado(totalEsperado);
@@ -44,41 +32,79 @@ export function RendicionPage() {
     else setClasificacion('FALTANTE');
   };
 
+  const cargarPendientes = async () => {
+    const id = Number(repartidorId);
+    if (!id) {
+      toast({ title: 'Error', description: 'Ingresa un ID de repartidor válido.', variant: 'destructive' });
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await api.getPendientesRendicion(id);
+      const pedidos = Array.isArray(data) ? data : (data.pedidos ?? []);
+      setPedidosEfectivo(pedidos.map((d: any) => ({ ...d, registrado: false })));
+      calcularKPIs();
+      setMontoEntregado('');
+      setIdRendicion(null);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message || 'No se pudieron cargar los pedidos pendientes.', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRegistrar = async () => {
-    if (!repartidorId) {
-      toast({ title: 'Error', description: 'Selecciona un repartidor.', variant: 'destructive' });
+    const id = Number(repartidorId);
+    if (!id) {
+      toast({ title: 'Error', description: 'Ingresa un ID de repartidor válido.', variant: 'destructive' });
+      return;
+    }
+    const pendientes = pedidosEfectivo.filter(d => d.registrado);
+    if (pendientes.length === 0) {
+      toast({ title: 'Error', description: 'Selecciona al menos un pedido para rendir.', variant: 'destructive' });
+      return;
+    }
+    if (!montoEntregado || Number(montoEntregado) <= 0) {
+      toast({ title: 'Error', description: 'Ingresa el monto entregado.', variant: 'destructive' });
       return;
     }
 
+    setLoading(true);
     try {
-      // Marcar todos los pedidos como registrados
-      const todosRegistrados = pedidosEfectivo.map(d => ({ ...d, registrado: true }));
-      setPedidosEfectivo(todosRegistrados);
-
-      // Generar MOVIMIENTO_CAJA concepto VENTA AL CONTADO
-      // Esto incrementa Monto_Sistema en el turno actual (backend)
-
-      const totalRegistrado = pedidosEfectivo.reduce((sum, d) => sum + d.total, 0);
+      const pedidoIds = pendientes.map((d: any) => d.pedidoId ?? d.id);
+      const data = await api.registrarRendicion({
+        repartidorId: id,
+        pedidoIds,
+        montoEntregado: Number(montoEntregado),
+        observaciones,
+      });
+      setIdRendicion(data.id ?? data.id_rendicion ?? null);
       toast({
         title: 'Rendición registrada',
-        description: `Se registraron S/ ${totalRegistrado} en VENTA AL CONTADO. Movimiento: MOVIMIENTO_CAJA`,
+        description: `Se registraron S/ ${montoEntregado} en VENTA AL CONTADO.`,
       });
-
-      // Resetear form
+      setMontoEntregado('');
       setObservaciones('');
-      calcularKPIs();
-    } catch (e) {
-      toast({ title: 'Error', description: 'No se pudo registrar la rendición.', variant: 'destructive' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message || 'No se pudo registrar la rendición.', variant: 'destructive' });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleValidar = async () => {
-    if (!repartidorId) return;
+    if (!idRendicion) {
+      toast({ title: 'Error', description: 'Primero registra una rendición.', variant: 'destructive' });
+      return;
+    }
+    setLoading(true);
     try {
+      await api.validarRendicion(idRendicion);
       toast({ title: 'Validada', description: 'La rendición ha sido validada por supervisor.' });
-      // En producción: PATCH /api/v1/rendiciones/:id/validar
-    } catch (e) {
-      toast({ title: 'Error', description: 'No se pudo validar.', variant: 'destructive' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message || 'No se pudo validar.', variant: 'destructive' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -92,21 +118,39 @@ export function RendicionPage() {
 
         <div className="grid grid-cols-1 gap-4 mb-4">
           <div className="sm:col-span-2 bg-white rounded-xl p-4 shadow-sm border border-[#F5F5F5]">
+            <div className="flex items-center gap-3 mb-4">
+              <label className="text-sm font-medium text-gray-700">ID Repartidor</label>
+              <input
+                type="number"
+                min="1"
+                value={repartidorId}
+                onChange={(e) => setRepartidorId(e.target.value)}
+                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 w-24"
+              />
+              <button
+                onClick={cargarPendientes}
+                disabled={loading}
+                className="rounded-lg bg-[#A61E22] px-4 py-2 text-sm font-semibold text-white hover:bg-[#7F1518] disabled:opacity-50"
+              >
+                Cargar Pedidos Pendientes
+              </button>
+            </div>
+            {loading && <p className="text-sm text-gray-500">Cargando...</p>}
             <h3 className="font-medium text-gray-700 text-sm uppercase mb-4">KPIs de la Rendición</h3>
 
             <div className="grid grid-cols-2 gap-2 mb-4">
               <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-center">
-                <div className="text-2xl font-bold text-blue-600">{esperado}</div>
+                <div className="text-2xl font-bold text-blue-600">{esperado.toFixed(2)}</div>
                 <div className="text-xs text-blue-500">Esperado</div>
               </div>
               <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-center">
-                <div className="text-2xl font-bold text-green-600">{entregado}</div>
+                <div className="text-2xl font-bold text-green-600">{entregado.toFixed(2)}</div>
                 <div className="text-xs text-green-500">Entregado</div>
               </div>
             </div>
 
             <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-center">
-              <div className="text-2xl font-bold text-yellow-600">{diferencia}</div>
+              <div className="text-2xl font-bold text-yellow-600">{diferencia.toFixed(2)}</div>
               <div className="text-xs text-yellow-500">{clasificacion}</div>
             </div>
           </div>
@@ -165,7 +209,22 @@ export function RendicionPage() {
         <div className="mt-6 p-6 bg-white rounded-2xl shadow-sm border border-[#F5F5F5]">
           <h3 className="font-medium text-gray-700 text-sm uppercase mb-4">Observaciones y Registro</h3>
 
-          <div className="grid grid-cols-1 gap-3 mb-4">
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Monto Entregado (S/)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={montoEntregado === '' ? '' : montoEntregado}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setMontoEntregado(val === '' ? '' : Number(val));
+                }}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="0.00"
+              />
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Observaciones</label>
               <textarea
@@ -180,14 +239,16 @@ export function RendicionPage() {
 
           <div className="grid grid-cols-2 gap-3 mb-6">
             <button
-              onClick={() => handleRegistrar()}
-              className="rounded-xl bg-[#A61E22] px-6 py-3 text-sm font-semibold text-white hover:bg-[#7F1518] transition-colors w-full"
+              onClick={handleRegistrar}
+              disabled={!repartidorId || loading}
+              className="rounded-xl bg-[#A61E22] px-6 py-3 text-sm font-semibold text-white hover:bg-[#7F1518] disabled:opacity-50 transition-colors w-full"
             >
-              Registrar Rendición
+              {loading ? 'Registrando...' : 'Registrar Rendición'}
             </button>
             <button
-              onClick={() => handleValidar()}
-              className="rounded-xl bg-[#7F1518] px-6 py-3 text-sm font-semibold text-white hover:bg-[#A61E22] transition-colors w-full"
+              onClick={handleValidar}
+              disabled={!idRendicion || loading}
+              className="rounded-xl bg-[#7F1518] px-6 py-3 text-sm font-semibold text-white hover:bg-[#A61E22] disabled:opacity-50 transition-colors w-full"
             >
               Validar
             </button>

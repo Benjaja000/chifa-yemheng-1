@@ -1,8 +1,22 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useGpsTracking } from '@/shared/hooks/useGpsTracking';
+import { api } from '@/shared/services/api-client';
 import { Ico } from '@/components/Icon';
 import { toast } from '@/shared/ui/use-toast';
+
+const GPS_MIN_INTERVAL_MS = 15000;
+
+interface EntregaDetalle {
+  id: number;
+  pedidoId: number;
+  direccion: string;
+  distrito: string | null;
+  referencia: string | null;
+  telefono: string | null;
+  costo: number;
+  estado: 'P' | 'R' | 'E' | 'C';
+}
 
 export function EntregaDetallePage() {
   const navigate = useNavigate();
@@ -11,13 +25,27 @@ export function EntregaDetallePage() {
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [compartiendoGps, setCompartiendoGps] = useState(false);
+  const [entrega, setEntrega] = useState<EntregaDetalle | null>(null);
+  const lastSentRef = useRef(0);
 
-  // Hook de GPS: watchPosition cada 30s, auto-stop al confirmar
+  useEffect(() => {
+    if (!deliveryId) return;
+    api.getMiEntrega(deliveryId).then(setEntrega).catch((e) => {
+      console.error('Error cargando entrega:', e);
+    });
+  }, [deliveryId]);
+
+  // Hook de GPS: watchPosition, auto-stop al entregar. Persiste la posición en BD (throttle).
   const { setEnabled } = useGpsTracking({
     onPosition: (pos) => {
       setLat(pos.lat);
       setLng(pos.lng);
-      console.log('Ubicación reportada:', pos.lat, pos.lng);
+      const now = Date.now();
+      if (now - lastSentRef.current < GPS_MIN_INTERVAL_MS) return;
+      lastSentRef.current = now;
+      api.actualizarUbicacion(deliveryId, pos.lat, pos.lng).catch((e) => {
+        console.error('Error reportando ubicación:', e);
+      });
     },
     autoStop: 'E',
     enabled: compartiendoGps,
@@ -25,9 +53,10 @@ export function EntregaDetallePage() {
 
   const iniciarRuta = async () => {
     try {
+      await api.iniciarRuta(deliveryId);
       await toast({
         title: 'Ruta iniciada',
-        description: 'Compartiendo tu ubicación cada 30s. Pulsa "Detener" cuando llegues.',
+        description: 'Compartiendo tu ubicación mientras estás en ruta.',
       });
       setCompartiendoGps(true);
       setEnabled(true);
@@ -38,6 +67,7 @@ export function EntregaDetallePage() {
 
   const confirmarEntrega = async () => {
     try {
+      await api.confirmarEntrega(deliveryId);
       toast({ title: 'Entregado', description: 'El pedido ha sido entregado exitosamente.' });
       setCompartiendoGps(false);
       setEnabled(false);
@@ -56,11 +86,13 @@ export function EntregaDetallePage() {
           <div className="grid grid-cols-1 gap-4 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Dirección</label>
-              <p className="text-gray-900 font-medium">Av. Los Incas 123, Urb. El Bosque</p>
+              <p className="text-gray-900 font-medium">{entrega?.direccion ?? '—'}</p>
+              {entrega?.referencia && <p className="text-sm text-gray-500">{entrega.referencia}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Cliente</label>
-              <p className="text-gray-900">Mesa 08 - Juan Pérez</p>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Pedido</label>
+              <p className="text-gray-900">#{entrega?.pedidoId ?? '—'} · {entrega?.distrito ?? '—'}</p>
+              {entrega?.telefono && <p className="text-sm text-gray-500">Tel: {entrega.telefono}</p>}
             </div>
           </div>
 
@@ -87,20 +119,6 @@ export function EntregaDetallePage() {
                 <Ico n="ok" size={20} /> Confirmar entrega
             </button>
           </div>
-
-          {/* Toggle GPS */}
-          {!compartiendoGps && (
-            <div className="mt-4 p-3 rounded-lg bg-gray-50 border border-gray-300">
-              <p className="text-sm text-gray-600 mb-2">
-                Compartir ubicación GPS cada 30s mientras estás en ruta. Se detiene automáticamente al confirmar entrega.
-              </p>
-              <button
-                onClick={() => setCompartiendoGps(true)}
-                className="text-xs text-blue-600 underline hover:text-blue-800">
-                Compartir ahora
-              </button>
-            </div>
-          )}
 
           {/* Mini mapa si hay GPS */}
           {lat !== null && lng !== null && (

@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase.js';
+import { updateAudit } from '../utils/auditoria.js';
 
 export interface PendienteRendicionItem {
   idPedidoDelivery: number;
@@ -25,68 +26,130 @@ export interface RendicionResultado {
   totalEsperado: number;
 }
 
+/**
+ * Embed único del pedido delivery: cliente + venta + pago (con método de pago).
+ * El pago efectivo se discrimina por metodo_pago.afecta_efectivo = 'S'
+ * (BR-INF-051: los pagos digitales no entran a la rendición física).
+ */
+const PEDIDO_EMBED = `
+  id_pedidodelivery,
+  id_pedido,
+  direccion_entrega,
+  costo_envio,
+  f_entrega,
+  pedido:pedido!inner(
+    id_cliente,
+    cliente:cliente!inner(
+      persona:persona!inner(nombre, ap_paterno)
+    ),
+    venta:venta!inner(
+      id_venta,
+      pago_venta:pago_venta!inner(
+        monto,
+        metodo_pago:metodo_pago!inner(n_metodopago, afecta_efectivo)
+      )
+    )
+  )
+`;
+
+function totalPedido(row: any): number {
+  const pago = Number(row.pedido?.venta?.[0]?.pago_venta?.[0]?.monto ?? 0);
+  return pago + Number(row.costo_envio ?? 0);
+}
+
+function nombreCliente(row: any): string {
+  const persona = row.pedido?.cliente?.persona;
+  return persona ? `${persona.nombre} ${persona.ap_paterno ?? ''}`.trim() : 'Sin cliente';
+}
+
+/** Pedidos ya rendidos (VU-DEL-005: un pedido solo puede rendirse una vez). */
+async function idsPedidosRendidos(pedidoIds: number[]): Promise<Set<number>> {
+  if (pedidoIds.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from('movimiento_caja')
+    .select('id_pedido')
+    .in('id_pedido', pedidoIds)
+    .eq('estado', 'A');
+
+  if (error) throw new Error(`RENDIDOS_FAIL: ${error.message}`);
+  return new Set((data ?? []).map((r: any) => Number(r.id_pedido)));
+}
+
+/** IDs de catálogo necesarios para registrar el movimiento (nunca literales de negocio). */
+async function idsCatalogoCaja(): Promise<{ idConcepto: number; idMetodo: number }> {
+  const { data: concepto, error: conceptoError } = await supabase
+    .from('concepto_caja')
+    .select('id_concepto')
+    .eq('n_concepto', 'VENTA AL CONTADO')
+    .eq('estado', 'A')
+    .single();
+  if (conceptoError || !concepto) throw new Error('CONCEPTO_CAJA_NO_DISPONIBLE');
+
+  const { data: metodo, error: metodoError } = await supabase
+    .from('metodo_pago')
+    .select('id_metodopago')
+    .eq('afecta_efectivo', 'S')
+    .eq('estado', 'A')
+    .order('id_metodopago', { ascending: true })
+    .limit(1)
+    .single();
+  if (metodoError || !metodo) throw new Error('METODO_PAGO_EFECTIVO_NO_DISPONIBLE');
+
+  return { idConcepto: concepto.id_concepto, idMetodo: metodo.id_metodopago };
+}
+
 export async function listarPendientesRendicion(repartidorId: number): Promise<PendienteRendicionItem[]> {
   const { data, error } = await supabase
     .from('pedido_delivery')
-    .select(`
-      id_pedidodelivery,
-      id_pedido,
-      direccion_entrega,
-      costo_envio,
-      f_entrega,
-      pedido:pedido!inner(
-        id_cliente,
-        cliente:cliente!inner(
-          persona:persona!inner(nombre, ap_paterno)
-        )
-      ),
-      pago_venta:pago_venta!inner(
-        metodo_pago,
-        monto
-      ),
-      movimiento_caja:movimiento_caja!left(
-        id_movimiento
-      )
-    `)
+    .select(PEDIDO_EMBED)
     .eq('id_empleado', repartidorId)
     .eq('situacion', 'E')
-    .eq('pago_venta.metodo_pago', 'EFECTIVO')
-    .is('movimiento_caja.id_movimiento', null);
+    .eq('pedido.venta.pago_venta.metodo_pago.afecta_efectivo', 'S');
 
   if (error) throw new Error(`PENDIENTES_RENDICION_FAIL: ${error.message}`);
 
-  return (data ?? []).map((row: any) => ({
-    idPedidoDelivery: row.id_pedidodelivery,
-    pedidoId: row.id_pedido,
-    cliente: row.pedido?.cliente?.persona
-      ? `${row.pedido.cliente.persona.nombre} ${row.pedido.cliente.persona.ap_paterno ?? ''}`.trim()
-      : 'Sin cliente',
-    direccion: row.direccion_entrega,
-    total: Number(row.pago_venta?.[0]?.monto ?? 0) + Number(row.costo_envio ?? 0),
-    metodoPago: 'EFECTIVO',
-    fechaEntrega: row.f_entrega,
-    estadoRendicion: 'P',
-  }));
+  const filas = (data ?? []) as any[];
+  const rendidos = await idsPedidosRendidos(filas.map((r) => Number(r.id_pedido)));
+
+  return filas
+    .filter((row) => !rendidos.has(Number(row.id_pedido)))
+    .map((row) => ({
+      idPedidoDelivery: row.id_pedidodelivery,
+      pedidoId: row.id_pedido,
+      cliente: nombreCliente(row),
+      direccion: row.direccion_entrega,
+      total: totalPedido(row),
+      metodoPago: row.pedido?.venta?.[0]?.pago_venta?.[0]?.metodo_pago?.n_metodopago ?? '',
+      fechaEntrega: row.f_entrega,
+      estadoRendicion: 'P' as const,
+    }));
 }
 
-export async function registrarRendicion(input: RendicionRegistrarInput, usucre: string, pc = ''): Promise<RendicionResultado> {
-  const { data: pedidos, error: pedidosError } = await supabase
+export async function registrarRendicion(
+  input: RendicionRegistrarInput,
+  usuarioId: number,
+): Promise<RendicionResultado> {
+  const { data, error } = await supabase
     .from('pedido_delivery')
-    .select(`
-      id_pedidodelivery,
-      costo_envio,
-      pago_venta:pago_venta!inner(monto)
-    `)
-    .in('id_pedidodelivery', input.pedidoIds)
+    .select(PEDIDO_EMBED)
+    .in('id_pedido', input.pedidoIds)
     .eq('id_empleado', input.repartidorId)
     .eq('situacion', 'E')
-    .eq('pago_venta.metodo_pago', 'EFECTIVO');
+    .eq('pedido.venta.pago_venta.metodo_pago.afecta_efectivo', 'S');
 
-  if (pedidosError) throw new Error(`PEDIDOS_RENDICION_FAIL: ${pedidosError.message}`);
+  if (error) throw new Error(`PEDIDOS_RENDICION_FAIL: ${error.message}`);
 
-  const totalEsperado = (pedidos ?? []).reduce((sum, p: any) => sum + Number(p.pago_venta?.[0]?.monto ?? 0) + Number(p.costo_envio ?? 0), 0);
+  const filas = (data ?? []) as any[];
+  if (filas.length !== input.pedidoIds.length) throw new Error('PEDIDO_NO_VALIDO');
+
+  const rendidos = await idsPedidosRendidos(input.pedidoIds);
+  if (rendidos.size > 0) throw new Error('PEDIDO_YA_RENDIDO');
+
+  const totalEsperado = filas.reduce((sum, row) => sum + totalPedido(row), 0);
   const diferencia = input.montoEntregado - totalEsperado;
-  const estado = diferencia === 0 ? 'Rendido' : 'Observado';
+  const estado: RendicionResultado['estado'] = diferencia === 0 ? 'Rendido' : 'Observado';
+
+  if (diferencia !== 0 && !input.observaciones?.trim()) throw new Error('OBSERVACION_REQUERIDA');
 
   const { data: caja, error: cajaError } = await supabase
     .from('apertura_caja')
@@ -94,45 +157,49 @@ export async function registrarRendicion(input: RendicionRegistrarInput, usucre:
     .eq('situacion', 'A')
     .order('feccre', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (cajaError || !caja) throw new Error('CAJA_NO_ABIERTA');
 
-  const { data: movimiento, error: movError } = await supabase
-    .from('movimiento_caja')
-    .insert({
-      id_aperturacaja: caja.id_aperturacaja,
-      concepto: 'VENTA AL CONTADO',
-      monto: input.montoEntregado,
-      afecta_efectivo: true,
-      descripcion: `Rendición delivery repartidor ${input.repartidorId} - ${input.pedidoIds.length} pedidos`,
-      ...(await import('../utils/auditoria.js')).createAudit(usucre, pc),
-    })
-    .select('id_movimiento')
-    .single();
+  const { idConcepto, idMetodo } = await idsCatalogoCaja();
+  const lote = `Rendición delivery repartidor ${input.repartidorId} (${input.pedidoIds.length} pedidos)`;
 
-  if (movError) throw new Error(`MOVIMIENTO_CAJA_FAIL: ${movError.message}`);
+  let primerMovimiento = 0;
+  for (const row of filas) {
+    const { data: mov, error: movError } = await supabase.rpc('fn_registrar_movimiento_caja', {
+      p_id_apertura: caja.id_aperturacaja,
+      p_id_concepto: idConcepto,
+      p_id_metodo: idMetodo,
+      p_id_usuario: usuarioId,
+      p_monto: totalPedido(row),
+      p_descripcion: `${lote} · pedido ${row.id_pedido}`,
+      p_id_pedido: row.id_pedido,
+      p_id_venta: row.pedido?.venta?.[0]?.id_venta ?? null,
+      p_numero_op: null,
+    });
 
-  const { error: updateError } = await supabase
-    .from('pedido_delivery')
-    .update({ fecmod: new Date().toISOString() })
-    .in('id_pedidodelivery', input.pedidoIds);
+    if (movError) throw new Error(`MOVIMIENTO_CAJA_FAIL: ${movError.message}`);
 
-  if (updateError) throw new Error(`UPDATE_PEDIDO_RENDICION_FAIL: ${updateError.message}`);
+    const idMov = Number((mov as any[])?.[0]?.id_movimientocaja ?? 0);
+    if (primerMovimiento === 0) primerMovimiento = idMov;
 
-  return {
-    id: movimiento.id_movimiento,
-    estado,
-    diferencia,
-    totalEsperado,
-  };
+    if (input.observaciones) {
+      const { error: obsError } = await supabase
+        .from('movimiento_caja')
+        .update({ documento: input.observaciones.slice(0, 200) })
+        .eq('id_movimientocaja', idMov);
+      if (obsError) throw new Error(`OBSERVACION_MOVIMIENTO_FAIL: ${obsError.message}`);
+    }
+  }
+
+  return { id: primerMovimiento, estado, diferencia, totalEsperado };
 }
 
 export async function validarRendicion(id: number, usumod: string, pc = ''): Promise<void> {
   const { error } = await supabase
     .from('movimiento_caja')
-    .update({ ...(await import('../utils/auditoria.js')).updateAudit(usumod, pc) })
-    .eq('id_movimiento', id);
+    .update({ ...updateAudit(usumod, pc) })
+    .eq('id_movimientocaja', id);
 
   if (error) throw new Error(`VALIDAR_RENDICION_FAIL: ${error.message}`);
 }
@@ -140,8 +207,8 @@ export async function validarRendicion(id: number, usumod: string, pc = ''): Pro
 export async function observarRendicion(id: number, motivo: string, usumod: string, pc = ''): Promise<void> {
   const { error } = await supabase
     .from('movimiento_caja')
-    .update({ descripcion: motivo, ...(await import('../utils/auditoria.js')).updateAudit(usumod, pc) })
-    .eq('id_movimiento', id);
+    .update({ documento: motivo.slice(0, 200), ...updateAudit(usumod, pc) })
+    .eq('id_movimientocaja', id);
 
   if (error) throw new Error(`OBSERVAR_RENDICION_FAIL: ${error.message}`);
 }
@@ -150,18 +217,22 @@ export async function getRendicionPdf(id: number) {
   const { data, error } = await supabase
     .from('movimiento_caja')
     .select(`
-      id_movimiento,
+      id_movimientocaja,
       monto,
-      concepto,
+      documento,
       descripcion,
+      f_movimiento,
       feccre,
-      apertura_caja:apertura_caja!inner(
-        id_aperturacaja,
-        caja:caja!inner(nombre),
-        empleado:empleado!inner(persona:persona!inner(nombre, ap_paterno))
+      id_pedido,
+      id_venta,
+      concepto:concepto_caja!inner(n_concepto),
+      pedido:pedido(
+        cliente:cliente(
+          persona:persona(nombre, ap_paterno)
+        )
       )
     `)
-    .eq('id_movimiento', id)
+    .eq('id_movimientocaja', id)
     .single();
 
   if (error) throw new Error(`PDF_RENDICION_FAIL: ${error.message}`);

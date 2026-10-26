@@ -13,8 +13,8 @@ interface Producto {
 }
 
 interface CartaStepProps {
-  items: Array<{ productoId: number; cantidad: number; nota?: string; descuento?: number }>;
-  onItemsChange: (items: Array<{ productoId: number; cantidad: number; nota?: string; descuento?: number }>) => void;
+  items: Array<{ productoId: number; cantidad: number; precioUnit: number; nombre?: string; nota?: string; descuento?: number }>;
+  onItemsChange: (items: Array<{ productoId: number; cantidad: number; precioUnit: number; nombre?: string; nota?: string; descuento?: number }>) => void;
   onNext: () => void;
 }
 
@@ -31,12 +31,26 @@ export function CartaStep({ items, onItemsChange, onNext }: CartaStepProps) {
   const cargarDatos = async () => {
     try {
       const [prods, cats] = await Promise.all([
-        api.request<any[]>('/productos?activo=true&disponible=true'),
-        api.request<any[]>('/categorias'),
+        api.getProductos({ estado: true, disponible: true }),
+        api.getCategorias(),
       ]);
-      setProductos(prods);
-      setCategorias(cats);
-      if (cats.length > 0) setCategoriaActiva(cats[0].id_categoria);
+      setProductos(
+        prods.map((p: any) => ({
+          id_producto: p.id,
+          nombre: p.nombre,
+          descripcion: p.detalle ?? null,
+          precio: Number(p.precio ?? 0),
+          imagen_url: p.imagen ?? null,
+          id_categoria: p.categoriaId ?? 0,
+        })),
+      );
+      setCategorias(
+        cats.map((c: any) => ({
+          id_categoria: c.id,
+          nombre: c.nombre,
+        })),
+      );
+      if (cats.length > 0) setCategoriaActiva(cats[0].id);
     } catch (error) {
       console.error('Error cargando carta:', error);
     } finally {
@@ -55,7 +69,7 @@ export function CartaStep({ items, onItemsChange, onNext }: CartaStepProps) {
         i.productoId === producto.id_producto ? { ...i, cantidad: i.cantidad + 1 } : i
       ));
     } else {
-      onItemsChange([...items, { productoId: producto.id_producto, cantidad: 1 }]);
+      onItemsChange([...items, { productoId: producto.id_producto, cantidad: 1, precioUnit: producto.precio, nombre: producto.nombre }]);
     }
   };
 
@@ -70,10 +84,7 @@ export function CartaStep({ items, onItemsChange, onNext }: CartaStepProps) {
   };
 
   const totalItems = items.reduce((sum, i) => sum + i.cantidad, 0);
-  const subtotal = items.reduce((sum, i) => {
-    const prod = productos.find(p => p.id_producto === i.productoId);
-    return sum + (prod?.precio || 0) * i.cantidad;
-  }, 0);
+  const subtotal = items.reduce((sum, i) => sum + i.precioUnit * i.cantidad, 0);
 
   if (loading) {
     return <div className="flex items-center justify-center h-64">Cargando carta...</div>;

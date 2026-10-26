@@ -2,7 +2,7 @@ import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 
 interface ConfirmarStepProps {
-  items: Array<{ productoId: number; cantidad: number; nota?: string; descuento?: number }>;
+  items: Array<{ productoId: number; cantidad: number; precioUnit: number; nombre?: string; nota?: string; descuento?: number }>;
   direccion: string;
   costoEnvio: number;
   metodoDigital: 'YAPE' | 'PLIN' | 'TARJETA' | 'TRANSFERENCIA';
@@ -20,7 +20,7 @@ const METODOS = [
 ];
 
 export function ConfirmarStep({ items, direccion, costoEnvio, metodoDigital, onMetodoChange, onSubmit, onPrev, loading }: ConfirmarStepProps) {
-  const subtotal = items.reduce((sum, item) => sum + item.cantidad * 15, 0); // placeholder precio
+  const subtotal = items.reduce((sum, item) => sum + item.precioUnit * item.cantidad, 0);
   const total = subtotal + costoEnvio;
 
   return (
@@ -30,8 +30,8 @@ export function ConfirmarStep({ items, direccion, costoEnvio, metodoDigital, onM
         <div className="bg-gray-50 rounded-lg p-4 space-y-2">
           {items.map((item, i) => (
             <div key={i} className="flex justify-between text-sm">
-              <span>{item.cantidad}x Producto #{item.productoId}</span>
-              <Badge variant="default">S/ {(15 * item.cantidad).toFixed(2)}</Badge>
+              <span>{item.cantidad}x {item.nombre ?? `Producto #${item.productoId}`}</span>
+              <Badge variant="default">S/ {(item.precioUnit * item.cantidad).toFixed(2)}</Badge>
             </div>
           ))}
           <div className="border-t pt-2 space-y-1">

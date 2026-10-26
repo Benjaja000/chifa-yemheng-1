@@ -259,20 +259,6 @@ describe('Personal endpoints', () => {
   })
 })
 
-// Personas - requires auth
-describe('Personas endpoints', () => {
-  it('should require auth for GET /personas', async () => {
-    const res = await request(app).get('/api/v1/personas/')
-    expect(res.status).toBe(401)
-  })
-
-  it('should GET /personas with auth', async () => {
-    setAuth('Bearer test-admin-token')
-    const res = await request(app).get('/api/v1/personas/')
-    expect([200, 401, 403]).toContain(res.status)
-  })
-})
-
 // Delivery - requires auth
 describe('Delivery endpoints', () => {
   it('should require auth for GET /delivery', async () => {

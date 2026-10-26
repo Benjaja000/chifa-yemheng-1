@@ -1,19 +1,22 @@
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1';
 
+const CLIENTE_TOKEN_KEY = 'chifa.cliente.token';
+const STAFF_TOKEN_KEY = 'chifa.token';
+
+/** Resuelve el JWT desde localStorage según el guard del endpoint (cliente vs staff/repartidor). */
+function resolveToken(endpoint: string): string | null {
+  return localStorage.getItem(endpoint.startsWith('/cliente') ? CLIENTE_TOKEN_KEY : STAFF_TOKEN_KEY);
+}
+
 class ApiClient {
-  private token: string | null = null;
-
-  setToken(token: string | null) {
-    this.token = token;
-  }
-
   async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    const token = resolveToken(endpoint);
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
-      ...(this.token && { Authorization: `Bearer ${this.token}` }),
+      ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     };
 
@@ -64,9 +67,14 @@ class ApiClient {
     });
   }
 
-  sugerirCosto(lat: number, lng: number, distrito: number) {
+  sugerirCosto(distrito: number, lat?: number, lng?: number) {
+    const params = new URLSearchParams({ distrito: String(distrito) });
+    if (lat !== undefined && lng !== undefined) {
+      params.set('lat', String(lat));
+      params.set('lng', String(lng));
+    }
     return this.request<{ distanciaKm: number | null; fueraRadio: boolean; costoSugerido: number }>(
-      `/cliente/delivery/sugerir-costo?lat=${lat}&lng=${lng}&distrito=${distrito}`
+      `/cliente/delivery/sugerir-costo?${params.toString()}`
     );
   }
 
@@ -180,13 +188,15 @@ class ApiClient {
   }
 
   // Maestros
-  getProductos(params?: { activo?: boolean; disponible?: boolean }) {
-    const query = new URLSearchParams(params as Record<string, string>).toString();
-    return this.request<any[]>(`/productos?${query}`);
+  getProductos(params?: { estado?: boolean; disponible?: boolean }) {
+    const query = new URLSearchParams();
+    if (params?.estado !== undefined) query.set('estado', params.estado ? 'A' : 'I');
+    if (params?.disponible !== undefined) query.set('disponible', params.disponible ? 'S' : 'N');
+    return this.request<{ data: any[] }>(`/productos?${query.toString()}`).then(r => r.data);
   }
 
   getCategorias() {
-    return this.request<any[]>(`/categorias`);
+    return this.request<{ data: any[] }>(`/categorias`).then(r => r.data);
   }
 
   getDepartamentos() {

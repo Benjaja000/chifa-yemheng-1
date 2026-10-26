@@ -22,8 +22,8 @@ const clienteDeliveryCreateSchema = z.object({
 });
 
 const sugerirCostoQuerySchema = z.object({
-  lat: z.coerce.number().min(-90).max(90),
-  lng: z.coerce.number().min(-180).max(180),
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
   distrito: z.coerce.number().int().positive(),
 });
 
@@ -51,7 +51,7 @@ export async function postClienteDelivery(req: Request, res: Response): Promise<
 export async function getSugerirCostoCliente(req: Request, res: Response): Promise<void> {
   const parsed = sugerirCostoQuerySchema.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() }); return; }
-  res.json(await sugerirCostoClienteService(parsed.data.lat, parsed.data.lng, parsed.data.distrito));
+  res.json(await sugerirCostoClienteService(parsed.data.lat ?? null, parsed.data.lng ?? null, parsed.data.distrito));
 }
 
 export async function getClienteDeliveryDetalle(req: Request, res: Response): Promise<void> {

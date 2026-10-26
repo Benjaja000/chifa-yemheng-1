@@ -5,8 +5,8 @@ export async function listarPendientesRendicionService(repartidorId: number): Pr
   return listarPendientesRendicion(repartidorId);
 }
 
-export async function registrarRendicionService(input: RendicionRegistrarInput, usucre: string, pc?: string): Promise<RendicionResultado> {
-  return registrarRendicion(input, usucre, pc);
+export async function registrarRendicionService(input: RendicionRegistrarInput, usuarioId: number): Promise<RendicionResultado> {
+  return registrarRendicion(input, usuarioId);
 }
 
 export async function validarRendicionService(id: number, usumod: string, pc?: string): Promise<void> {

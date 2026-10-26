@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import jsQR from 'jsqr';
+import { codigoQrCanonico } from '../lib/utils';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1';
 
@@ -16,8 +17,9 @@ export function QrScannerModal({ open, onClose, onScan }: QrScannerModalProps) {
   const intervalRef = useRef<number | null>(null);
   const onCloseRef = useRef(onClose);
   const onScanRef = useRef(onScan);
+  const reintentarRef = useRef<(() => void) | null>(null);
   const [errorCam, setErrorCam] = useState<string | null>(null);
-  const [detectando, setDetectando] = useState(false);
+  const [estado, setEstado] = useState<'buscando' | 'validando' | 'invalido'>('buscando');
 
   onCloseRef.current = onClose;
   onScanRef.current = onScan;
@@ -32,13 +34,71 @@ export function QrScannerModal({ open, onClose, onScan }: QrScannerModalProps) {
       streamRef.current = null;
       if (videoRef.current) videoRef.current.srcObject = null;
       setErrorCam(null);
-      setDetectando(false);
+      setEstado('buscando');
       return;
     }
 
     let cancelado = false;
+    let ultimoCodigo: string | null = null;
     setErrorCam(null);
-    setDetectando(false);
+    setEstado('buscando');
+
+    function detenerLoop() {
+      if (intervalRef.current !== null) {
+        window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }
+
+    function marcarInvalido(codigo: string) {
+      ultimoCodigo = codigo;
+      detenerLoop();
+      setEstado('invalido');
+    }
+
+    function validar(codigo: string) {
+      detenerLoop();
+      const canonico = codigoQrCanonico(codigo);
+      if (!canonico) {
+        marcarInvalido(codigo);
+        return;
+      }
+      setEstado('validando');
+      fetch(`${API_URL}/mesas/by-qr?codigo=${encodeURIComponent(canonico)}`)
+        .then(async (res) => {
+          if (!res.ok) throw new Error('QR_INVALIDO');
+          const body = await res.json();
+          onScanRef.current(String(body.id), typeof body?.ambiente === 'string' ? body.ambiente : '');
+        })
+        .catch(() => {
+          if (!cancelado) marcarInvalido(codigo);
+        });
+    }
+
+    function escanear() {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      if (!code?.data || code.data === ultimoCodigo) return;
+      validar(code.data);
+    }
+
+    function iniciarEscaneo() {
+      detenerLoop();
+      ultimoCodigo = null;
+      setErrorCam(null);
+      setEstado('buscando');
+      intervalRef.current = window.setInterval(escanear, 400);
+    }
+
+    reintentarRef.current = iniciarEscaneo;
 
     async function abrir() {
       try {
@@ -68,64 +128,7 @@ export function QrScannerModal({ open, onClose, onScan }: QrScannerModalProps) {
           await videoRef.current.play().catch(() => undefined);
         }
 
-        intervalRef.current = window.setInterval(() => {
-          const video = videoRef.current;
-          const canvas = canvasRef.current;
-          if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) return;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-          if (code?.data) {
-            window.clearInterval(intervalRef.current!);
-            intervalRef.current = null;
-            setDetectando(true);
-            fetch(`${API_URL}/mesas/by-qr?codigo=${encodeURIComponent(code.data)}`)
-              .then(async (res) => {
-                if (!res.ok) throw new Error('QR_INVALIDO');
-                const body = await res.json();
-                onScanRef.current(String(body.id), typeof body?.ambiente === 'string' ? body.ambiente : '');
-              })
-              .catch(() => {
-                setErrorCam('QR inválido. Escanea el QR pegado en tu mesa.');
-                setDetectando(false);
-                setTimeout(() => {
-                  if (!cancelado && intervalRef.current === null) {
-                    intervalRef.current = window.setInterval(() => {
-                      const v = videoRef.current;
-                      const c = canvasRef.current;
-                      if (!v || !c || v.readyState !== v.HAVE_ENOUGH_DATA) return;
-                      const cx = c.getContext('2d');
-                      if (!cx) return;
-                      c.width = v.videoWidth;
-                      c.height = v.videoHeight;
-                      cx.drawImage(v, 0, 0, c.width, c.height);
-                      const imgData = cx.getImageData(0, 0, c.width, c.height);
-                      const cd = jsQR(imgData.data, imgData.width, imgData.height);
-                      if (cd?.data) {
-                        window.clearInterval(intervalRef.current!);
-                        intervalRef.current = null;
-                        setDetectando(true);
-                        fetch(`${API_URL}/mesas/by-qr?codigo=${encodeURIComponent(cd.data)}`)
-                          .then(async (r) => {
-                            if (!r.ok) throw new Error('QR_INVALIDO');
-                              const b = await r.json();
-                              onScanRef.current(String(b.id), typeof b?.ambiente === 'string' ? b.ambiente : '');
-                          })
-                          .catch(() => {
-                            setErrorCam('QR inválido. Escanea el QR pegado en tu mesa.');
-                            setDetectando(false);
-                          });
-                      }
-                    }, 400);
-                  }
-                }, 2000);
-              });
-          }
-        }, 400);
+        iniciarEscaneo();
       } catch (e) {
         if (cancelado) return;
         const nombre = (e as Error)?.name ?? '';
@@ -150,11 +153,9 @@ export function QrScannerModal({ open, onClose, onScan }: QrScannerModalProps) {
     window.addEventListener('keydown', alEscape);
     return () => {
       cancelado = true;
+      reintentarRef.current = null;
       window.removeEventListener('keydown', alEscape);
-      if (intervalRef.current) {
-        window.clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      detenerLoop();
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       if (videoRef.current) videoRef.current.srcObject = null;
@@ -215,15 +216,29 @@ export function QrScannerModal({ open, onClose, onScan }: QrScannerModalProps) {
           </>
         )}
 
-        {!errorCam && !detectando && (
+        {!errorCam && estado === 'buscando' && (
           <p className="text-center text-[11px] text-[#e4beb9]/70">
             Apunta al QR de tu mesa — se detecta automáticamente.
           </p>
         )}
-        {detectando && (
-          <p className="text-center text-[11px] text-[#F2C94C] font-bold">
-            QR detectado, validando…
-          </p>
+        {!errorCam && estado === 'validando' && (
+          <p className="text-center text-[11px] text-[#F2C94C] font-bold">QR detectado, validando…</p>
+        )}
+        {!errorCam && estado === 'invalido' && (
+          <div className="space-y-3">
+            <p aria-live="assertive" className="rounded-xl bg-black/30 px-3 py-3 text-xs leading-relaxed text-[#ffdcc3]">
+              QR inválido o de otra mesa. Acércalo al recuadro e inténtalo de nuevo.
+            </p>
+            <button
+              type="button"
+              autoFocus
+              onClick={() => reintentarRef.current?.()}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#F2C94C] px-4 py-3 text-xs font-bold tracking-wider text-[#7F1518] uppercase"
+            >
+              <span className="material-symbols-outlined text-base">refresh</span>
+              Reintentar
+            </button>
+          </div>
         )}
 
         {!errorCam && (

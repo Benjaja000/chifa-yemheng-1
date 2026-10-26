@@ -67,4 +67,4 @@ export async function entregarService(id: number, usumod: string, pc?: string) {
   if (!r) throw new DeliveryError('NOT_FOUND');
   return r;
 }
-export async function sugerirCostoService(q: SugerirCostoQuery) { return sugerirCosto(q.lat, q.lng, q.distrito); }
+export async function sugerirCostoService(q: SugerirCostoQuery) { return sugerirCosto(q.lat ?? null, q.lng ?? null, q.distrito); }

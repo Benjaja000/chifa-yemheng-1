@@ -30,6 +30,7 @@ interface DistritoGPSRow {
   lng_ref: number | null;
   radio_km: number | null;
   costo_base: number | null;
+  recargo_km: number | null;
 }
 
 const SELECT = 'id_pedidodelivery, id_pedido, id_distrito, distrito(d_distrito), direccion_entrega, referencia, telefono_contacto, id_empleado, repartidor:empleado(persona(nombre, ap_paterno)), costo_envio, situacion, feccre';
@@ -137,10 +138,10 @@ export interface SugerirCostoResult {
   costoSugerido: number;
 }
 
-export async function sugerirCosto(lat: number, lng: number, distritoId: number): Promise<SugerirCostoResult> {
+export async function sugerirCosto(lat: number | null, lng: number | null, distritoId: number): Promise<SugerirCostoResult> {
   const { data: distrito, error } = await supabase
     .from('distrito')
-    .select('id_distrito, d_distrito, lat_ref, lng_ref, radio_km, costo_base')
+    .select('id_distrito, d_distrito, lat_ref, lng_ref, radio_km, costo_base, recargo_km')
     .eq('id_distrito', distritoId)
     .single();
 
@@ -149,7 +150,8 @@ export async function sugerirCosto(lat: number, lng: number, distritoId: number)
 
   const d = distrito as unknown as DistritoGPSRow;
 
-  if (d.lat_ref === null || d.lng_ref === null) {
+  // Sin GPS (BR-GPS-001) o sin centroide del distrito: sugerir solo costo_base.
+  if (lat === null || lng === null || d.lat_ref === null || d.lng_ref === null) {
     return {
       distanciaKm: null,
       fueraRadio: false,
@@ -167,17 +169,17 @@ export async function sugerirCosto(lat: number, lng: number, distritoId: number)
   if (distError) throw new Error(`HAVERSINE_FAIL: ${distError.message}`);
 
   const distanciaKm = Number(distancia ?? 0);
-  const radioKm = Number(d.radio_km ?? 5);
+  const radioKm = Number(d.radio_km ?? 0);
   const costoBase = Number(d.costo_base ?? 0);
+  // Recargo por km fuera de radio: dato de negocio (distrito.recargo_km), nunca constante (BR-GPS-002).
+  const recargoKm = Number(d.recargo_km ?? 0);
 
-  // Costo sugerido: base + (distancia - radio) * factor si fuera de radio
-  // Por simplicidad: si fuera de radio, suma 1.5 por km extra
   let costoSugerido = costoBase;
   let fueraRadio = false;
 
   if (distanciaKm > radioKm) {
     fueraRadio = true;
-    costoSugerido += (distanciaKm - radioKm) * 1.5;
+    costoSugerido += (distanciaKm - radioKm) * recargoKm;
   }
 
   return {
