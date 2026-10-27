@@ -47,18 +47,19 @@ export async function listarDepartamentos(): Promise<any[]> {
 }
 
 /** Provincias con estado A filtradas por departamento. */
-export async function listarProvincias(idDepartamento: number): Promise<any[]> {
-  const { data, error } = await supabase
+export async function listarProvincias(idDepartamento?: number): Promise<any[]> {
+  let query = supabase
     .from('provincia')
-    .select('id_provincia, n_provincia')
+    .select('id_provincia, n_provincia, id_departamento')
     .eq('estado', 'A')
-    .eq('id_departamento', idDepartamento)
     .order('id_provincia', { ascending: true });
+  if (idDepartamento !== undefined) query = query.eq('id_departamento', idDepartamento);
+  const { data, error } = await query;
   if (error) throw new Error(`DB_LIST_FAIL: ${error.message}`);
   return (data ?? []).map((r: any) => ({
     id_provincia: r.id_provincia,
     d_provincia: r.n_provincia,
-    id_departamento: idDepartamento,
+    id_departamento: r.id_departamento,
   }));
 }
 

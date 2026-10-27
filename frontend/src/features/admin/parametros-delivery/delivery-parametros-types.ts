@@ -13,6 +13,23 @@ export interface TarifaDistrito {
   recargoKm: number;
 }
 
+export interface Departamento {
+  id_departamento: number;
+  d_departamento: string;
+}
+
+export interface Provincia {
+  id_provincia: number;
+  d_provincia: string;
+  id_departamento: number;
+}
+
+export interface Distrito {
+  id_distrito: number;
+  d_distrito: string;
+  id_provincia: number;
+}
+
 export interface TarifaForm {
   costoBase: number;
   radioKm: number;

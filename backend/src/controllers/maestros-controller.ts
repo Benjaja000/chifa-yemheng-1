@@ -13,8 +13,9 @@ export async function getDepartamentos(_req: Request, res: Response): Promise<vo
 }
 
 export async function getProvincias(req: Request, res: Response): Promise<void> {
-  const idDepartamento = Number(req.query.departamento);
-  if (!idDepartamento) {
+  const rawDepartamento = req.query.departamento;
+  const idDepartamento = rawDepartamento === undefined ? undefined : Number(rawDepartamento);
+  if (idDepartamento !== undefined && (!Number.isInteger(idDepartamento) || idDepartamento <= 0)) {
     res.status(400).json({ error: 'DEPARTAMENTO_REQUERIDO' });
     return;
   }

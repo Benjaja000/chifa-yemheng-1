@@ -1,13 +1,16 @@
 /** Tipos del módulo pedidos (pedido/detalle_pedido/estado_pedido/tipo_pedido). */
 export type EstadoPedido = 'A' | 'I';
+export type CanalPedido = 'QR' | 'WEB' | 'PRESENCIAL';
 
 export interface Pedido {
   id: number;
   numero: string;
   clienteId: number | null;
   mesaId: number | null;
+  mesaNumero: string | null;
   tipoId: number;
   tipo: string;
+  canalOrigen: CanalPedido;
   estadoId: number;
   estado: string;
   usuarioId: number;
@@ -42,6 +45,7 @@ export interface DetallePedido {
   esCortesia: 'S' | 'N';
   fechaSolicitud: string;
   fechaAtencion: string | null;
+  fechaEntregaMozo: string | null;
   clienteId: number | null;
   estadoRegistro: EstadoPedido;
 }
@@ -64,6 +68,8 @@ export type PedidoErrorCode =
   | 'NO_PARTICIPANTE'
   | 'NO_COMANDA_ACTIVA'
   | 'MESA_POR_COBRAR'
+  | 'MOZO_PEDIDO_DIGITAL'
+  | 'ENTREGA_NO_DISPONIBLE'
   | 'YA_POR_COBRAR'
   | 'VALIDATION_ERROR';
 

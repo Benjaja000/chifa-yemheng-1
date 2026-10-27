@@ -14,6 +14,7 @@ import {
   abrirPedido as repoAbrir,
   pedidosAbiertosPorMesa,
   pedirCuentaMesa,
+  registrarEntregaMozo,
   recalcularPedido as repoRecalcular,
 } from '../repositories/pedidos-repository.js';
 
@@ -64,6 +65,7 @@ export async function agregarDetalleService(
   idUsuario: number,
   _logeo: string,
   _pc = '',
+  roles: string[] = [],
 ): Promise<Pedido> {
   const pedido = await repoObtener(pedidoId);
   if (!pedido) {
@@ -71,6 +73,9 @@ export async function agregarDetalleService(
   }
   if (pedido.facturado === 'S' || pedido.anulado === 'S') {
     throw new PedidoError('PEDIDO_FACTURADO');
+  }
+  if (roles.includes('MOZO') && pedido.canalOrigen !== 'PRESENCIAL') {
+    throw new PedidoError('MOZO_PEDIDO_DIGITAL');
   }
   await repoAgregar(pedidoId, input.producto, input.cantidad, input.nota ?? '', input.descuento ?? 0);
   await repoRecalcular(pedidoId);
@@ -82,10 +87,54 @@ export async function agregarDetalleService(
   return updated;
 }
 
-export async function recalcularService(pedidoId: number): Promise<Pedido> {
+export async function entregasPendientesMozoService(): Promise<Pedido[]> {
+  const pedidos = await listarPedidosCocina();
+  return pedidos
+    .filter((pedido) => pedido.mesaId !== null)
+    .map((pedido) => ({
+      ...pedido,
+      detalles: pedido.detalles?.filter(
+        (detalle) =>
+          detalle.estadoRegistro === 'A' &&
+          detalle.estadoPreparacion === 'S' &&
+          detalle.fechaEntregaMozo === null,
+      ),
+    }))
+    .filter((pedido) => (pedido.detalles?.length ?? 0) > 0);
+}
+
+export async function confirmarEntregaMozoService(
+  pedidoId: number,
+  detalleId: number,
+  usuarioId: number,
+): Promise<void> {
   const pedido = await repoObtener(pedidoId);
   if (!pedido) {
     throw new PedidoError('NOT_FOUND');
+  }
+  if (pedido.mesaId === null || pedido.facturado === 'S' || pedido.anulado === 'S') {
+    throw new PedidoError('ENTREGA_NO_DISPONIBLE');
+  }
+  const detalle = pedido.detalles?.find((item) => item.id === detalleId);
+  if (
+    !detalle ||
+    detalle.estadoRegistro !== 'A' ||
+    detalle.estadoPreparacion !== 'S' ||
+    detalle.fechaEntregaMozo !== null
+  ) {
+    throw new PedidoError('ENTREGA_NO_DISPONIBLE');
+  }
+  await registrarEntregaMozo(pedidoId, detalleId, usuarioId);
+  await auditar(usuarioId, 'ENTREGAR_PLATO', detalleId, `Pedido ${pedido.numero}, producto ${detalle.productoId}`);
+}
+
+export async function recalcularService(pedidoId: number, roles: string[] = []): Promise<Pedido> {
+  const pedido = await repoObtener(pedidoId);
+  if (!pedido) {
+    throw new PedidoError('NOT_FOUND');
+  }
+  if (roles.includes('MOZO') && pedido.canalOrigen !== 'PRESENCIAL') {
+    throw new PedidoError('MOZO_PEDIDO_DIGITAL');
   }
   await repoRecalcular(pedidoId);
   const updated = await repoObtener(pedidoId);
@@ -100,6 +149,7 @@ export async function pedirCuentaStaffService(
   idUsuario: number,
   _logeo: string,
   _pc = '',
+  roles: string[] = [],
 ): Promise<{ ok: true; pedidoId: number; estado: string }> {
   const pedido = await repoObtener(pedidoId);
   if (!pedido) {
@@ -113,6 +163,9 @@ export async function pedirCuentaStaffService(
   }
   if (pedido.anulado === 'S') {
     throw new PedidoError('PEDIDO_ANULADO');
+  }
+  if (roles.includes('MOZO') && pedido.canalOrigen !== 'PRESENCIAL') {
+    throw new PedidoError('MOZO_PEDIDO_DIGITAL');
   }
   const estadoMesa = await obtenerEstadoMesa(pedido.mesaId);
   if (estadoMesa.descripcion === 'POR COBRAR') {
@@ -132,6 +185,7 @@ export async function anularService(
   idUsuario: number,
   motivo: string,
   _pc = '',
+  roles: string[] = [],
 ): Promise<void> {
   const pedido = await repoObtener(pedidoId);
   if (!pedido) {
@@ -142,6 +196,9 @@ export async function anularService(
   }
   if (pedido.anulado === 'S') {
     throw new PedidoError('PEDIDO_ANULADO');
+  }
+  if (roles.includes('MOZO') && pedido.canalOrigen !== 'PRESENCIAL') {
+    throw new PedidoError('MOZO_PEDIDO_DIGITAL');
   }
   await repoAnular(pedidoId, idUsuario, motivo);
   await auditar(idUsuario, 'ANULAR_PEDIDO', pedidoId, motivo);

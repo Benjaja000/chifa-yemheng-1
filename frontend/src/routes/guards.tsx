@@ -1,6 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/login/auth-context';
 import { leerPermisos } from '../features/auth/login/auth-service';
@@ -34,7 +34,7 @@ export function PublicGuard({ children }: { children: ReactNode }) {
 export function AuthGuard({ children }: { children: ReactNode }) {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
-  const payload = validateToken(token);
+  const payload = useMemo(() => validateToken(token), [token]);
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
@@ -54,7 +54,8 @@ export function AuthGuard({ children }: { children: ReactNode }) {
 export function RoleGuard({ roles, children }: { roles: string[]; children: ReactNode }) {
   const { token, usuario } = useAuth();
   const navigate = useNavigate();
-  const payload = validateToken(token);
+  const payload = useMemo(() => validateToken(token), [token]);
+  const allowedRoles = roles.map((role) => role.toUpperCase()).join('|');
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
@@ -62,13 +63,13 @@ export function RoleGuard({ roles, children }: { roles: string[]; children: Reac
       navigate('/auth/login', { replace: true });
     } else {
       const tipo = (usuario?.tipo ?? payload.tipo ?? '').toUpperCase();
-      if (!roles.map((r) => r.toUpperCase()).includes(tipo)) {
+      if (!allowedRoles.split('|').includes(tipo)) {
         navigate('/auth/login', { replace: true });
       } else {
         setAuthorized(true);
       }
     }
-  }, [payload, usuario?.tipo, roles, navigate]);
+  }, [payload, usuario?.tipo, allowedRoles, navigate]);
 
   if (!authorized) return null;
   return <>{children}</>;
@@ -78,7 +79,7 @@ export function RoleGuard({ roles, children }: { roles: string[]; children: Reac
 export function RepartidorGuard({ children }: { children: ReactNode }) {
   const { token, usuario } = useAuth();
   const navigate = useNavigate();
-  const payload = validateToken(token);
+  const payload = useMemo(() => validateToken(token), [token]);
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
@@ -101,9 +102,9 @@ export function RepartidorGuard({ children }: { children: ReactNode }) {
 /** Matriz área → permisos (BR-ACC-036, spec permisos/areas). */
 const AREA_PERMISOS: Record<string, string[]> = {
   MESAS: ['MESA_VER', 'MESA_CREAR', 'MESA_EDITAR', 'MESA_ELIMINAR', 'TMESA_VER', 'TMESA_CREAR', 'TMESA_EDITAR', 'TMESA_ELIMINAR'],
-  MOZO: ['PED_VER', 'PED_REGISTRAR', 'PED_ANULAR', 'PED_COCINA', 'PED_DESCUENTO'],
+  MOZO: ['PED_VER', 'PED_REGISTRAR', 'PED_ANULAR', 'PED_DESCUENTO', 'PED_ENTREGAR'],
   COCINA: ['PED_COCINA', 'PED_VER'],
-  CAJA: ['CAJA_APERTURA', 'CAJA_CIERRE', 'CAJA_ARQUEO', 'CAJA_RENDICION', 'CAJ_APERTURAR', 'CAJ_CERRAR', 'CAJ_EGRESO', 'VEN_COBRAR', 'VEN_EMITIR', 'VEN_NOTACREDITO'],
+  CAJA: ['CAJA_APERTURA', 'CAJA_CIERRE', 'CAJA_ARQUEO', 'CAJA_RENDICION', 'CAJ_APERTURAR', 'CAJ_CERRAR', 'CAJ_VALIDAR_CIERRE', 'CAJ_EGRESO', 'VEN_COBRAR', 'VEN_EMITIR', 'VEN_NOTACREDITO'],
   SEGURIDAD: ['EMP_VER', 'EMP_CREAR', 'EMP_EDITAR', 'EMP_ELIMINAR', 'PER_VER', 'PER_CREAR', 'PER_EDITAR', 'PER_ELIMINAR', 'AUD_VER'],
 };
 
@@ -111,7 +112,7 @@ const AREA_PERMISOS: Record<string, string[]> = {
 export function AreaGuard({ area, children }: { area: keyof typeof AREA_PERMISOS | string; children: ReactNode }) {
   const { token } = useAuth();
   const navigate = useNavigate();
-  const payload = validateToken(token);
+  const payload = useMemo(() => validateToken(token), [token]);
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
@@ -146,7 +147,7 @@ export function ClientePublicGuard({ children }: { children: ReactNode }) {
 export function ClienteAuthGuard({ children }: { children: ReactNode }) {
   const { token, logoutCliente } = useClienteAuth();
   const navigate = useNavigate();
-  const payload = validateToken(token);
+  const payload = useMemo(() => validateToken(token), [token]);
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {

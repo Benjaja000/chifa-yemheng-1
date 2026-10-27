@@ -28,12 +28,17 @@ export interface TicketLinea {
   notaCocina: string | null;
   estadoPreparacion: EstadoPreparacion;
   fechaSolicitud: string | null;
+  fechaEntregaMozo: string | null;
 }
+
+export type CanalOrigenPedido = 'QR' | 'WEB' | 'PRESENCIAL';
 
 export interface Ticket {
   id: number;
   numero: string;
   mesaId: number | null;
+  mesaNumero: string | null;
+  canalOrigen: CanalOrigenPedido;
   estado: string;
   fecha: string | null;
   comensales: number;
@@ -48,12 +53,16 @@ export interface CajaInfo {
   nombre: string;
   aperturada: 'S' | 'N';
   montoBase: number;
+  turnoId: number | null;
+  montoSistema: number | null;
+  cierrePendiente: boolean;
 }
 
 export interface MetodoPagoInfo {
   id: number;
   nombre: string;
   afectaEfectivo: boolean;
+  requiereReferencia: boolean;
 }
 
 export interface CajaMaestros {
@@ -67,6 +76,18 @@ export interface CobroResult {
   numero: string;
   total: number;
   vuelto: number;
+}
+
+export interface CierrePendiente {
+  id: number;
+  cajaId: number;
+  cajaNombre: string;
+  cajero: string;
+  fechaSolicitud: string;
+  montoSistema: number;
+  montoDeclarado: number;
+  diferencia: number;
+  observacion: string | null;
 }
 
 /* ------------------------------- Cocina ------------------------------- */
@@ -126,6 +147,18 @@ export function pedirCuenta(pedidoId: number): Promise<{ ok: true; pedidoId: num
   }).then(lanzar<{ ok: true; pedidoId: number; estado: string }>);
 }
 
+export function listarEntregasMozo(): Promise<Ticket[]> {
+  return fetch(`${BASE}/pedidos/mozo/entregas`, { headers: headers() }).then(lanzar<Ticket[]>);
+}
+
+export function confirmarEntregaMozo(pedidoId: number, detalleId: number): Promise<{ ok: true }> {
+  return fetch(`${BASE}/pedidos/${pedidoId}/detalles/${detalleId}/entrega`, {
+    method: 'PATCH',
+    headers: headers(),
+    body: JSON.stringify({}),
+  }).then(lanzar<{ ok: true }>);
+}
+
 /* -------------------------------- Caja -------------------------------- */
 
 export function listarCajaMaestros(): Promise<CajaMaestros> {
@@ -159,3 +192,27 @@ export function registrarCobro(input: {
     body: JSON.stringify(input),
   }).then(lanzar<CobroResult>);
 }
+
+  export function listarCierresPendientes(): Promise<CierrePendiente[]> {
+    return fetch(`${BASE}/caja/cierres/pendientes`, { headers: headers() }).then(lanzar<CierrePendiente[]>);
+  }
+
+  export function solicitarCierreCaja(input: {
+    cajaId: number;
+    montoDeclarado: number;
+    observacion: string;
+  }): Promise<{ aperturaId: number; sistema: number; declarado: number; diferencia: number; resultado: string }> {
+    return fetch(`${BASE}/caja/turno/cierre`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(input),
+    }).then(lanzar<{ aperturaId: number; sistema: number; declarado: number; diferencia: number; resultado: string }>);
+  }
+
+  export function confirmarCierreCaja(aperturaId: number): Promise<{ sistema: number; declarado: number; diferencia: number; resultado: string }> {
+    return fetch(`${BASE}/caja/turno/cierre/confirmar`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ aperturaId }),
+    }).then(lanzar<{ sistema: number; declarado: number; diferencia: number; resultado: string }>);
+  }

@@ -17,13 +17,15 @@ import {
   abrirService,
   pedirCuentaStaffService,
   recalcularService,
+  entregasPendientesMozoService,
+  confirmarEntregaMozoService,
 } from '../services/pedidos-service.js';
 import type { AuthenticatedRequest } from '../middlewares/auth-guard.js';
 import { getPc } from '../utils/auditoria.js';
 
-function sesion(req: Request): { id: number; logeo: string; pc: string } {
+function sesion(req: Request): { id: number; logeo: string; pc: string; roles: string[] } {
   const user = (req as AuthenticatedRequest).user;
-  return { id: user.sub, logeo: user.logeo, pc: getPc(req) };
+  return { id: user.sub, logeo: user.logeo, pc: getPc(req), roles: user.roles };
 }
 
 function errorPedido(res: Response, err: unknown): void {
@@ -35,7 +37,9 @@ function errorPedido(res: Response, err: unknown): void {
             err.code === 'PEDIDO_ANULADO' ||
             err.code === 'MESA_OCUPADA' ||
             err.code === 'YA_POR_COBRAR' ||
-            err.code === 'MESA_POR_COBRAR'
+            err.code === 'MESA_POR_COBRAR' ||
+            err.code === 'MOZO_PEDIDO_DIGITAL' ||
+            err.code === 'ENTREGA_NO_DISPONIBLE'
           ? 409
           : err.code === 'PRODUCTO_NO_DISPONIBLE' || err.code === 'TIPO_INVALIDO'
             ? 422
@@ -91,8 +95,26 @@ export async function postDetalle(req: Request, res: Response): Promise<void> {
   }
   try {
     const s = sesion(req);
-    const pedido = await agregarDetalleService(Number(req.params['id']), parsed.data, s.id, s.logeo, s.pc);
+    const pedido = await agregarDetalleService(Number(req.params['id']), parsed.data, s.id, s.logeo, s.pc, s.roles);
     res.json(pedido);
+  } catch (err) {
+    errorPedido(res, err);
+  }
+}
+
+export async function getEntregasMozo(_req: Request, res: Response): Promise<void> {
+  res.json(await entregasPendientesMozoService());
+}
+
+export async function patchEntregarDetalle(req: Request, res: Response): Promise<void> {
+  try {
+    const s = sesion(req);
+    await confirmarEntregaMozoService(
+      Number(req.params['id']),
+      Number(req.params['idDetalle']),
+      s.id,
+    );
+    res.json({ ok: true });
   } catch (err) {
     errorPedido(res, err);
   }
@@ -121,7 +143,7 @@ export async function patchAnular(req: Request, res: Response): Promise<void> {
   }
   try {
     const s = sesion(req);
-    await anularService(Number(req.params['id']), s.id, parsed.data.motivo, s.pc);
+    await anularService(Number(req.params['id']), s.id, parsed.data.motivo, s.pc, s.roles);
     res.json({ ok: true });
   } catch (err) {
     errorPedido(res, err);
@@ -130,7 +152,7 @@ export async function patchAnular(req: Request, res: Response): Promise<void> {
 
 export async function postRecalcular(req: Request, res: Response): Promise<void> {
   try {
-    const pedido = await recalcularService(Number(req.params['id']));
+    const pedido = await recalcularService(Number(req.params['id']), sesion(req).roles);
     res.json(pedido);
   } catch (err) {
     errorPedido(res, err);
@@ -140,7 +162,7 @@ export async function postRecalcular(req: Request, res: Response): Promise<void>
 export async function patchPedirCuenta(req: Request, res: Response): Promise<void> {
   try {
     const s = sesion(req);
-    const result = await pedirCuentaStaffService(Number(req.params['id']), s.id, s.logeo, s.pc);
+    const result = await pedirCuentaStaffService(Number(req.params['id']), s.id, s.logeo, s.pc, s.roles);
     res.json(result);
   } catch (err) {
     errorPedido(res, err);

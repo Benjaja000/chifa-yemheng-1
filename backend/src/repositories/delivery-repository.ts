@@ -2,6 +2,7 @@ import { supabase } from '../config/supabase.js';
 import type { Delivery, DeliveryLista } from '../models/delivery.js';
 import type { DeliveryCreate, DeliveryQuery, ParametrosNegocioUpdate, TarifaUpsert } from '../schemas/delivery.js';
 import { createAudit, updateAudit } from '../utils/auditoria.js';
+import { calcularSugerenciaCosto } from '../utils/delivery-costo.js';
 
 interface DeliveryRow {
   id_pedidodelivery: number;
@@ -149,7 +150,7 @@ export interface SugerirCostoResult {
 export async function sugerirCosto(lat: number | null, lng: number | null, distritoId: number): Promise<SugerirCostoResult> {
   const { data: distrito, error } = await supabase
     .from('distrito')
-    .select('id_distrito, costo_base, radio_km, recargo_km')
+    .select('id_distrito, costo_base, radio_km, recargo_km, lat_ref, lng_ref')
     .eq('id_distrito', distritoId)
     .single();
 
@@ -171,45 +172,50 @@ export async function sugerirCosto(lat: number | null, lng: number | null, distr
 
   const local = cfg as unknown as ConfiguracionNegocioRow | null;
 
-  // Sin GPS del cliente (BR-GPS-001) o sin punto del local: sugerir solo costo_base.
-  if (lat === null || lng === null || !local || local.lat_local === null || local.lng_local === null) {
-    return {
-      distanciaKm: null,
-      fueraRadio: false,
-      dentroCobertura: true,
-      costoSugerido: costoBase,
-    };
+  // Sin GPS del cliente (BR-GPS-001), no se estima distancia ni se bloquea el pedido.
+  if (lat === null || lng === null) {
+    return calcularSugerenciaCosto({
+      costoBase,
+      radioKm,
+      recargoKm,
+      distanciaTarifaKm: null,
+      distanciaCoberturaKm: null,
+      radioCoberturaKm: local?.radio_cobertura_km ?? null,
+    });
   }
 
-  const { data: distancia, error: distError } = await supabase.rpc('haversine_km', {
-    lat1: local.lat_local,
-    lng1: local.lng_local,
-    lat2: lat,
-    lng2: lng,
-  });
+  const calcularDistancia = async (
+    latOrigen: number | null | undefined,
+    lngOrigen: number | null | undefined,
+    tipo: 'tarifa' | 'cobertura',
+  ): Promise<number | null> => {
+    if (latOrigen == null || lngOrigen == null) return null;
 
-  if (distError) throw new Error(`HAVERSINE_FAIL: ${distError.message}`);
-
-  const distanciaKm = Number(distancia ?? 0);
-
-  let costoSugerido = costoBase;
-  let fueraRadio = false;
-
-  if (distanciaKm > radioKm) {
-    fueraRadio = true;
-    costoSugerido += (distanciaKm - radioKm) * recargoKm;
-  }
-
-  // Limite duro de cobertura (BR-GPS-003): dato de negocio, nunca constante. NULL/0 = sin limite.
-  const radioCobertura = Number(local.radio_cobertura_km ?? 0);
-  const dentroCobertura = radioCobertura <= 0 ? true : distanciaKm <= radioCobertura;
-
-  return {
-    distanciaKm: Number(distanciaKm.toFixed(2)),
-    fueraRadio,
-    dentroCobertura,
-    costoSugerido: Number(costoSugerido.toFixed(2)),
+    const { data, error: distanciaError } = await supabase.rpc('haversine_km', {
+      lat1: latOrigen,
+      lng1: lngOrigen,
+      lat2: lat,
+      lng2: lng,
+    });
+    if (distanciaError) throw new Error(`HAVERSINE_${tipo.toUpperCase()}_FAIL: ${distanciaError.message}`);
+    return Number(data ?? 0);
   };
+
+  const [distanciaTarifaKm, distanciaCoberturaKm] = await Promise.all([
+    calcularDistancia(d.lat_ref, d.lng_ref, 'tarifa'),
+    calcularDistancia(local?.lat_local, local?.lng_local, 'cobertura'),
+  ]);
+
+  // La tarifa usa el centro de referencia del distrito (BR-GPS-002); el límite
+  // duro de entrega se mide desde el local según la configuración del negocio.
+  return calcularSugerenciaCosto({
+    costoBase,
+    radioKm,
+    recargoKm,
+    distanciaTarifaKm,
+    distanciaCoberturaKm,
+    radioCoberturaKm: local?.radio_cobertura_km ?? null,
+  });
 }
 
 export interface ParametrosNegocioResult {

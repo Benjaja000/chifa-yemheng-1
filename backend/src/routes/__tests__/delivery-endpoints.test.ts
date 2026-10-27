@@ -100,12 +100,15 @@ describe('Delivery · sugerir costo', () => {
   it('con GPS ⇒ respeta el schema y nunca sugiere menos que costo_base (BR-GPS-002)', async () => {
     const base = await costoBaseDe(DISTRITO)
     const { data } = await supabase
-      .from('configuracion_negocio')
-      .select('lat_local, lng_local')
-      .eq('id', 1)
-      .maybeSingle()
-    const cfg = data as { lat_local: number | null; lng_local: number | null } | null
-    const tieneLocal = cfg?.lat_local !== null && cfg?.lat_local !== undefined && cfg?.lng_local !== null
+      .from('distrito')
+      .select('lat_ref, lng_ref')
+      .eq('id_distrito', DISTRITO)
+      .single()
+    const referencia = data as { lat_ref: number | null; lng_ref: number | null } | null
+    const tieneReferenciaDistrito = referencia?.lat_ref !== null
+      && referencia?.lat_ref !== undefined
+      && referencia?.lng_ref !== null
+      && referencia?.lng_ref !== undefined
 
     const res = await request(app)
       .get(`/api/v1/delivery/sugerir-costo?distrito=${DISTRITO}&lat=-12.0464&lng=-77.0428`)
@@ -113,16 +116,16 @@ describe('Delivery · sugerir costo', () => {
 
     expect(res.status).toBe(200)
     expect(typeof res.body.fueraRadio).toBe('boolean')
+    expect(typeof res.body.dentroCobertura).toBe('boolean')
     expect(typeof res.body.costoSugerido).toBe('number')
     expect(res.body.costoSugerido).toBeGreaterThanOrEqual(base)
 
-    if (tieneLocal) {
-      // Con punto del local cargado ⇒ debe calcular distancia real (origen = local).
+    if (tieneReferenciaDistrito) {
+      // La distancia publicada corresponde a la referencia usada para la tarifa distrital.
       expect(typeof res.body.distanciaKm).toBe('number')
       expect(res.body.distanciaKm).toBeGreaterThanOrEqual(0)
     } else {
-      // Sin punto del local el GPS no bloquea: cae a costo_base (BR-GPS-001).
-      // Este es el camino vigente hasta que se configure el punto del local.
+      // Sin referencia distrital, se conserva costo_base; cobertura se evalúa aparte con el local.
       expect(res.body.distanciaKm).toBeNull()
       expect(res.body.fueraRadio).toBe(false)
       expect(res.body.costoSugerido).toBe(base)

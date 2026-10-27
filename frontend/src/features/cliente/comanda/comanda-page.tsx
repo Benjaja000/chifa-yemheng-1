@@ -200,14 +200,15 @@ export function ClienteComandaPage() {
         </div>
       ) : (
         <div className="y-comanda-layout">
-          <header className="y-comanda-header">
-            <div>
-              <h1 className="font-d" style={{ fontSize: 22, margin: '0 0 2px' }}>Mi Comanda — Mesa {mesaId}</h1>
-              <p style={{ margin: 0, color: 'var(--muted)', fontSize: 12 }}>
-                {items.length} {items.length === 1 ? 'plato' : 'platos'} · {totalQty} unidades
+          <section className="y-flow-hero y-comanda-page-hero" aria-labelledby="comanda-hero-title">
+            <div className="y-flow-hero__content">
+              <span className="y-flow-hero__eyebrow">Pedido en mesa {mesaId}</span>
+              <h1 id="comanda-hero-title" className="y-flow-hero__title">Arma tu comanda a tu ritmo.</h1>
+              <p className="y-flow-hero__description">
+                {items.length} {items.length === 1 ? 'plato' : 'platos'} · {totalQty} unidades. Revisa tu selección antes de enviarla a cocina.
               </p>
             </div>
-          </header>
+          </section>
 
           <div className="y-comanda-body">
             <section className="y-comanda-items" aria-label="Platos en la comanda">

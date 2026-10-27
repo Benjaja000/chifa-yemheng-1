@@ -9,11 +9,10 @@ import type { Producto } from '../../admin/productos/productos-types';
 import {
   abrirPedidoMesa,
   agregarLinea,
-  listarCajaMaestros,
+  confirmarEntregaMozo,
+  listarEntregasMozo,
   listarPedidoPorMesa,
   pedirCuenta,
-  registrarCobro,
-  type CajaMaestros,
   type Ticket,
 } from '../staff-service';
 import { EstadoBadge } from '../../../shared/ui/EstadoBadge';
@@ -31,7 +30,9 @@ export function StaffMozoPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [cargandoComanda, setCargandoComanda] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
-  const [maestrosCobro, setMaestrosCobro] = useState<CajaMaestros | null>(null);
+  const [entregas, setEntregas] = useState<Ticket[] | null>(null);
+  const [entregaError, setEntregaError] = useState<string | null>(null);
+  const [entregasAbiertas, setEntregasAbiertas] = useState(false);
 
   const cargarMesas = useCallback(async () => {
     try {
@@ -46,6 +47,21 @@ export function StaffMozoPage() {
   useEffect(() => {
     void cargarMesas();
   }, [cargarMesas]);
+
+  const cargarEntregas = useCallback(async () => {
+    try {
+      setEntregas(await listarEntregasMozo());
+      setEntregaError(null);
+    } catch (e) {
+      setEntregaError(e instanceof Error ? e.message : 'No se pudieron cargar los platos listos');
+    }
+  }, []);
+
+  useEffect(() => {
+    void cargarEntregas();
+    const timer = window.setInterval(() => void cargarEntregas(), 15000);
+    return () => window.clearInterval(timer);
+  }, [cargarEntregas]);
 
   const abrirComanda = useCallback(async (mesa: Mesa) => {
     setAbierta(mesa);
@@ -64,6 +80,10 @@ export function StaffMozoPage() {
 
   const activos = useMemo(() => (mesas ?? []).filter((m) => m.estadoOperativo !== 'LIBRE'), [mesas]);
   const porCobrar = useMemo(() => (mesas ?? []).filter((m) => m.estadoOperativo === 'POR COBRAR'), [mesas]);
+  const cantidadListos = useMemo(
+    () => (entregas ?? []).reduce((total, pedido) => total + (pedido.detalles?.length ?? 0), 0),
+    [entregas],
+  );
   const visibles = useMemo(() => {
     const q = buscar.trim().toUpperCase();
     if (!q) return mesas ?? [];
@@ -73,22 +93,43 @@ export function StaffMozoPage() {
   return (
     <div className="y-shell" style={{ padding: '24px 16px 140px', maxWidth: 1240, margin: '0 auto' }}>
       <PageHeader
-        title="Panel Mozo"
-        sub="Mesas, comandas y pedidos en curso."
+        title="Atención del salón"
+        sub="Prioriza los platos listos y mantén a la vista el estado de cada mesa."
         right={(
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span className="ys-status" style={{ color: '#22c55e', background: '#22c55e22' }}>
-              <i /> {(mesas?.length ?? 0) - activos.length} libres
-            </span>
-            <span className="ys-status" style={{ color: '#ef4444', background: '#ef444422' }}>
-              <i /> {activos.length - porCobrar.length} ocupadas
-            </span>
-            <span className="ys-status" style={{ color: '#17a2b8', background: '#17a2b822' }}>
-              <i /> {porCobrar.length} por cobrar
-            </span>
+          <div style={{ display: 'grid', gap: 10, justifyItems: 'end' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'end' }}>
+              <span className="ys-status" style={{ color: '#22c55e', background: '#22c55e22' }}>
+                <i /> {(mesas?.length ?? 0) - activos.length} libres
+              </span>
+              <span className="ys-status" style={{ color: '#ef4444', background: '#ef444422' }}>
+                <i /> {activos.length - porCobrar.length} ocupadas
+              </span>
+              <span className="ys-status" style={{ color: '#17a2b8', background: '#17a2b822' }}>
+                <i /> {porCobrar.length} por cobrar
+              </span>
+            </div>
+            <button
+              className="btn btn-gold"
+              onClick={() => {
+                setEntregasAbiertas(true);
+                void cargarEntregas();
+              }}
+            >
+              Platos listos · {cantidadListos}
+            </button>
           </div>
         )}
       />
+      <section className="y-flow-hero y-cliente-flow-hero" style={{ marginBottom: 16 }}>
+        <div className="y-flow-hero__content">
+          <span className="y-flow-hero__eyebrow">Bandeja de atención</span>
+          <h2 className="y-flow-hero__title">Primero lo que ya salió de cocina.</h2>
+          <p className="y-flow-hero__description">
+            Revisa los platos listos para entregar y abre una mesa para continuar la atención.
+            Los pedidos QR/web se consultan aquí, pero los gestiona el cliente.
+          </p>
+        </div>
+      </section>
       <div className="y-search" style={{ marginBottom: 14 }}>
         <Ico n="search" size={18} />
         <input
@@ -152,17 +193,19 @@ export function StaffMozoPage() {
             await cargarMesas();
           }}
           onMensaje={setMensaje}
-          maestrosCobro={maestrosCobro}
-          onCargarMaestros={async () => {
-            if (!maestrosCobro) {
-              setMaestrosCobro(await listarCajaMaestros());
-            }
-          }}
-          onCobrar={async (payload) => {
-            const r = await registrarCobro(payload);
-            setMensaje(`Comprobante ${r.serie}-${r.numero} emitido`);
+        />
+      )}
+      {entregasAbiertas && (
+        <EntregasListasModal
+          pedidos={entregas}
+          error={entregaError}
+          onCerrar={() => setEntregasAbiertas(false)}
+          onRefrescar={cargarEntregas}
+          onConfirmar={async (pedidoId, detalleId) => {
+            await confirmarEntregaMozo(pedidoId, detalleId);
+            await cargarEntregas();
             await cargarMesas();
-            await abrirComanda(abierta);
+            if (abierta) await abrirComanda(abierta);
           }}
         />
       )}
@@ -181,9 +224,6 @@ function MozoDetalles({
   onAbrirComanda,
   onPedirCuenta,
   onMensaje,
-  maestrosCobro,
-  onCargarMaestros,
-  onCobrar,
 }: {
   mesa: Mesa;
   tickets: Ticket[];
@@ -195,22 +235,12 @@ function MozoDetalles({
   onAbrirComanda: (comensales: number) => Promise<void>;
   onPedirCuenta: (pedidoId: number) => Promise<void>;
   onMensaje: (m: string) => void;
-  maestrosCobro: CajaMaestros | null;
-  onCargarMaestros: () => Promise<void>;
-  onCobrar: (payload: {
-    pedidoId: number;
-    cajaId: number;
-    metodoPagoId: number;
-    tipoDocumento: string;
-    clienteId: number | null;
-    montoRecibido: number | null;
-    referencia: string;
-  }) => Promise<void>;
 }) {
   const activos = tickets.filter((t) => t.anulado === 'N' && t.facturado === 'N');
   const activo = activos[0];
   const [pickerAbierto, setPickerAbierto] = useState(false);
-  const [cobroAbierto, setCobroAbierto] = useState(false);
+  const pedidoDigital = activo?.canalOrigen === 'QR' || activo?.canalOrigen === 'WEB';
+  const puedeAgregar = Boolean(activo && !pedidoDigital && mesa.estadoOperativo !== 'POR COBRAR');
 
   useRealtimePedido(activo?.id ?? null, () => void onRefrescar());
 
@@ -254,6 +284,9 @@ function MozoDetalles({
           <>
             <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <span className="ys-status" style={{ color: '#f6be39', background: '#f6be3922' }}>{activo.numero}</span>
+              <span className="ys-status" style={{ color: pedidoDigital ? '#8b5cf6' : '#64748b', background: pedidoDigital ? '#8b5cf622' : '#64748b22' }}>
+                <i /> {pedidoDigital ? `Pedido ${activo.canalOrigen}` : 'Atención presencial'}
+              </span>
               <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{timeAgo(activo.fecha)}</span>
               <span style={{ marginLeft: 'auto', fontWeight: 700 }}>{fmtPEN(activo.total)}</span>
             </div>
@@ -263,42 +296,41 @@ function MozoDetalles({
                   <div style={{ flex: 1 }}>
                     <b>{d.cantidad}x {d.producto}</b>
                     {d.notaCocina && <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12 }}>{d.notaCocina}</p>}
+                    {d.fechaEntregaMozo && <p style={{ margin: 0, color: '#22c55e', fontSize: 11 }}>Entregado a la mesa</p>}
                   </div>
                   <EstadoBadge estado={d.estadoPreparacion} size="md" />
                 </div>
               ))}
             </div>
+            {pedidoDigital && (
+              <p style={{ margin: '12px 0 0', color: 'var(--text-muted)', fontSize: 12 }}>
+                El cliente administra su pedido digital. Desde aquí solo se consulta el avance y se registra la entrega.
+              </p>
+            )}
             <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn btn-gold" onClick={() => setPickerAbierto(true)}>Agregar producto</button>
-              <button
-                className="btn btn-ghost"
-                onClick={() => void onPedirCuenta(activo.id).catch((e) => onMensaje(e instanceof Error ? e.message : 'No se pudo pedir cuenta'))}
-              >
-                Pedir cuenta
-              </button>
-              {mesa.estadoOperativo === 'POR COBRAR' && (
+              {puedeAgregar && (
                 <button
                   className="btn btn-gold"
-                  onClick={() => {
-                    setCobroAbierto(true);
-                    void onCargarMaestros();
-                  }}
+                  onClick={() => setPickerAbierto(true)}
                 >
-                  Cobrar {fmtPEN(activo.total)}
+                  Agregar producto
                 </button>
+              )}
+              {!pedidoDigital && mesa.estadoOperativo !== 'POR COBRAR' && (
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => void onPedirCuenta(activo.id).catch((e) => onMensaje(e instanceof Error ? e.message : 'No se pudo pedir cuenta'))}
+                >
+                  Pedir cuenta · {fmtPEN(activo.total)}
+                </button>
+              )}
+              {mesa.estadoOperativo === 'POR COBRAR' && (
+                <span className="ys-status" style={{ color: '#17a2b8', background: '#17a2b822' }}>
+                  Cuenta solicitada · cobro en Caja
+                </span>
               )}
               <button className="btn btn-ghost" onClick={onRefrescar}>Refrescar</button>
             </div>
-
-            {cobroAbierto && maestrosCobro && (
-              <CobroRapido
-                ticket={activo}
-                maestros={maestrosCobro}
-                onCerrar={() => setCobroAbierto(false)}
-                onCobrar={onCobrar}
-                onError={onMensaje}
-              />
-            )}
           </>
         )}
 
@@ -405,97 +437,103 @@ function ProductosPicker({
   );
 }
 
-/** Cobro rápido del mozo (opcional): emite comprobante sin salir del salón. */
-function CobroRapido({
-  ticket,
-  maestros,
+function EntregasListasModal({
+  pedidos,
+  error,
   onCerrar,
-  onCobrar,
-  onError,
+  onRefrescar,
+  onConfirmar,
 }: {
-  ticket: Ticket;
-  maestros: CajaMaestros;
+  pedidos: Ticket[] | null;
+  error: string | null;
   onCerrar: () => void;
-  onCobrar: (payload: {
-    pedidoId: number;
-    cajaId: number;
-    metodoPagoId: number;
-    tipoDocumento: string;
-    clienteId: number | null;
-    montoRecibido: number | null;
-    referencia: string;
-  }) => Promise<void>;
-  onError: (m: string) => void;
+  onRefrescar: () => Promise<void>;
+  onConfirmar: (pedidoId: number, detalleId: number) => Promise<void>;
 }) {
-  const cajaAbierta = maestros.cajas.find((c) => c.aperturada === 'S') ?? maestros.cajas[0];
-  const [cajaId, setCaja] = useState<number>(cajaAbierta?.id ?? 0);
-  const [metodoId, setMetodo] = useState<number>(maestros.metodosPago[0]?.id ?? 0);
-  const [tipoDocumento, setTipoDocumento] = useState('03');
-  const [recibido, setRecibido] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const metodo = maestros.metodosPago.find((m) => m.id === metodoId);
-  const esEfectivo = metodo?.afectaEfectivo ?? false;
-  const cajaSel = maestros.cajas.find((c) => c.id === cajaId);
-  const cajaCerrada = (cajaSel?.aperturada ?? 'N') === 'N';
+  const [procesando, setProcesando] = useState<number | null>(null);
+  const [errorAccion, setErrorAccion] = useState<string | null>(null);
+  const cantidad = (pedidos ?? []).reduce((total, pedido) => total + (pedido.detalles?.length ?? 0), 0);
 
   return (
-    <div style={{ marginTop: 14, borderTop: '1px solid var(--line2)', paddingTop: 14, display: 'grid', gap: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <h4 style={{ margin: 0, flex: 1 }}>Cobrar {fmtPEN(ticket.total)}</h4>
-        <button className="btn btn-ghost" onClick={onCerrar}>Cerrar</button>
-      </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <select className="select" value={cajaId} onChange={(e) => setCaja(Number(e.target.value))} style={{ maxWidth: 200 }}>
-          {maestros.cajas.map((c) => (
-            <option key={c.id} value={c.id}>{c.nombre} · {c.aperturada === 'S' ? 'ABIERTA' : 'CERRADA'}</option>
-          ))}
-        </select>
-        <select className="select" value={metodoId} onChange={(e) => setMetodo(Number(e.target.value))} style={{ maxWidth: 200 }}>
-          {maestros.metodosPago.map((m) => (
-            <option key={m.id} value={m.id}>{m.nombre}</option>
-          ))}
-        </select>
-        <select className="select" value={tipoDocumento} onChange={(e) => setTipoDocumento(e.target.value)} style={{ maxWidth: 200 }}>
-          <option value="03">Boleta</option>
-          <option value="01">Factura (empresa)</option>
-        </select>
-      </div>
-      {esEfectivo && (
-        <input
-          className="input"
-          inputMode="decimal"
-          placeholder={`Recibido (total ${ticket.total.toFixed(2)})`}
-          value={recibido}
-          onChange={(e) => setRecibido(e.target.value)}
-        />
-      )}
-      {cajaCerrada && (
-        <p style={{ margin: 0, color: '#fcd34d', fontSize: 12 }}>
-          La caja seleccionada está cerrada: pide a caja aperturar el turno.
-        </p>
-      )}
-      <button
-        className="btn btn-gold"
-        disabled={busy || cajaCerrada || !cajaId || !metodoId}
-        onClick={() => {
-          setBusy(true);
-          void onCobrar({
-            pedidoId: ticket.id,
-            cajaId,
-            metodoPagoId: metodoId,
-            tipoDocumento,
-            clienteId: null,
-            montoRecibido: esEfectivo && recibido !== '' ? Number(recibido) : null,
-            referencia: '',
-          })
-            .then(onCerrar)
-            .catch((e) => onError(e instanceof Error ? e.message : 'No se pudo cobrar'))
-            .finally(() => setBusy(false));
-        }}
+    <div
+      className="ys-veil"
+      style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', padding: 16, background: 'rgba(0,0,0,.58)' }}
+      onClick={onCerrar}
+    >
+      <section
+        className="card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mozo-entregas-title"
+        style={{ width: 'min(760px, 96vw)', maxHeight: '88vh', overflow: 'auto', padding: 22 }}
+        onClick={(event) => event.stopPropagation()}
       >
-        Emitir comprobante
-      </button>
+        <header style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <div style={{ flex: 1 }}>
+            <span className="y-flow-hero__eyebrow">Despacho de cocina</span>
+            <h2 id="mozo-entregas-title" style={{ margin: '4px 0', fontSize: 22 }}>Listos para entregar</h2>
+            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13 }}>
+              {cantidad} {cantidad === 1 ? 'plato espera' : 'platos esperan'} en sus mesas.
+            </p>
+          </div>
+          <button className="btn btn-ghost" onClick={() => void onRefrescar()} aria-label="Actualizar platos listos">
+            Actualizar
+          </button>
+          <button className="btn btn-ghost" onClick={onCerrar}>Cerrar</button>
+        </header>
+
+        {error && <ErrorBox msg={error} retry={onRefrescar} />}
+        {errorAccion && <ErrorBox msg={errorAccion} />}
+        {pedidos === null && !error && <Loading text="Buscando platos listos..." />}
+        {pedidos?.length === 0 && !error && (
+          <div className="card" style={{ textAlign: 'center', padding: 32, background: 'var(--surface-2)' }}>
+            <Ico n="ok" size={30} />
+            <h3 style={{ margin: '8px 0 4px' }}>Todo entregado</h3>
+            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Cuando cocina despache nuevos platos aparecerán aquí.</p>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gap: 12 }}>
+          {pedidos?.map((pedido) => (
+            <article key={pedido.id} className="card" style={{ padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <strong>Mesa {pedido.mesaNumero ?? pedido.mesaId ?? '—'}</strong>
+                  <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: 12 }}>
+                    Comanda {pedido.numero} · {pedido.canalOrigen === 'PRESENCIAL' ? 'Atención presencial' : `Pedido ${pedido.canalOrigen}`}
+                  </span>
+                </div>
+                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{timeAgo(pedido.fecha)}</span>
+              </div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {pedido.detalles?.map((detalle) => (
+                  <div key={detalle.id} className="y-line" style={{ gap: 12, padding: '10px 0' }}>
+                    <div style={{ flex: 1 }}>
+                      <strong>{detalle.cantidad} × {detalle.producto}</strong>
+                      {detalle.notaCocina && (
+                        <p style={{ margin: '3px 0 0', color: 'var(--text-muted)', fontSize: 12 }}>{detalle.notaCocina}</p>
+                      )}
+                    </div>
+                    <button
+                      className="btn btn-gold"
+                      disabled={procesando === detalle.id}
+                      onClick={() => {
+                        setProcesando(detalle.id);
+                        setErrorAccion(null);
+                        void onConfirmar(pedido.id, detalle.id)
+                          .catch((e) => setErrorAccion(e instanceof Error ? e.message : 'No se pudo registrar la entrega'))
+                          .finally(() => setProcesando(null));
+                      }}
+                    >
+                      {procesando === detalle.id ? 'Registrando…' : 'Confirmar entrega'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

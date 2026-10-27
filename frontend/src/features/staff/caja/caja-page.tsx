@@ -1,16 +1,39 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ErrorBox, Loading, PageHeader } from '../../../components/ui';
+import { ErrorBox, Loading } from '../../../components/ui';
 import { Ico } from '../../../components/Icon';
 import { fmtPEN } from '../../../lib/format';
+import { leerPermisos } from '../../auth/login/auth-service';
 import {
   aperturarCaja,
+  confirmarCierreCaja,
+  listarCierresPendientes,
   listarCajaMaestros,
   listarCajaPendientes,
   registrarCobro,
+  solicitarCierreCaja,
   type CajaInfo,
+  type CierrePendiente,
   type MetodoPagoInfo,
   type Ticket,
 } from '../staff-service';
+
+function mensajeCaja(codigo: string): string {
+  const mensajes: Record<string, string> = {
+    EFECTIVO_INSUFICIENTE: 'El monto recibido no cubre el total de la cuenta.',
+    REFERENCIA_REQUERIDA: 'Ingresa el número de operación para este método de pago.',
+    PEDIDO_NO_POR_COBRAR: 'La cuenta todavía no fue solicitada por la mesa.',
+    PEDIDO_FACTURADO: 'Este pedido ya fue cobrado.',
+    NO_CAJA_ABIERTA: 'No hay un turno abierto para esta caja.',
+    TURNO_NO_ABIERTO: 'El turno ya no está disponible para cierre.',
+    CIERRE_NO_PENDIENTE: 'Este arqueo ya fue atendido.',
+    SOLO_CAJERO_APERTURA: 'Solo quien aperturó el turno puede solicitar su cierre.',
+    VALIDADOR_DEBE_SER_DISTINTO: 'El cierre debe ser aprobado por otra persona.',
+    RUC_INVALIDO: 'El RUC asociado al cliente no es válido.',
+    FACTURA_REQUIERE_EMPRESA: 'Selecciona un cliente asociado a una empresa con RUC.',
+    MONTO_INVALIDO: 'Ingresa un monto válido.',
+  };
+  return mensajes[codigo] ?? codigo;
+}
 
 export function StaffCajaPage() {
   const [pendientes, setPendientes] = useState<Ticket[] | null>(null);
@@ -21,22 +44,42 @@ export function StaffCajaPage() {
   const [cajaTurno, setCajaTurno] = useState<number>(0);
   const [montoInicial, setMontoInicial] = useState('');
   const [aperturando, setAperturando] = useState(false);
+  const [montoDeclarado, setMontoDeclarado] = useState('');
+  const [observacionCierre, setObservacionCierre] = useState('');
+  const [solicitandoCierre, setSolicitandoCierre] = useState(false);
+  const [validandoCierre, setValidandoCierre] = useState<number | null>(null);
+  const [cierres, setCierres] = useState<CierrePendiente[]>([]);
+  const permisos = leerPermisos();
+  const puedeCerrar = permisos.includes('CAJ_CERRAR');
+  const puedeValidarCierre = permisos.includes('CAJ_VALIDAR_CIERRE');
 
   const cargar = useCallback(async () => {
     try {
-      const [pend, mast] = await Promise.all([listarCajaPendientes(), listarCajaMaestros()]);
-      // Solo pedidos por cobrar, no anulados ni ya facturados.
+      const [pend, mast, solicitudes] = await Promise.all([
+        listarCajaPendientes(),
+        listarCajaMaestros(),
+        puedeValidarCierre ? listarCierresPendientes() : Promise.resolve([]),
+      ]);
       setPendientes(pend.filter((p) => p.anulado === 'N' && p.facturado === 'N'));
       setMaestros(mast);
-      setCajaTurno((prev) => prev || mast.cajas[0]?.id || 0);
+      setCierres(solicitudes);
+      setCajaTurno(
+        (prev) =>
+          prev ||
+          mast.cajas.find((caja) => caja.aperturada === 'S' && !caja.cierrePendiente)?.id ||
+          mast.cajas[0]?.id ||
+          0,
+      );
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo cargar la caja');
     }
-  }, []);
+  }, [puedeValidarCierre]);
 
   useEffect(() => {
     void cargar();
+    const timer = window.setInterval(() => void cargar(), 15000);
+    return () => window.clearInterval(timer);
   }, [cargar]);
 
   const total = useMemo(
@@ -55,23 +98,60 @@ export function StaffCajaPage() {
       setMontoInicial('');
       await cargar();
     } catch (e) {
-      setMensaje(e instanceof Error ? e.message : 'No se pudo aperturar la caja');
+      setMensaje(e instanceof Error ? mensajeCaja(e.message) : 'No se pudo aperturar la caja');
     } finally {
       setAperturando(false);
     }
   }, [cajaSel, montoInicial, cargar]);
 
+  const solicitarCierre = useCallback(async () => {
+    if (!cajaSel?.turnoId || cajaSel.cierrePendiente || montoDeclarado === '') return;
+    setSolicitandoCierre(true);
+    setMensaje(null);
+    try {
+      const result = await solicitarCierreCaja({
+        cajaId: cajaSel.id,
+        montoDeclarado: Number(montoDeclarado),
+        observacion: observacionCierre,
+      });
+      setMensaje(`Cierre enviado a validación. Diferencia: ${fmtPEN(result.diferencia)}.`);
+      setMontoDeclarado('');
+      setObservacionCierre('');
+      await cargar();
+    } catch (e) {
+      setMensaje(e instanceof Error ? mensajeCaja(e.message) : 'No se pudo solicitar el cierre');
+    } finally {
+      setSolicitandoCierre(false);
+    }
+  }, [cajaSel, montoDeclarado, observacionCierre, cargar]);
+
+  const validarCierre = useCallback(async (cierre: CierrePendiente) => {
+    setValidandoCierre(cierre.id);
+    try {
+      const result = await confirmarCierreCaja(cierre.id);
+      setMensaje(`Cierre de ${cierre.cajaNombre} validado: ${result.resultado.toLowerCase()}.`);
+      await cargar();
+    } catch (e) {
+      setMensaje(e instanceof Error ? mensajeCaja(e.message) : 'No se pudo validar el cierre');
+    } finally {
+      setValidandoCierre(null);
+    }
+  }, [cargar]);
+
   return (
     <div className="y-shell" style={{ padding: '24px 16px 140px', maxWidth: 1240, margin: '0 auto' }}>
-      <PageHeader
-        title="Caja"
-        sub="Turno de caja, cobros y movimientos."
-        right={
-          <button className="btn btn-ghost" onClick={() => void cargar()}>
-            Refrescar
-          </button>
-        }
-      />
+      <section className="y-flow-hero" aria-labelledby="caja-hero-title">
+        <div className="y-flow-hero__content">
+          <span className="y-flow-hero__eyebrow">Operación y control de efectivo</span>
+          <h1 id="caja-hero-title" className="y-flow-hero__title">Caja, clara y bajo control.</h1>
+          <p className="y-flow-hero__description">
+            Administra tu turno, cobra las cuentas solicitadas y entrega el arqueo para validación.
+          </p>
+          <div className="y-flow-hero__actions">
+            <button className="y-btn line" onClick={() => void cargar()}>Actualizar información</button>
+          </div>
+        </div>
+      </section>
       {error && <ErrorBox msg={error} retry={cargar} />}
       {pendientes === null && !error && <Loading text="Cargando caja..." />}
       {pendientes && maestros && !error && (
@@ -114,7 +194,9 @@ export function StaffCajaPage() {
                   </option>
                 ))}
               </select>
-              {cajaSel?.aperturada === 'N' ? (
+              {!cajaSel ? (
+                <span className="caja-muted">No hay cajas activas configuradas.</span>
+              ) : cajaSel.aperturada === 'N' ? (
                 <>
                   <input
                     className="input"
@@ -128,13 +210,85 @@ export function StaffCajaPage() {
                     Aperturar turno
                   </button>
                 </>
-              ) : (
-                <span className="ys-status" style={{ color: '#22c55e', background: '#22c55e22' }}>
-                  <i /> Turno abierto
+              ) : cajaSel.cierrePendiente ? (
+                <span className="ys-status" style={{ color: '#fbbf24', background: '#fbbf2422' }}>
+                  <i /> Cierre pendiente de validación
                 </span>
+              ) : (
+                <>
+                  <span className="ys-status" style={{ color: '#22c55e', background: '#22c55e22' }}>
+                    <i /> Turno abierto · sistema {fmtPEN(cajaSel?.montoSistema ?? 0)}
+                  </span>
+                  {puedeCerrar && cajaSel?.turnoId && (
+                    <div className="caja-cierre-form">
+                      <label>
+                        Efectivo contado
+                        <input
+                          className="input"
+                          inputMode="decimal"
+                          min="0"
+                          placeholder="0.00"
+                          value={montoDeclarado}
+                          onChange={(e) => setMontoDeclarado(e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Observación (opcional)
+                        <input
+                          className="input"
+                          maxLength={200}
+                          placeholder="Diferencia, incidencia o comentario"
+                          value={observacionCierre}
+                          onChange={(e) => setObservacionCierre(e.target.value)}
+                        />
+                      </label>
+                      <button
+                        className="btn btn-ghost"
+                        disabled={solicitandoCierre || montoDeclarado === '' || !Number.isFinite(Number(montoDeclarado)) || Number(montoDeclarado) < 0}
+                        onClick={() => void solicitarCierre()}
+                      >
+                        {solicitandoCierre ? 'Enviando…' : 'Solicitar cierre'}
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
+          {puedeValidarCierre && (
+            <section className="caja-validaciones card" aria-labelledby="cierres-pendientes-title">
+              <div className="caja-section-heading">
+                <div>
+                  <span className="y-flow-hero__eyebrow">Supervisión</span>
+                  <h2 id="cierres-pendientes-title">Arqueos por validar</h2>
+                </div>
+                <span className="caja-count">{cierres.length}</span>
+              </div>
+              {cierres.length === 0 ? (
+                <p className="caja-muted">No hay cierres pendientes de aprobación.</p>
+              ) : cierres.map((cierre) => (
+                <article className="caja-cierre-pendiente" key={cierre.id}>
+                  <div>
+                    <b>{cierre.cajaNombre}</b>
+                    <span>{cierre.cajero} · {new Date(cierre.fechaSolicitud).toLocaleString('es-PE')}</span>
+                    {cierre.observacion && <small>{cierre.observacion}</small>}
+                  </div>
+                  <div className="caja-arqueo-cifras">
+                    <span>Sistema <b>{fmtPEN(cierre.montoSistema)}</b></span>
+                    <span>Declarado <b>{fmtPEN(cierre.montoDeclarado)}</b></span>
+                    <span>Diferencia <b>{fmtPEN(cierre.diferencia)}</b></span>
+                  </div>
+                  <button
+                    className="btn btn-gold"
+                    disabled={validandoCierre !== null}
+                    onClick={() => void validarCierre(cierre)}
+                  >
+                    {validandoCierre === cierre.id ? 'Validando…' : 'Validar y cerrar'}
+                  </button>
+                </article>
+              ))}
+            </section>
+          )}
           {pendientes.length === 0 ? (
             <div className="card" style={{ padding: 32, textAlign: 'center' }}>
               <Ico n="ok" size={40} />
@@ -151,7 +305,13 @@ export function StaffCajaPage() {
                       {t.mesaId ? `Mesa ${t.mesaId}` : 'Delivery'} · {t.detalles.length} ítems · S/ {(t.total ?? 0).toFixed(2)}
                     </span>
                     <span style={{ marginLeft: 'auto' }}>
-                      <button className="btn btn-gold" onClick={() => setSeleccion(t)}>Cobrar</button>
+                      <button
+                        className="btn btn-gold"
+                        disabled={!cajaSel || cajaSel.aperturada !== 'S' || cajaSel.cierrePendiente}
+                        onClick={() => setSeleccion(t)}
+                      >
+                        Cobrar
+                      </button>
                     </span>
                   </div>
                 </div>
@@ -164,7 +324,7 @@ export function StaffCajaPage() {
       {seleccion && maestros && (
         <CobroModal
           ticket={seleccion}
-          cajas={maestros.cajas}
+          cajas={maestros.cajas.filter((c) => c.aperturada === 'S' && !c.cierrePendiente)}
           metodos={maestros.metodosPago}
           onClose={() => {
             setSeleccion(null);
@@ -179,7 +339,7 @@ export function StaffCajaPage() {
         />
       )}
       {mensaje && !seleccion && (
-        <p style={{ marginTop: 14, color: 'var(--gold-light)' }}>{mensaje}</p>
+        <p className="caja-feedback" role="status">{mensaje}</p>
       )}
     </div>
   );
@@ -210,7 +370,7 @@ function CobroModal({
   const [metodoId, setMetodo] = useState<number>(metodos[0]?.id ?? 0);
   const [tipoDocumento, setTipoDocumento] = useState('03');
   const [clienteTexto, setClienteTexto] = useState('');
-  const [recibido, setRecibido] = useState<string>('');
+  const [recibido, setRecibido] = useState<string>(ticket.total.toFixed(2));
   const [referencia, setReferencia] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -218,6 +378,9 @@ function CobroModal({
   const metodo = metodos.find((m) => m.id === metodoId);
   const esEfectivo = metodo?.afectaEfectivo ?? false;
   const montoRecibido = esEfectivo && recibido !== '' ? Number(recibido) : null;
+  const efectivoInsuficiente = esEfectivo && (montoRecibido === null || montoRecibido < ticket.total);
+  const requiereReferencia = metodo?.requiereReferencia ?? false;
+  const faltaReferencia = requiereReferencia && referencia.trim() === '';
   const cajaCerrada = (cajas.find((c) => c.id === cajaId)?.aperturada ?? 'N') === 'N';
 
   const enviar = useCallback(async () => {
@@ -227,9 +390,11 @@ function CobroModal({
       if (clienteTexto && !/^\d+$/.test(clienteTexto)) {
         throw new Error('ID_CLIENTE_INVALIDO');
       }
-      if (esEfectivo && recibido !== '' && isNaN(Number(recibido))) {
+      if (esEfectivo && (recibido === '' || !Number.isFinite(Number(recibido)))) {
         throw new Error('MONTO_RECIBIDO_INVALIDO');
       }
+      if (efectivoInsuficiente) throw new Error('EFECTIVO_INSUFICIENTE');
+      if (faltaReferencia) throw new Error('REFERENCIA_REQUERIDA');
       await onCobrar({
         pedidoId: ticket.id,
         cajaId,
@@ -240,11 +405,19 @@ function CobroModal({
         referencia,
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo registrar el cobro');
+      setError(e instanceof Error ? mensajeCaja(e.message) : 'No se pudo registrar el cobro');
     } finally {
       setBusy(false);
     }
-  }, [onCobrar, ticket, cajaId, metodoId, tipoDocumento, clienteTexto, montoRecibido, referencia, esEfectivo, recibido]);
+  }, [onCobrar, ticket, cajaId, metodoId, tipoDocumento, clienteTexto, montoRecibido, referencia, esEfectivo, recibido, efectivoInsuficiente, faltaReferencia]);
+
+  useEffect(() => {
+    const cerrarConEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busy) onClose();
+    };
+    window.addEventListener('keydown', cerrarConEscape);
+    return () => window.removeEventListener('keydown', cerrarConEscape);
+  }, [busy, onClose]);
 
   return (
     <div
@@ -256,10 +429,13 @@ function CobroModal({
         className="card"
         style={{ width: 'min(520px, 94vw)', padding: 22, maxHeight: '88vh', overflow: 'auto' }}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cobro-modal-title"
       >
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <div style={{ flex: 1 }}>
-            <h3 style={{ margin: 0 }}>Cobrar {ticket.numero}</h3>
+            <h3 id="cobro-modal-title" style={{ margin: 0 }}>Cobrar {ticket.numero}</h3>
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12 }}>
               {ticket.mesaId ? `Mesa ${ticket.mesaId}` : 'Delivery'} · {fmtPEN(ticket.total)}
             </p>
@@ -306,24 +482,37 @@ function CobroModal({
 
           {esEfectivo && (
             <>
-              <label style={{ color: 'var(--text-muted)', fontSize: 12 }}>Monto recibido</label>
+              <label htmlFor="cobro-efectivo" style={{ color: 'var(--text-muted)', fontSize: 12 }}>Monto recibido</label>
               <input
+                id="cobro-efectivo"
                 className="input"
                 inputMode="decimal"
                 placeholder={ticket.total.toFixed(2)}
                 value={recibido}
                 onChange={(e) => setRecibido(e.target.value)}
               />
+              <div className="caja-vuelto">
+                <span>Total a pagar <b>{fmtPEN(ticket.total)}</b></span>
+                <span>Vuelto estimado <b>{fmtPEN(Math.max(0, Number(recibido || 0) - ticket.total))}</b></span>
+              </div>
             </>
           )}
 
-          <label style={{ color: 'var(--text-muted)', fontSize: 12 }}>Referencia (opcional)</label>
-          <input
-            className="input"
-            placeholder="N° operación / datos"
-            value={referencia}
-            onChange={(e) => setReferencia(e.target.value)}
-          />
+          {(!esEfectivo || requiereReferencia) && (
+            <>
+              <label htmlFor="cobro-referencia" style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                Número de operación{requiereReferencia ? '' : ' (opcional)'}
+              </label>
+              <input
+                id="cobro-referencia"
+                className="input"
+                maxLength={30}
+                placeholder="N° de operación"
+                value={referencia}
+                onChange={(e) => setReferencia(e.target.value)}
+              />
+            </>
+          )}
         </div>
 
         {error && (
@@ -338,13 +527,13 @@ function CobroModal({
         <button
           className="btn btn-gold"
           style={{ marginTop: 14 }}
-          disabled={busy || cajaCerrada}
+          disabled={busy || cajaCerrada || efectivoInsuficiente || faltaReferencia}
           onClick={() => void enviar()}
         >
-          Emitir comprobante
+          {busy ? 'Procesando cobro…' : 'Confirmar cobro'}
         </button>
         <p style={{ marginTop: 8, color: 'var(--text-muted)', fontSize: 12 }}>
-          Se generará venta, comprobante, pago y movimiento de caja.
+          El cobro se registrará en una sola operación. Revisa el método y el total antes de confirmar.
         </p>
       </div>
     </div>

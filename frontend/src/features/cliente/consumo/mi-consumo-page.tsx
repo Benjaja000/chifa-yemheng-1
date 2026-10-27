@@ -98,6 +98,22 @@ export function ClienteMiConsumoPage() {
   if (!mesaId) {
     return (
       <div className="y-shell" style={{ padding: '24px 16px 140px', maxWidth: 520, margin: '0 auto' }}>
+        <section className="y-flow-hero y-cliente-flow-hero" aria-labelledby="consumo-scan-title">
+          <div className="y-flow-hero__content">
+            <span className="y-flow-hero__eyebrow">Autoconsumo QR</span>
+            <h1 id="consumo-scan-title" className="y-flow-hero__title">Escanea tu mesa y comparte el consumo.</h1>
+            <p className="y-flow-hero__description">
+              Todas las personas de la mesa pueden seguir los pedidos y consultar el total acumulado.
+            </p>
+            <div className="y-flow-hero__actions">
+              {token ? (
+                <button className="y-btn line" onClick={() => setScannerOpen(true)}>Escanear mesa</button>
+              ) : (
+                <Link className="y-btn line" to="/cliente/login">Iniciar sesión para escanear</Link>
+              )}
+            </div>
+          </div>
+        </section>
         <div className="y-panel" style={{ padding: 24, textAlign: 'center' }}>
           <Ico n="alert" size={24} />
           <h2 style={{ margin: '8px 0 4px', fontSize: 18 }}>Mi consumo</h2>
@@ -105,11 +121,6 @@ export function ClienteMiConsumoPage() {
             Escanea el QR de tu mesa para ver tu comanda en vivo.
           </p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
-            {token ? (
-              <button className="y-btn red" onClick={() => setScannerOpen(true)}>Escanear mesa</button>
-            ) : (
-              <Link className="y-btn red" to="/cliente/login">Iniciar sesión para escanear</Link>
-            )}
             <Link className="y-btn line" to="/cliente/inicio">Volver</Link>
           </div>
         </div>
@@ -129,7 +140,15 @@ export function ClienteMiConsumoPage() {
 
   return (
     <div className="y-shell" style={{ padding: '24px 16px 140px', maxWidth: 520, margin: '0 auto' }}>
-      <h1 className="font-d" style={{ fontSize: 28, margin: '0 0 12px' }}>Mi consumo — Mesa {mesaId}</h1>
+      <section className="y-flow-hero y-cliente-flow-hero" aria-labelledby="consumo-hero-title">
+        <div className="y-flow-hero__content">
+          <span className="y-flow-hero__eyebrow">Mesa {mesaId}</span>
+          <h1 id="consumo-hero-title" className="y-flow-hero__title">Tu consumo, siempre a la vista.</h1>
+          <p className="y-flow-hero__description">
+            Consulta la cuenta compartida de tu mesa y solicita el cobro cuando estén listos.
+          </p>
+        </div>
+      </section>
 
       {err && <div className="y-banner" style={{ borderColor: 'rgba(239,68,68,.4)', background: 'rgba(239,68,68,.08)', color: '#fca5a5' }}>{err}</div>}
       {msgCuenta && <div className="y-banner">{msgCuenta}</div>}

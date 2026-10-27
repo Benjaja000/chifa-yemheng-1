@@ -40,9 +40,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const setNota = (id: number, n: string) => setItems((p) => p.map((x) => (x.producto.id_producto === id ? { ...x, nota: n } : x)));
   const clear = () => setItems([]);
   const { subtotal, igv, total, count } = useMemo(() => {
-    const subtotal = items.reduce((s, x) => s + x.cantidad * Number(x.producto.precio), 0);
-    const igv = subtotal * IGV_RATE;
-    const total = subtotal + igv;
+    const total = items.reduce((s, x) => s + x.cantidad * Number(x.producto.precio), 0);
+    const subtotal = total / (1 + IGV_RATE);
+    const igv = total - subtotal;
     const count = items.reduce((s, x) => s + x.cantidad, 0);
     return { subtotal, igv, total, count };
   }, [items]);

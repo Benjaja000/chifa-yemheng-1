@@ -14,8 +14,19 @@ export const cobroCajaSchema = z.object({
   clienteId: z.number().int().positive().nullable().default(null),
   metodoPagoId: z.number().int().positive(),
   montoRecibido: z.number().min(0).nullable().default(null),
-  referencia: z.string().max(100).default(''),
+  referencia: z.string().max(30).default(''),
+});
+
+export const cierreCajaSchema = z.object({
+  cajaId: z.number().int().positive(),
+  montoDeclarado: z.number().min(0, 'MONTO_INVALIDO'),
+  observacion: z.string().max(200).default(''),
+});
+
+export const confirmarCierreCajaSchema = z.object({
+  aperturaId: z.number().int().positive(),
 });
 
 export type TurnoCajaInput = z.infer<typeof turnoCajaSchema>;
 export type CobroCajaInput = z.infer<typeof cobroCajaSchema>;
+export type CierreCajaInput = z.infer<typeof cierreCajaSchema>;

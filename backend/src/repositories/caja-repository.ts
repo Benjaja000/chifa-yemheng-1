@@ -6,19 +6,37 @@ export interface Caja {
   aperturada: 'S' | 'N';
   montoBase: number;
   estadoRegistro: 'A' | 'I';
+  turnoId: number | null;
+  montoSistema: number | null;
+  cierrePendiente: boolean;
 }
 
 export interface MetodoPago {
   id: number;
   nombre: string;
   afectaEfectivo: boolean;
+  requiereReferencia: boolean;
   estadoRegistro: 'A' | 'I';
 }
 
 export interface TurnoCaja {
   id: number;
   cajaId: number;
-  situacion: 'A' | 'C';
+  usuarioId: number;
+  montoSistema: number;
+  situacion: 'A' | 'P' | 'C';
+}
+
+export interface CierrePendiente {
+  id: number;
+  cajaId: number;
+  cajaNombre: string;
+  cajero: string;
+  fechaSolicitud: string;
+  montoSistema: number;
+  montoDeclarado: number;
+  diferencia: number;
+  observacion: string | null;
 }
 
 export interface CajaResponse {
@@ -27,28 +45,48 @@ export interface CajaResponse {
 }
 
 export async function listarCajas(): Promise<Caja[]> {
-  const { data, error } = await supabase
-    .from('caja')
-    .select('id_caja, n_caja, aperturada, monto_base, estado')
-    .eq('estado', 'A')
-    .order('n_caja', { ascending: true })
-    .order('id_caja', { ascending: false });
-  if (error) {
-    throw new Error(`DB_LIST_FAIL: ${error.message}`);
+  const [{ data, error }, { data: turnos, error: turnosError }] = await Promise.all([
+    supabase
+      .from('caja')
+      .select('id_caja, n_caja, aperturada, monto_base, estado')
+      .eq('estado', 'A')
+      .order('n_caja', { ascending: true })
+      .order('id_caja', { ascending: false }),
+    supabase
+      .from('apertura_caja')
+      .select('id_aperturacaja, id_caja, situacion, monto_sistema')
+      .in('situacion', ['A', 'P'])
+      .eq('estado', 'A'),
+  ]);
+  if (error || turnosError) {
+    throw new Error(`DB_LIST_FAIL: ${(error ?? turnosError)?.message ?? 'No se pudieron cargar las cajas'}`);
   }
+  const turnoPorCaja = new Map(
+    ((turnos ?? []) as unknown as Record<string, unknown>[]).map((turno) => [
+      Number(turno['id_caja']),
+      turno,
+    ]),
+  );
   return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
     id: Number(r['id_caja']),
     nombre: String(r['n_caja'] ?? ''),
     aperturada: (r['aperturada'] === 'S' ? 'S' : 'N') as 'S' | 'N',
     montoBase: Number(r['monto_base'] ?? 0),
     estadoRegistro: (r['estado'] === 'I' ? 'I' : 'A') as 'A' | 'I',
+    turnoId: turnoPorCaja.has(Number(r['id_caja']))
+      ? Number(turnoPorCaja.get(Number(r['id_caja']))?.['id_aperturacaja'])
+      : null,
+    montoSistema: turnoPorCaja.has(Number(r['id_caja']))
+      ? Number(turnoPorCaja.get(Number(r['id_caja']))?.['monto_sistema'] ?? 0)
+      : null,
+    cierrePendiente: turnoPorCaja.get(Number(r['id_caja']))?.['situacion'] === 'P',
   }));
 }
 
 export async function listarMetodosPago(): Promise<MetodoPago[]> {
   const { data, error } = await supabase
     .from('metodo_pago')
-    .select('id_metodopago, n_metodopago, afecta_efectivo, estado')
+    .select('id_metodopago, n_metodopago, afecta_efectivo, requiere_referencia, estado')
     .eq('estado', 'A')
     .order('n_metodopago', { ascending: true })
     .order('id_metodopago', { ascending: false });
@@ -59,6 +97,7 @@ export async function listarMetodosPago(): Promise<MetodoPago[]> {
     id: Number(r['id_metodopago']),
     nombre: String(r['n_metodopago'] ?? ''),
     afectaEfectivo: String(r['afecta_efectivo'] ?? 'N') === 'S',
+    requiereReferencia: String(r['requiere_referencia'] ?? 'N') === 'S',
     estadoRegistro: (r['estado'] === 'I' ? 'I' : 'A') as 'A' | 'I',
   }));
 }
@@ -67,7 +106,7 @@ export async function listarMetodosPago(): Promise<MetodoPago[]> {
 export async function turnoActivo(cajaId: number, usuarioId: number): Promise<TurnoCaja | null> {
   const { data, error } = await supabase
     .from('apertura_caja')
-    .select('id_aperturacaja, id_caja, situacion')
+    .select('id_aperturacaja, id_caja, id_usuario, situacion, monto_sistema')
     .eq('id_caja', cajaId)
     .eq('id_usuario', usuarioId)
     .eq('situacion', 'A')
@@ -84,7 +123,9 @@ export async function turnoActivo(cajaId: number, usuarioId: number): Promise<Tu
   return {
     id: Number(row['id_aperturacaja']),
     cajaId: Number(row['id_caja']),
-    situacion: (row['situacion'] === 'C' ? 'C' : 'A') as 'A' | 'C',
+    usuarioId: Number(row['id_usuario']),
+    montoSistema: Number(row['monto_sistema'] ?? 0),
+    situacion: 'A',
   };
 }
 
@@ -92,7 +133,7 @@ export async function turnoActivo(cajaId: number, usuarioId: number): Promise<Tu
 export async function turnoAbiertoDeCaja(cajaId: number): Promise<TurnoCaja | null> {
   const { data, error } = await supabase
     .from('apertura_caja')
-    .select('id_aperturacaja, id_caja, situacion')
+    .select('id_aperturacaja, id_caja, id_usuario, situacion, monto_sistema')
     .eq('id_caja', cajaId)
     .eq('situacion', 'A')
     .order('f_apertura', { ascending: false })
@@ -108,6 +149,8 @@ export async function turnoAbiertoDeCaja(cajaId: number): Promise<TurnoCaja | nu
   return {
     id: Number(row['id_aperturacaja']),
     cajaId: Number(row['id_caja']),
+    usuarioId: Number(row['id_usuario']),
+    montoSistema: Number(row['monto_sistema'] ?? 0),
     situacion: 'A',
   };
 }
@@ -118,39 +161,23 @@ export async function abrirCaja(args: {
   montoInicial: number;
   numeroTurno: string;
 }): Promise<{ id: number; mensaje: string }> {
-  const { data: existente, error: errExist } = await supabase
-    .from('apertura_caja')
-    .select('id_aperturacaja')
-    .eq('id_caja', args.cajaId)
-    .eq('situacion', 'A')
-    .limit(1)
-    .maybeSingle();
-  if (errExist) {
-    throw new Error(`DB_GET_FAIL: ${errExist.message}`);
-  }
-  if (existente) {
-    throw new Error('CAJA_YA_ABIERTA');
-  }
-
-  const { data, error } = await supabase
-    .from('apertura_caja')
-    .insert({
-      id_caja: args.cajaId,
-      id_usuario: args.usuarioId,
-      numero_turno: args.numeroTurno,
-      monto_inicial: args.montoInicial,
-      monto_sistema: args.montoInicial,
-      situacion: 'A',
-      estado: 'A',
-    })
-    .select('id_aperturacaja')
-    .single();
+  const { data, error } = await supabase.rpc('fn_aperturar_caja_atomic', {
+    p_caja: args.cajaId,
+    p_usuario: args.usuarioId,
+    p_monto: args.montoInicial,
+    p_numero: args.numeroTurno,
+  });
   if (error) {
-    throw new Error(`DB_APERTURA_FAIL: ${error.message}`);
+    throw new Error(error.message);
   }
-  await supabase.from('caja').update({ aperturada: 'S' }).eq('id_caja', args.cajaId);
-  const row = data as { id_aperturacaja: number };
-  return { id: Number(row.id_aperturacaja), mensaje: 'Caja aperturada correctamente' };
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
+  if (!row) {
+    throw new Error('APERTURA_SIN_RESULTADO');
+  }
+  return {
+    id: Number(row['id_apertura']),
+    mensaje: String(row['mensaje'] ?? 'Caja aperturada correctamente'),
+  };
 }
 
 function codigoConcepto(metodo: MetodoPago): number {
@@ -529,7 +556,7 @@ export interface TurnoDetalle {
   montoSistema: number;
   totalIngresos: number;
   totalEgresos: number;
-  situacion: 'A' | 'C';
+  situacion: 'A' | 'P' | 'C';
 }
 
 export interface HistorialTurno {
@@ -572,7 +599,6 @@ export async function turnoDeCaja(cajaId: number): Promise<TurnoDetalle | null> 
     .from('apertura_caja')
     .select('id_aperturacaja, id_caja, id_usuario, numero_turno, f_apertura, monto_inicial, monto_sistema, total_ingresos, total_egresos, situacion')
     .eq('id_caja', cajaId)
-    .order('situacion', { ascending: true }) // 'A' primero
     .order('f_apertura', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -595,7 +621,7 @@ export async function turnoDeCaja(cajaId: number): Promise<TurnoDetalle | null> 
     montoSistema: Number(row['monto_sistema'] ?? 0),
     totalIngresos: Number(row['total_ingresos'] ?? 0),
     totalEgresos: Number(row['total_egresos'] ?? 0),
-    situacion: (row['situacion'] === 'C' ? 'C' : 'A') as 'A' | 'C',
+    situacion: (row['situacion'] === 'P' ? 'P' : row['situacion'] === 'C' ? 'C' : 'A') as 'A' | 'P' | 'C',
   };
 }
 
@@ -716,63 +742,137 @@ export async function historialCaja(limite = 20): Promise<HistorialTurno[]> {
   });
 }
 
-/**
- * Cierra el turno con arqueo (BR-DER-032, BR-INF-049, BR-ACC-046).
- * El USP deja: ID_UsuarioCierre, F_Cierre, Monto_Declarado, Diferencia, Situacion='C' y auditoría.
- */
-export async function cerrarCaja(args: {
+export async function cobrarAtomic(args: {
+  pedidoId: number;
+  usuarioId: number;
   aperturaId: number;
-  usuarioCierreId: number;
+  tipoDocumento: string;
+  clienteId: number | null;
+  metodoPagoId: number;
+  montoRecibido: number | null;
+  referencia: string;
+}): Promise<{ idVenta: number; serie: string; numero: string; total: number; vuelto: number }> {
+  const { data, error } = await supabase.rpc('fn_cobrar_pedido_atomic', {
+    p_pedido: args.pedidoId,
+    p_usuario: args.usuarioId,
+    p_apertura: args.aperturaId,
+    p_tipodoc: args.tipoDocumento,
+    p_cliente: args.clienteId,
+    p_metodo: args.metodoPagoId,
+    p_recibido: args.montoRecibido,
+    p_ref: args.referencia,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
+  if (!row) {
+    throw new Error('COBRO_SIN_RESULTADO');
+  }
+  return {
+    idVenta: Number(row['id_venta']),
+    serie: String(row['serie'] ?? ''),
+    numero: String(row['numero'] ?? ''),
+    total: Number(row['total'] ?? 0),
+    vuelto: Number(row['vuelto'] ?? 0),
+  };
+}
+
+export async function solicitarCierreCaja(args: {
+  aperturaId: number;
+  usuarioId: number;
   declarado: number;
   observacion: string;
 }): Promise<CierreResultado> {
-  const { error: errUpd } = await supabase
-    .from('apertura_caja')
-    .update({
-      id_usuariocierre: args.usuarioCierreId,
-      f_cierre: new Date().toISOString(),
-      monto_declarado: args.declarado,
-      diferencia: null,
-      situacion: 'C',
-      observacion: args.observacion || null,
-      usumod: String(args.usuarioCierreId),
-      fecmod: new Date().toISOString(),
-    })
-    .eq('id_aperturacaja', args.aperturaId)
-    .eq('situacion', 'A');
-  if (errUpd) {
-    const msg = errUpd.message;
-    if (msg.includes('check') || msg.includes('diferencia')) {
-      throw new Error('MONTO_INVALIDO');
-    }
-    throw new Error(`DB_CIERRE_FAIL: ${msg}`);
+  const { data, error } = await supabase.rpc('fn_solicitar_cierre_caja', {
+    p_apertura: args.aperturaId,
+    p_usuario: args.usuarioId,
+    p_declarado: args.declarado,
+    p_observacion: args.observacion,
+  });
+  if (error) {
+    throw new Error(error.message);
   }
-  const { error: errCajaUpd } = await supabase
-    .from('caja')
-    .update({ aperturada: 'N' })
-    .eq('id_caja', (await supabase.from('apertura_caja').select('id_caja').eq('id_aperturacaja', args.aperturaId).maybeSingle()).data! ? Number(((await supabase.from('apertura_caja').select('id_caja').eq('id_aperturacaja', args.aperturaId).maybeSingle()).data as Record<string, unknown>)['id_caja']) : 0);
-  if (errCajaUpd) {
-    throw new Error(`DB_CIERRE_FAIL: ${errCajaUpd.message}`);
-  }
-  const { data: row, error: errRow } = await supabase
-    .from('apertura_caja')
-    .select('id_caja, monto_sistema, monto_declarado, diferencia')
-    .eq('id_aperturacaja', args.aperturaId)
-    .maybeSingle();
-  if (errRow) {
-    throw new Error(`DB_GET_FAIL: ${errRow.message}`);
-  }
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
   if (!row) {
-    throw new Error('TURNO_NO_ABIERTO');
+    throw new Error('CIERRE_SIN_RESULTADO');
   }
-  const r = row as Record<string, unknown>;
-  const diferencia = Number(r['diferencia'] ?? 0);
+  const diferencia = Number(row['diferencia'] ?? 0);
   return {
-    sistema: Number(r['monto_sistema'] ?? 0),
-    declarado: Number(r['monto_declarado'] ?? 0),
+    sistema: Number(row['sistema'] ?? 0),
+    declarado: Number(row['declarado'] ?? 0),
     diferencia,
     resultado: diferencia === 0 ? 'CUADRADO' : diferencia > 0 ? 'SOBRANTE' : 'FALTANTE',
   };
+}
+
+export async function confirmarCierreCaja(args: {
+  aperturaId: number;
+  supervisorId: number;
+}): Promise<CierreResultado> {
+  const { data, error } = await supabase.rpc('fn_confirmar_cierre_caja', {
+    p_apertura: args.aperturaId,
+    p_supervisor: args.supervisorId,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
+  if (!row) {
+    throw new Error('CIERRE_SIN_RESULTADO');
+  }
+  const diferencia = Number(row['diferencia'] ?? 0);
+  return {
+    sistema: Number(row['sistema'] ?? 0),
+    declarado: Number(row['declarado'] ?? 0),
+    diferencia,
+    resultado: diferencia === 0 ? 'CUADRADO' : diferencia > 0 ? 'SOBRANTE' : 'FALTANTE',
+  };
+}
+
+export async function listarCierresPendientes(): Promise<CierrePendiente[]> {
+  const { data, error } = await supabase
+    .from('apertura_caja')
+    .select('id_aperturacaja, id_caja, id_usuario, f_solicitud_cierre, monto_sistema, monto_declarado, diferencia, observacion')
+    .eq('situacion', 'P')
+    .eq('estado', 'A')
+    .order('f_solicitud_cierre', { ascending: true });
+  if (error) {
+    throw new Error(`DB_LIST_FAIL: ${error.message}`);
+  }
+  const rows = (data ?? []) as unknown as Record<string, unknown>[];
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const cajaIds = Array.from(new Set(rows.map((row) => Number(row['id_caja']))));
+  const usuarioIds = Array.from(new Set(rows.map((row) => Number(row['id_usuario']))));
+  const [{ data: cajas, error: cajasError }, usuarios] = await Promise.all([
+    supabase.from('caja').select('id_caja, n_caja').in('id_caja', cajaIds),
+    logeoUsuario(usuarioIds),
+  ]);
+  if (cajasError) {
+    throw new Error(`DB_GET_FAIL: ${cajasError.message}`);
+  }
+  const cajaNombre = new Map(
+    ((cajas ?? []) as unknown as Record<string, unknown>[]).map((row) => [
+      Number(row['id_caja']),
+      String(row['n_caja'] ?? ''),
+    ]),
+  );
+  return rows.map((row) => ({
+    id: Number(row['id_aperturacaja']),
+    cajaId: Number(row['id_caja']),
+    cajaNombre: cajaNombre.get(Number(row['id_caja'])) ?? `Caja ${row['id_caja']}`,
+    cajero: usuarios.get(Number(row['id_usuario'])) ?? '',
+    fechaSolicitud: row['f_solicitud_cierre']
+      ? new Date(String(row['f_solicitud_cierre'])).toISOString()
+      : '',
+    montoSistema: Number(row['monto_sistema'] ?? 0),
+    montoDeclarado: Number(row['monto_declarado'] ?? 0),
+    diferencia: Number(row['diferencia'] ?? 0),
+    observacion: row['observacion'] ? String(row['observacion']) : null,
+  }));
 }
 
 /** Reporte Z de un turno (abierto o cerrado). */

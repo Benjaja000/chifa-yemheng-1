@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import type { ClienteAuthenticatedRequest } from '../middlewares/cliente-auth-guard.js';
 import { z } from 'zod';
-import { crearDeliveryClienteService, sugerirCostoClienteService, getDeliveryDetalleClienteService, getDeliveryUbicacionClienteService } from '../services/cliente-delivery-service.js';
+import { crearDeliveryClienteService, sugerirCostoClienteService, getDeliveryDetalleClienteService, getDeliveryUbicacionClienteService, getCoberturaDeliveryClienteService } from '../services/cliente-delivery-service.js';
 import { DeliveryError } from '../models/delivery.js';
 import { getPc } from '../utils/auditoria.js';
 
@@ -54,6 +54,10 @@ export async function getSugerirCostoCliente(req: Request, res: Response): Promi
   const parsed = sugerirCostoQuerySchema.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() }); return; }
   res.json(await sugerirCostoClienteService(parsed.data.lat ?? null, parsed.data.lng ?? null, parsed.data.distrito));
+}
+
+export async function getCoberturaDeliveryCliente(_req: Request, res: Response): Promise<void> {
+  res.json(await getCoberturaDeliveryClienteService());
 }
 
 export async function getClienteDeliveryDetalle(req: Request, res: Response): Promise<void> {

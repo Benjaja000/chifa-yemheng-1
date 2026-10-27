@@ -78,6 +78,7 @@ export async function abrirClienteService(
     null,
     input.comensales ?? 1,
     input.obs ?? '',
+    'QR',
   );
   await auditar(AUTOSERVICIO_USER_ID, 'ABRIR_PEDIDO_CLIENTE', result.id, `Pedido ${result.numero} (cliente ${clienteId})`);
   const pedido = await repoObtener(result.id);

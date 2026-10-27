@@ -13,7 +13,7 @@ export async function departamentosService(): Promise<any[]> {
   return listarDepartamentos();
 }
 
-export async function provinciasService(idDepartamento: number): Promise<any[]> {
+export async function provinciasService(idDepartamento?: number): Promise<any[]> {
   return listarProvincias(idDepartamento);
 }
 

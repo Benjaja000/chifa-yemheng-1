@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapLeaflet } from '../../../shared/ui/MapLeaflet';
+import { api } from '../../../shared/services/api-client';
 import {
   actualizarParametros,
   getParametros,
@@ -8,7 +9,15 @@ import {
   reversarGeocodificacion,
   sugerirDirecciones,
 } from './delivery-parametros-service';
-import type { ParametrosNegocio, SugerenciaDireccion, TarifaDistrito, TarifaForm } from './delivery-parametros-types';
+import type {
+  Departamento,
+  Distrito,
+  ParametrosNegocio,
+  Provincia,
+  SugerenciaDireccion,
+  TarifaDistrito,
+  TarifaForm,
+} from './delivery-parametros-types';
 
 const INPUT =
   'w-full rounded-lg border border-[#D9D9D9] bg-[#F5F5F5] px-3.5 py-2.5 text-sm outline-none focus:border-[#A61E22]';
@@ -16,6 +25,13 @@ const INPUT =
 export function ParametrosDeliveryPage() {
   const [params, setParams] = useState<ParametrosNegocio | null>(null);
   const [tarifas, setTarifas] = useState<TarifaDistrito[]>([]);
+  const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
+  const [provincias, setProvincias] = useState<Provincia[]>([]);
+  const [distritos, setDistritos] = useState<Distrito[]>([]);
+  const [departamentoFiltro, setDepartamentoFiltro] = useState<number | null>(null);
+  const [provinciaFiltro, setProvinciaFiltro] = useState<number | null>(null);
+  const [distritoFiltro, setDistritoFiltro] = useState<number | null>(null);
+  const [errorMaestros, setErrorMaestros] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [direccion, setDireccion] = useState('');
@@ -31,6 +47,10 @@ export function ParametrosDeliveryPage() {
   const [verSugerencias, setVerSugerencias] = useState(false);
   const [busquedaTarifa, setBusquedaTarifa] = useState('');
   const [centroMapa, setCentroMapa] = useState<[number, number] | null>(null);
+  const [puntoLocalVista, setPuntoLocalVista] = useState<[number, number] | null>(null);
+  const [ubicacionCargando, setUbicacionCargando] = useState(false);
+  const [errorUbicacion, setErrorUbicacion] = useState<string | null>(null);
+  const ubicacionRequestRef = useRef(0);
 
   const cargar = async () => {
     setCargando(true);
@@ -50,13 +70,50 @@ export function ParametrosDeliveryPage() {
 
   useEffect(() => {
     void cargar();
+    void cargarMaestros();
   }, []);
+
+  const cargarMaestros = async () => {
+    try {
+      const [departamentosData, provinciasData, distritosData] = await Promise.all([
+        api.getDepartamentos(),
+        api.getProvincias(),
+        api.getDistritos(),
+      ]);
+      setDepartamentos(departamentosData as Departamento[]);
+      setProvincias(provinciasData as Provincia[]);
+      setDistritos(distritosData as Distrito[]);
+      setErrorMaestros(null);
+    } catch (loadError) {
+      console.error('Error cargando los filtros del tarifario:', loadError);
+      setErrorMaestros('No se pudieron cargar los filtros geográficos del tarifario.');
+    }
+  };
+
+  const provinciasFiltradas = useMemo(
+    () => provincias.filter((provincia) => departamentoFiltro === null || provincia.id_departamento === departamentoFiltro),
+    [provincias, departamentoFiltro],
+  );
+
+  const distritosFiltrados = useMemo(
+    () => distritos.filter((distrito) => provinciaFiltro === null || distrito.id_provincia === provinciaFiltro),
+    [distritos, provinciaFiltro],
+  );
 
   const tarifasFiltradas = useMemo(() => {
     const q = busquedaTarifa.trim().toLowerCase();
-    if (!q) return tarifas;
-    return tarifas.filter((t) => t.distrito.toLowerCase().includes(q));
-  }, [tarifas, busquedaTarifa]);
+    const provinciasPorId = new Map(provincias.map((provincia) => [provincia.id_provincia, provincia]));
+    const distritosPorId = new Map(distritos.map((distrito) => [distrito.id_distrito, distrito]));
+
+    return tarifas.filter((tarifa) => {
+      const distrito = distritosPorId.get(tarifa.distritoId);
+      const provincia = distrito ? provinciasPorId.get(distrito.id_provincia) : undefined;
+      if (distritoFiltro !== null && tarifa.distritoId !== distritoFiltro) return false;
+      if (provinciaFiltro !== null && distrito?.id_provincia !== provinciaFiltro) return false;
+      if (departamentoFiltro !== null && provincia?.id_departamento !== departamentoFiltro) return false;
+      return !q || tarifa.distrito.toLowerCase().includes(q);
+    });
+  }, [tarifas, busquedaTarifa, provincias, distritos, departamentoFiltro, provinciaFiltro, distritoFiltro]);
 
   const ubicarDistrito = async (consulta: string) => {
     const s = await sugerirDirecciones(consulta);
@@ -64,15 +121,40 @@ export function ParametrosDeliveryPage() {
   };
 
   const aplicarUbicacion = async (lat: number, lng: number) => {
-    await fijarPunto(lat, lng);
+    const requestId = ++ubicacionRequestRef.current;
+    setUbicacionCargando(true);
+    setErrorUbicacion(null);
+    setAviso(null);
+    setCentroMapa([lat, lng]);
+    setPuntoLocalVista([lat, lng]);
+
     const dir = await reversarGeocodificacion(lat, lng);
-    if (dir) {
-      setDireccion(dir);
-      try {
-        setParams(await actualizarParametros({ direccionLocal: dir }));
-      } catch {
-        /* la direccion no es critica: el punto ya quedo guardado */
-      }
+    if (requestId !== ubicacionRequestRef.current) return;
+    const direccionActualizada = dir?.slice(0, 200) ?? null;
+    setDireccion(direccionActualizada ?? '');
+
+    try {
+      const input: Partial<ParametrosNegocio> = {
+        latLocal: lat,
+        lngLocal: lng,
+        direccionLocal: direccionActualizada,
+      };
+      const p = await actualizarParametros(input);
+      if (requestId !== ubicacionRequestRef.current) return;
+      setParams(p);
+      setDireccion(p.direccionLocal ?? '');
+      setPuntoLocalVista(null);
+      setAviso(
+        direccionActualizada
+          ? 'Punto y dirección del local actualizados.'
+          : 'Punto actualizado; no se pudo reconocer la dirección automáticamente.',
+      );
+    } catch (saveError) {
+      if (requestId !== ubicacionRequestRef.current) return;
+      console.error('Error guardando la ubicación del local:', saveError);
+      setErrorUbicacion('No se pudo guardar el punto del local y su dirección.');
+    } finally {
+      if (requestId === ubicacionRequestRef.current) setUbicacionCargando(false);
     }
   };
 
@@ -88,16 +170,6 @@ export function ParametrosDeliveryPage() {
       setVerSugerencias(true);
     } finally {
       setBuscando(false);
-    }
-  };
-
-  const fijarPunto = async (lat: number, lng: number) => {
-    try {
-      const p = await actualizarParametros({ latLocal: lat, lngLocal: lng });
-      setParams(p);
-      setAviso('Punto del local actualizado.');
-    } catch {
-      setError('No se pudo guardar el punto del local.');
     }
   };
 
@@ -146,17 +218,22 @@ export function ParametrosDeliveryPage() {
   };
 
   const tienePunto = params?.latLocal != null && params?.lngLocal != null;
+  const puntoLocalActual = puntoLocalVista
+    ?? (tienePunto ? [params!.latLocal!, params!.lngLocal!] as [number, number] : null);
 
   const pinsLocal = useMemo(
-    () =>
-      params?.latLocal != null && params?.lngLocal != null
-        ? [{ lat: params.latLocal, lng: params.lngLocal, label: 'Local', color: 'red' as const }]
-        : [],
-    [params?.latLocal, params?.lngLocal],
+    () => puntoLocalActual
+      ? [{ lat: puntoLocalActual[0], lng: puntoLocalActual[1], label: 'Local', color: 'red' as const }]
+      : [],
+    [puntoLocalActual],
   );
 
   const centroMapaActual: [number, number] | undefined =
     centroMapa ?? (tienePunto ? [params!.latLocal!, params!.lngLocal!] : undefined);
+  const radioCoberturaVista = radioCobertura.trim() === '' ? undefined : Number(radioCobertura);
+  const radioCoberturaMapa = radioCoberturaVista !== undefined && Number.isFinite(radioCoberturaVista)
+    ? radioCoberturaVista
+    : undefined;
 
   return (
     <div className="flex w-full flex-col gap-6 pb-12">
@@ -168,8 +245,8 @@ export function ParametrosDeliveryPage() {
         </nav>
         <h1 className="mt-1 font-[Newsreader] text-3xl font-medium text-[#7F1518]">Parámetros de Delivery</h1>
         <p className="mt-1 max-w-2xl text-sm text-[#333333]/70">
-          Punto de origen del local y tarifas de envío por distrito. El costo sugerido se calcula desde el
-          local hasta la ubicación del cliente.
+          Configure el punto y cobertura del local, y las tarifas por distrito. La tarifa se estima desde la
+          referencia del distrito; el límite máximo de entrega se mide desde el local.
         </p>
       </div>
 
@@ -232,8 +309,18 @@ export function ParametrosDeliveryPage() {
                   pins={pinsLocal}
                   center={centroMapaActual}
                   height="320px"
-                  onClick={(e) => void fijarPunto(Number(e.latlng.lat.toFixed(6)), Number(e.latlng.lng.toFixed(6)))}
+                  drawRadius={radioCoberturaMapa}
+                  radiusCenter={
+                    puntoLocalActual ?? undefined
+                  }
+                  onClick={(e) => void aplicarUbicacion(Number(e.latlng.lat.toFixed(6)), Number(e.latlng.lng.toFixed(6)))}
                 />
+                <p className="mt-2 text-xs text-[#333333]/60" role={ubicacionCargando ? 'status' : undefined}>
+                  {ubicacionCargando
+                    ? 'Consultando y guardando la dirección del nuevo punto…'
+                    : 'El círculo de cobertura se actualiza al cambiar el radio; el punto y su dirección se guardan al seleccionar el mapa.'}
+                </p>
+                {errorUbicacion ? <p className="mt-2 text-xs text-red-700" role="alert">{errorUbicacion}</p> : null}
               </div>
               <div className="mt-3 flex items-end gap-2">
                 <label className="flex flex-1 flex-col gap-1.5">
@@ -278,7 +365,7 @@ export function ParametrosDeliveryPage() {
                 </button>
               </div>
               <p className="mt-2 text-xs text-[#333333]/60">
-                Distancia máxima de entrega desde el local. Vacío o 0 = sin límite.
+                Distancia máxima de entrega desde el local. El círculo del mapa cambia al editar el número. Vacío o 0 = sin límite.
               </p>
               {!tienePunto ? (
                 <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-700">
@@ -289,10 +376,69 @@ export function ParametrosDeliveryPage() {
 
             <div className="rounded-xl bg-white p-4 shadow-sm">
               <h2 className="font-[Newsreader] text-lg font-medium text-[#7F1518]">Tarifas por distrito</h2>
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Departamento</span>
+                  <select
+                    value={departamentoFiltro ?? ''}
+                    onChange={(e) => {
+                      setDepartamentoFiltro(e.target.value ? Number(e.target.value) : null);
+                      setProvinciaFiltro(null);
+                      setDistritoFiltro(null);
+                    }}
+                    className={INPUT}
+                  >
+                    <option value="">Todos los departamentos</option>
+                    {departamentos.map((departamento) => (
+                      <option key={departamento.id_departamento} value={departamento.id_departamento}>
+                        {departamento.d_departamento}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Provincia</span>
+                  <select
+                    value={provinciaFiltro ?? ''}
+                    onChange={(e) => {
+                      setProvinciaFiltro(e.target.value ? Number(e.target.value) : null);
+                      setDistritoFiltro(null);
+                    }}
+                    disabled={departamentoFiltro === null}
+                    className={INPUT}
+                  >
+                    <option value="">Todas las provincias</option>
+                    {provinciasFiltradas.map((provincia) => (
+                      <option key={provincia.id_provincia} value={provincia.id_provincia}>
+                        {provincia.d_provincia}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-bold tracking-wider uppercase opacity-60">Distrito</span>
+                  <select
+                    value={distritoFiltro ?? ''}
+                    onChange={(e) => setDistritoFiltro(e.target.value ? Number(e.target.value) : null)}
+                    disabled={provinciaFiltro === null}
+                    className={INPUT}
+                  >
+                    <option value="">Todos los distritos</option>
+                    {distritosFiltrados.map((distrito) => (
+                      <option key={distrito.id_distrito} value={distrito.id_distrito}>
+                        {distrito.d_distrito}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {errorMaestros ? (
+                <p className="mt-2 text-xs text-red-700" role="alert">{errorMaestros}</p>
+              ) : null}
               <input
                 value={busquedaTarifa}
                 onChange={(e) => setBusquedaTarifa(e.target.value)}
-                placeholder="Buscar distrito…"
+                placeholder="Buscar distrito por nombre…"
                 className={`${INPUT} mt-3`}
               />
               <div className="mt-3 max-h-[460px] overflow-auto">

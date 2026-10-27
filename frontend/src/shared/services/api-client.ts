@@ -8,6 +8,16 @@ function resolveToken(endpoint: string): string | null {
   return localStorage.getItem(endpoint.startsWith('/cliente') ? CLIENTE_TOKEN_KEY : STAFF_TOKEN_KEY);
 }
 
+function buildQuery(params?: Record<string, string | number | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (value !== undefined && value !== '') {
+      query.set(key, String(value));
+    }
+  }
+  return query.toString();
+}
+
 class ApiClient {
   async request<T>(
     endpoint: string,
@@ -77,6 +87,15 @@ class ApiClient {
     );
   }
 
+  getCoberturaDelivery() {
+    return this.request<{
+      latLocal: number | null;
+      lngLocal: number | null;
+      direccionLocal: string | null;
+      radioCoberturaKm: number | null;
+    }>('/cliente/delivery/cobertura');
+  }
+
   getDeliveryDetalle(id: number) {
     return this.request<any>(`/cliente/delivery/${id}`);
   }
@@ -87,8 +106,8 @@ class ApiClient {
 
   // Repartidor
   getMisEntregas(params?: { estado?: string; page?: number; limit?: number }) {
-    const query = new URLSearchParams(params as Record<string, string>).toString();
-    return this.request<any>(`/repartidor/entregas?${query}`);
+    const query = buildQuery(params);
+    return this.request<any>(`/repartidor/entregas${query ? `?${query}` : ''}`);
   }
 
   getMiEntrega(id: number) {
@@ -123,17 +142,17 @@ class ApiClient {
 
   // Staff Seguimiento
   listarDelivery(filtros?: { page?: number; limit?: number; estado?: string }) {
-    const query = new URLSearchParams({
-      page: filtros?.page?.toString() ?? '1',
-      limit: filtros?.limit?.toString() ?? '20',
-      estado: filtros?.estado ?? '',
-    }).toString();
+    const query = buildQuery({
+      page: filtros?.page ?? 1,
+      limit: filtros?.limit ?? 20,
+      estado: filtros?.estado,
+    });
     return this.request<any>(`/delivery?${query}`);
   }
 
   getSeguimiento(params?: { estado?: string; repartidorId?: number; page?: number; limit?: number }) {
-    const query = new URLSearchParams(params as Record<string, string>).toString();
-    return this.request<any>(`/delivery/seguimiento?${query}`);
+    const query = buildQuery(params);
+    return this.request<any>(`/delivery/seguimiento${query ? `?${query}` : ''}`);
   }
 
   getDeliverySeguimiento(id: number) {
@@ -202,18 +221,20 @@ class ApiClient {
     return this.request<any[]>(`/maestros/departamentos`);
   }
 
-  getProvincias(departamento: number) {
-    return this.request<any[]>(`/maestros/provincias?departamento=${departamento}`);
+  getProvincias(departamento?: number) {
+    const query = departamento === undefined ? '' : `?departamento=${departamento}`;
+    return this.request<any[]>(`/maestros/provincias${query}`);
   }
 
-  getDistritos(provincia: number) {
-    return this.request<any[]>(`/maestros/distritos?provincia=${provincia}`);
+  getDistritos(provincia?: number) {
+    const query = provincia === undefined ? '' : `?provincia=${provincia}`;
+    return this.request<any[]>(`/maestros/distritos${query}`);
   }
 
   // Delivery Staff
   getDeliveries(params?: { page?: number; limit?: number; estado?: string }) {
-    const query = new URLSearchParams(params as Record<string, string>).toString();
-    return this.request<any>(`/delivery?${query}`);
+    const query = buildQuery(params);
+    return this.request<any>(`/delivery${query ? `?${query}` : ''}`);
   }
 
   getDelivery(id: number) {

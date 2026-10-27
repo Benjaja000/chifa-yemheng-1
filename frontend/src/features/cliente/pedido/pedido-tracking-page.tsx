@@ -136,6 +136,17 @@ export function ClientePedidoTrackingPage() {
 
   return (
     <div className="y-shell" style={{ padding: '24px 16px 140px', maxWidth: 480, margin: '0 auto' }}>
+      <section className="y-flow-hero y-cliente-flow-hero" aria-labelledby="pedido-hero-title">
+        <div className="y-flow-hero__content">
+          <span className="y-flow-hero__eyebrow">
+            {pedido.mesaId ? `Mesa ${pedido.mesaId}` : 'Seguimiento de pedido'}
+          </span>
+          <h1 id="pedido-hero-title" className="y-flow-hero__title">Sigue cada paso de tu pedido.</h1>
+          <p className="y-flow-hero__description">
+            Pedido {pedido.numero} · {pedido.estadoComandaDerivado}
+          </p>
+        </div>
+      </section>
       <div className="y-panel" style={{ padding: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <Link to="/cliente/inicio" style={{ color: 'var(--muted)' }}><ArrowLeft size={18} /></Link>

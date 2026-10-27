@@ -75,6 +75,10 @@ Cada regla tiene un identificador `BR-{dominio}-{number}`. La columna "Implement
 | BR-RES-027 | No se permite dividir automáticamente una comanda en múltiples ventas. | Caja |
 | BR-RES-028 | No se permite emitir múltiples comprobantes para una misma comanda. | Caja |
 | BR-RES-029 | Una mesa en estado POR COBRAR no admite nuevos productos. | USP_AGREGAR_DETALLE_PEDIDO |
+| BR-MOZ-001 | Cada comanda de mesa registra su canal de origen (`QR`, `WEB` o `PRESENCIAL`). Las comandas creadas por clientes desde canales digitales conservan su origen durante todo el flujo. | PEDIDO.CANAL_ORIGEN / app |
+| BR-MOZ-002 | El mozo no registra, agrega, anula ni modifica comandas originadas por `QR` o `WEB`; puede consultarlas y registrar la entrega de platos. La toma y edición de pedidos por el mozo corresponde a la atención presencial tradicional. | Autorización backend / app |
+| BR-MOZ-003 | Solo Cocina cambia el estado de preparación. El mozo confirma por separado la entrega a mesa de un ítem que Cocina ya marcó como SERVIDO, registrando usuario y fecha sin modificar el estado de preparación. | PED_COCINA / DETALLE_PEDIDO |
+| BR-MOZ-004 | El mozo no cobra. En pedidos digitales el cliente solicita la cuenta; en atención presencial el mozo puede solicitarla. El cobro se realiza en Caja. | PEDIR_CUENTA / CAJA |
 | BR-RES-054 | La NOTA_CREDITO solo se emite sobre una VENTA facturada y no anulada; exige motivo obligatorio y serie 07 con correlativo bloqueado. | USP_ANULAR_VENTA_CON_NC |
 | BR-RES-052 | La reserva **online** exige login Gmail **obligatorio** (asociado al CLIENTE) y **nace Pendiente (P) sin mesa asignada** (`ID_Mesa NULL`, usuario interno AUTOSERVICIO). Solo el personal con permiso `SAL_RESERVA` la confirma **asignando una mesa libre**, y la mesa pasa a RESERVADA. | App (OAuth) + RESERVA / app |
 
@@ -190,11 +194,12 @@ Cada regla tiene un identificador `BR-{dominio}-{number}`. La columna "Implement
 
 ### Tramo 6 — Entrega y estado servido
 - Cocina marca el plato como **S (Servido)** al despacharlo.
-- El mozo lleva el plato a la mesa; el aviso al cliente se actualiza **al entregar** (BR-ACC-044).
+- El mozo ve los platos despachados en su bandeja, los lleva a la mesa y registra la entrega por separado; el aviso al cliente se actualiza **al entregar** (BR-ACC-044, BR-MOZ-003).
+- En comandas `QR`/`WEB`, el mozo solo consulta y entrega; no agrega ni modifica pedidos. En comandas `PRESENCIAL`, toma y edita el pedido según la atención tradicional (BR-MOZ-001/002).
 - La comanda pasa a **SERVIDO** cuando **todos** sus ítems están servidos (BR-INF-048).
 
 ### Tramo 7 — Cobro y pago
-- El cliente desde la app pulsa **"Pedir la cuenta/Cobrar"** → la comanda pasa a **POR COBRAR** (ya no se agregan platos, BR-RES-029). El cliente QR **nunca paga directamente** desde el celular: solo solicita la cuenta (BR-ACC-043).
+- El cliente desde la app pulsa **"Pedir la cuenta/Cobrar"** → la comanda pasa a **POR COBRAR** (ya no se agregan platos, BR-RES-029). El cliente QR **nunca paga directamente** desde el celular: solo solicita la cuenta (BR-ACC-043). En atención presencial el mozo puede solicitarla; no puede cobrar (BR-MOZ-004).
 - La solicitud de cuenta afecta a todos los participantes de la mesa (BR-ACC-051, BR-RES-026).
 - No existe división automática de cuentas (BR-RES-027).
 - Todos los consumos de la mesa generan una única venta (BR-EST-005).
@@ -218,7 +223,8 @@ Cada regla tiene un identificador `BR-{dominio}-{number}`. La columna "Implement
 ### Tramo 9 — Cierre de caja / arqueo
 - Cada caja maneja uno o varios turnos; un turno se cierra antes de abrir otro en la misma caja (BR-EST-008, BR-RES-017).
 - El arqueo se calcula en los USP: `Diferencia = Monto_Declarado − Monto_Sistema` → CUADRADO/SOBRANTE/FALTANTE (BR-DER-032, BR-INF-049).
-- El cajero declara el efectivo; un **supervisor/administrador valida** el cierre (BR-ACC-046).
+- El cajero solicita el cierre declarando el efectivo; el turno queda pendiente y deja de aceptar cobros. Un **supervisor/administrador distinto del cajero** valida y confirma el cierre (BR-ACC-046).
+- Mientras un cierre está pendiente no se puede abrir otro turno para esa caja; al confirmarlo se registra la diferencia, se cierra el turno y se habilita la caja.
 - Los pagos digitales se registran como ingreso pero **no** modifican el efectivo físico (BR-INF-051).
 
 ---

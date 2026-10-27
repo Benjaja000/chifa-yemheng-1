@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '@/shared/services/api-client';
-import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
+import { Button } from '@/shared/ui/Button';
+import { MapLeaflet } from '@/shared/ui/MapLeaflet';
 
 interface Producto {
   id_producto: number;
@@ -52,16 +53,18 @@ interface CrearDeliveryModalProps {
 }
 
 export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDeliveryModalProps) {
-  if (!abierto) return null;
-
-  // Paso actual: 1=cliente, 2=dirección, 3=productos, 4=confirmar
+  const [mostrarHero, setMostrarHero] = useState(true);
   const [paso, setPaso] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  // Datos del formulario
   const [clienteId, setClienteId] = useState<number | null>(null);
   const [clienteBuscar, setClienteBuscar] = useState('');
-  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [clientes] = useState<Cliente[]>([
+    { id_cliente: 1, nombre: 'María González' },
+    { id_cliente: 2, nombre: 'José López' },
+    { id_cliente: 3, nombre: 'Ana Torres' },
+    { id_cliente: 4, nombre: 'Carlos Ruiz' },
+  ]);
   const [mostrarClientes, setMostrarClientes] = useState(false);
 
   const [direccion, setDireccion] = useState('');
@@ -77,15 +80,19 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
   const [costoSugerido, setCostoSugerido] = useState<number | null>(null);
   const [fueraRadio, setFueraRadio] = useState(false);
 
-  const [items, setItems] = useState<ItemCarrito[]>([]);
-  const [productos, setProductos] = useState<Producto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriaActiva, setCategoriaActiva] = useState<number | null>(null);
+  const [productos, setProductos] = useState<Producto[]>([]);
   const [buscarProducto, setBuscarProducto] = useState('');
+  const [items, setItems] = useState<ItemCarrito[]>([]);
 
-  // Cargar datos iniciales
+  const [mapPins] = useState<Array<{ lat: number; lng: number; label?: string; color?: 'blue' | 'red' | 'green'; id_provincia?: number }>>([]);
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [radioCoberturaKm] = useState(5);
+
   useEffect(() => {
-    cargarDatosIniciales();
+    const timer = window.setTimeout(() => setMostrarHero(false), 8000);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const cargarDatosIniciales = async () => {
@@ -94,60 +101,127 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
         api.getCategorias(),
         api.getDepartamentos(),
       ]);
+
       setCategorias(cats);
       setDepartamentos(deps);
-      if (cats.length > 0) setCategoriaActiva(cats[0].id_categoria);
+
+      if (cats.length > 0) {
+        setCategoriaActiva(cats[0].id_categoria);
+      }
+
+      if (deps.length > 0) {
+        setDepartamentoId(deps[0].id_departamento);
+      }
     } catch (error) {
       console.error('Error cargando datos iniciales:', error);
     }
   };
 
   useEffect(() => {
-    if (departamentoId) {
-      api.getProvincias(departamentoId).then(setProvincias);
-      setProvinciaId(null);
-      setDistritoId(null);
-      setDistritos([]);
-    } else {
+    void cargarDatosIniciales();
+  }, []);
+
+  useEffect(() => {
+    if (!departamentoId) {
       setProvincias([]);
+      setProvinciaId(null);
       setDistritos([]);
+      setDistritoId(null);
+      return;
     }
+
+    void api.getProvincias(departamentoId).then(setProvincias);
+    setProvinciaId(null);
+    setDistritoId(null);
+    setDistritos([]);
   }, [departamentoId]);
 
   useEffect(() => {
-    if (provinciaId) {
-      api.getDistritos(provinciaId).then(setDistritos);
-      setDistritoId(null);
-    } else {
+    if (!provinciaId) {
       setDistritos([]);
+      setDistritoId(null);
+      return;
     }
+
+    void api.getDistritos(provinciaId).then(setDistritos);
+    setDistritoId(null);
   }, [provinciaId]);
 
   useEffect(() => {
-    if (categoriaActiva) {
-      api.getProductos({ disponible: true }).then(prods => {
-        setProductos(prods.filter(p => p.id_categoria === categoriaActiva));
-      });
+    if (!categoriaActiva) {
+      setProductos([]);
+      return;
     }
+
+    void api.getProductos({ disponible: true }).then((prods) => {
+      setProductos(prods.filter((p) => p.id_categoria === categoriaActiva));
+    });
   }, [categoriaActiva]);
 
-  // Cliente
-  useEffect(() => {
-    if (clienteBuscar.length >= 2) {
-      api.request<Cliente[]>(`/clientes?search=${encodeURIComponent(clienteBuscar)}`)
-        .then(setClientes)
-        .catch(() => setClientes([]));
-      setMostrarClientes(true);
-    } else {
-      setMostrarClientes(false);
-    }
-  }, [clienteBuscar]);
+  const reverseGeocodeAdmin = async (lat: number, lng: number) => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`,
+        {
+          headers: { 'User-Agent': 'ChifaYemheng/1.0' },
+        }
+      );
 
-  // Sugerir costo
+      if (!response.ok) {
+        throw new Error('Reverse geocoding failed');
+      }
+
+      const data = await response.json();
+      const address = data?.address;
+      if (!address) return;
+
+      const partes: string[] = [];
+      if (address.road) partes.push(address.road);
+      if (address.house_number) partes.push(`Nro. ${address.house_number}`);
+      if (address.suburb) partes.push(address.suburb);
+      if (address.neighbourhood) partes.push(address.neighbourhood);
+      if (address.city) partes.push(address.city);
+      if (address.town) partes.push(address.town);
+      if (address.county) partes.push(address.county);
+
+      const direccionCompleta = partes.join(', ');
+      if (direccionCompleta) {
+        setDireccion(direccionCompleta);
+      }
+    } catch (error) {
+      console.error('Error en reverse geocoding admin:', error);
+    }
+  };
+
+  const agregarItem = (producto: Producto) => {
+    setItems((prev) => {
+      const existing = prev.find((i) => i.productoId === producto.id_producto);
+      if (existing) {
+        return prev.map((i) =>
+          i.productoId === producto.id_producto ? { ...i, cantidad: i.cantidad + 1 } : i
+        );
+      }
+
+      return [
+        ...prev,
+        {
+          productoId: producto.id_producto,
+          nombre: producto.nombre,
+          precio: producto.precio,
+          cantidad: 1,
+        },
+      ];
+    });
+  };
+
+  const subtotal = items.reduce((sum, item) => sum + item.precio * item.cantidad, 0);
+  const total = subtotal + costoEnvio;
+
   const handleSugerirCosto = async () => {
     if (!distritoId) return;
+
     try {
-      const res = await api.sugerirCosto(0, 0, distritoId); // sin GPS por ahora
+      const res = await api.sugerirCosto(distritoId);
       setCostoSugerido(res.costoSugerido);
       setFueraRadio(res.fueraRadio);
       setCostoEnvio(res.costoSugerido);
@@ -156,42 +230,39 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
     }
   };
 
-  // Carrito
-  const agregarItem = (producto: Producto) => {
-    setItems(prev => {
-      const existing = prev.find(i => i.productoId === producto.id_producto);
-      if (existing) {
-        return prev.map(i =>
-          i.productoId === producto.id_producto
-            ? { ...i, cantidad: i.cantidad + 1 }
-            : i
-        );
-      }
-      return [...prev, { productoId: producto.id_producto, nombre: producto.nombre, precio: producto.precio, cantidad: 1 }];
-    });
-  };
-
-  const subtotal = items.reduce((sum, i) => sum + i.precio * i.cantidad, 0);
-  const total = subtotal + costoEnvio;
-
   const handleSubmit = async () => {
-    if (!clienteId) { alert('Seleccione un cliente'); return; }
-    if (!direccion.trim()) { alert('Dirección obligatoria'); return; }
-    if (!distritoId) { alert('Distrito obligatorio'); return; }
-    if (!telefono.trim()) { alert('Teléfono obligatorio'); return; }
-    if (items.length === 0) { alert('Agregue al menos un producto'); return; }
+    if (!clienteId) {
+      alert('Seleccione un cliente');
+      return;
+    }
+    if (!direccion.trim()) {
+      alert('Dirección obligatoria');
+      return;
+    }
+    if (!distritoId) {
+      alert('Distrito obligatorio');
+      return;
+    }
+    if (!telefono.trim()) {
+      alert('Teléfono obligatorio');
+      return;
+    }
+    if (items.length === 0) {
+      alert('Agregue al menos un producto');
+      return;
+    }
 
     setLoading(true);
     try {
       await api.request('/delivery', {
         method: 'POST',
         body: JSON.stringify({
-          pedidoId: 0, // Se crea desde staff, el backend debe crear PEDIDO + PEDIDO_DELIVERY
+          pedidoId: 0,
           clienteId,
-          items: items.map(i => ({
-            productoId: i.productoId,
-            cantidad: i.cantidad,
-            nota: i.nota,
+          items: items.map((item) => ({
+            productoId: item.productoId,
+            cantidad: item.cantidad,
+            nota: item.nota,
           })),
           direccion,
           distritoId,
@@ -200,6 +271,7 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
           costoEnvio,
         }),
       });
+
       alert('Delivery creado exitosamente');
       onExito();
       onCerrar();
@@ -208,6 +280,29 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
     } finally {
       setLoading(false);
     }
+  };
+
+  const renderMapa = () => {
+    const pinsFiltrados = provinciaId ? mapPins.filter((pin) => pin.id_provincia === provinciaId) : mapPins;
+
+    return (
+      <div className="lg:col-span-1">
+        <MapLeaflet
+          pins={pinsFiltrados}
+          center={mapCenter ?? undefined}
+          zoom={15}
+          drawRadius={radioCoberturaKm}
+          provinciaId={provinciaId ?? undefined}
+          onClick={(e) => {
+            const { lat, lng } = e.latlng;
+            setMapCenter([lat, lng]);
+            void reverseGeocodeAdmin(lat, lng);
+            console.log('Punto local fijado en coordenadas:', { lat, lng });
+          }}
+          height="300px"
+        />
+      </div>
+    );
   };
 
   const renderPaso = () => {
@@ -220,21 +315,31 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
               <input
                 type="text"
                 value={clienteBuscar}
-                onChange={e => setClienteBuscar(e.target.value)}
-                placeholder="Buscar cliente por nombre, teléfono o documento..."
+                onChange={(e) => {
+                  setClienteBuscar(e.target.value);
+                  setMostrarClientes(true);
+                }}
+                placeholder="Buscar cliente por nombre..."
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
               />
               {mostrarClientes && clientes.length > 0 && (
                 <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {clientes.map(c => (
-                    <button
-                      key={c.id_cliente}
-                      onClick={() => { setClienteId(c.id_cliente); setClienteBuscar(c.nombre); setMostrarClientes(false); }}
-                      className="w-full px-3 py-2 text-left hover:bg-gray-100 border-b last:border-0"
-                    >
-                      {c.nombre}
-                    </button>
-                  ))}
+                  {clientes
+                    .filter((c) => c.nombre.toLowerCase().includes(clienteBuscar.toLowerCase()))
+                    .map((c) => (
+                      <button
+                        type="button"
+                        key={c.id_cliente}
+                        onClick={() => {
+                          setClienteId(c.id_cliente);
+                          setClienteBuscar(c.nombre);
+                          setMostrarClientes(false);
+                        }}
+                        className="w-full px-3 py-2 text-left hover:bg-gray-100 border-b last:border-0"
+                      >
+                        {c.nombre}
+                      </button>
+                    ))}
                 </div>
               )}
             </div>
@@ -245,6 +350,7 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
             )}
           </div>
         );
+
       case 2:
         return (
           <div className="space-y-4">
@@ -255,7 +361,7 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
                 <input
                   type="text"
                   value={direccion}
-                  onChange={e => setDireccion(e.target.value)}
+                  onChange={(e) => setDireccion(e.target.value)}
                   placeholder="Av. Los Incas 123, Urb. El Bosque"
                   className="w-full px-3 py-2 border rounded-lg"
                   required
@@ -266,7 +372,7 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
                 <input
                   type="text"
                   value={referencia}
-                  onChange={e => setReferencia(e.target.value)}
+                  onChange={(e) => setReferencia(e.target.value)}
                   placeholder="Frente al parque, casa azul, 2do piso"
                   className="w-full px-3 py-2 border rounded-lg"
                 />
@@ -276,7 +382,7 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
                 <input
                   type="tel"
                   value={telefono}
-                  onChange={e => setTelefono(e.target.value)}
+                  onChange={(e) => setTelefono(e.target.value)}
                   placeholder="987654321"
                   maxLength={9}
                   className="w-full px-3 py-2 border rounded-lg"
@@ -284,43 +390,57 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
                 />
               </div>
             </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Departamento *</label>
                 <select
-                  value={departamentoId || ''}
-                  onChange={e => setDepartamentoId(e.target.value ? Number(e.target.value) : null)}
+                  value={departamentoId ?? ''}
+                  onChange={(e) => setDepartamentoId(e.target.value ? Number(e.target.value) : null)}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
                   <option value="">Seleccionar</option>
-                  {departamentos.map(d => <option key={d.id_departamento} value={d.id_departamento}>{d.d_departamento}</option>)}
+                  {departamentos.map((d) => (
+                    <option key={d.id_departamento} value={d.id_departamento}>
+                      {d.d_departamento}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Provincia *</label>
                 <select
-                  value={provinciaId || ''}
-                  onChange={e => setProvinciaId(e.target.value ? Number(e.target.value) : null)}
+                  value={provinciaId ?? ''}
+                  onChange={(e) => setProvinciaId(e.target.value ? Number(e.target.value) : null)}
                   disabled={!departamentoId}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
                   <option value="">Seleccionar</option>
-                  {provincias.map(p => <option key={p.id_provincia} value={p.id_provincia}>{p.d_provincia}</option>)}
+                  {provincias.map((p) => (
+                    <option key={p.id_provincia} value={p.id_provincia}>
+                      {p.d_provincia}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Distrito *</label>
                 <select
-                  value={distritoId || ''}
-                  onChange={e => setDistritoId(e.target.value ? Number(e.target.value) : null)}
+                  value={distritoId ?? ''}
+                  onChange={(e) => setDistritoId(e.target.value ? Number(e.target.value) : null)}
                   disabled={!provinciaId}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
                   <option value="">Seleccionar</option>
-                  {distritos.map(d => <option key={d.id_distrito} value={d.id_distrito}>{d.d_distrito}</option>)}
+                  {distritos.map((d) => (
+                    <option key={d.id_distrito} value={d.id_distrito}>
+                      {d.d_distrito}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
+
             <div className="flex items-center gap-4">
               <div className="flex-1">
                 <label className="block text-sm font-medium mb-1">Costo Envío *</label>
@@ -328,54 +448,84 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
                   <input
                     type="number"
                     value={costoEnvio}
-                    onChange={e => setCostoEnvio(Number(e.target.value) || 0)}
+                    onChange={(e) => setCostoEnvio(Number(e.target.value) || 0)}
                     min="0"
                     step="0.1"
                     className="w-full px-3 py-2 border rounded-lg"
                   />
                   <span className="flex items-center text-gray-500">S/</span>
                 </div>
+                {provinciaId && distritoId && (
+                  <div className="mt-1 text-xs text-gray-500">
+                    <span className="font-medium text-gray-600">Provincia: </span>
+                    <span className="text-blue-600" style={{ marginLeft: '4px' }}>
+                      {provincias.find((p) => p.id_provincia === provinciaId)?.d_provincia || ''}
+                    </span>
+                    <span className="ml-2 text-gray-400">|</span>
+                    <span className="font-medium text-gray-600">Distrito: </span>
+                    <span className="text-green-600" style={{ marginLeft: '4px' }}>
+                      {distritos.find((d) => d.id_distrito === distritoId)?.d_distrito || ''}
+                    </span>
+                  </div>
+                )}
               </div>
               <Button variant="outline" onClick={handleSugerirCosto} disabled={!distritoId}>
                 Sugerir por distrito
               </Button>
             </div>
+
             {costoSugerido !== null && (
-              <div className={`p-3 rounded-lg ${fueraRadio ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
+              <div
+                className={`p-3 rounded-lg ${
+                  fueraRadio ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'
+                }`}
+              >
                 <span className="font-medium">Costo sugerido: </span>
                 <Badge variant={fueraRadio ? 'warning' : 'success'}>S/ {costoSugerido.toFixed(2)}</Badge>
                 {fueraRadio && <span className="ml-2 text-sm text-yellow-700">(Fuera de radio)</span>}
-                <Button size="sm" variant="secondary" onClick={() => setCostoEnvio(costoSugerido!)} className="ml-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setCostoEnvio(costoSugerido)}
+                  className="ml-2"
+                >
                   Usar
                 </Button>
               </div>
             )}
+
+            {renderMapa()}
           </div>
         );
+
       case 3:
         return (
           <div className="space-y-4">
             <h3 className="text-lg font-medium">3. Productos</h3>
             <div className="flex gap-2 mb-2">
               <select
-                value={categoriaActiva || ''}
-                onChange={e => setCategoriaActiva(e.target.value ? Number(e.target.value) : null)}
+                value={categoriaActiva ?? ''}
+                onChange={(e) => setCategoriaActiva(e.target.value ? Number(e.target.value) : null)}
                 className="px-3 py-2 border rounded-lg w-48"
               >
-                {categorias.map(c => <option key={c.id_categoria} value={c.id_categoria}>{c.nombre}</option>)}
+                {categorias.map((c) => (
+                  <option key={c.id_categoria} value={c.id_categoria}>
+                    {c.nombre}
+                  </option>
+                ))}
               </select>
               <input
                 type="text"
                 value={buscarProducto}
-                onChange={e => setBuscarProducto(e.target.value)}
+                onChange={(e) => setBuscarProducto(e.target.value)}
                 placeholder="Buscar producto..."
                 className="flex-1 px-3 py-2 border rounded-lg"
               />
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
               {productos
-                .filter(p => p.nombre.toLowerCase().includes(buscarProducto.toLowerCase()))
-                .map(p => (
+                .filter((p) => p.nombre.toLowerCase().includes(buscarProducto.toLowerCase()))
+                .map((p) => (
                   <div key={p.id_producto} className="bg-white border rounded-lg p-3 hover:shadow-md">
                     <p className="font-medium">{p.nombre}</p>
                     <p className="text-sm text-gray-500">S/ {p.precio.toFixed(2)}</p>
@@ -387,14 +537,17 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
             </div>
           </div>
         );
+
       case 4:
         return (
           <div className="space-y-4">
             <h3 className="text-lg font-medium">4. Confirmar Pedido</h3>
             <div className="bg-gray-50 rounded-lg p-4 space-y-2">
               {items.map((item, i) => (
-                <div key={i} className="flex justify-between text-sm">
-                  <span>{item.cantidad}x {item.nombre}</span>
+                <div key={`${item.productoId}-${i}`} className="flex justify-between text-sm">
+                  <span>
+                    {item.cantidad}x {item.nombre}
+                  </span>
                   <Badge variant="default">S/ {(item.precio * item.cantidad).toFixed(2)}</Badge>
                 </div>
               ))}
@@ -414,12 +567,18 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
               </div>
             </div>
             <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
-              <strong>Nota:</strong> Este pedido se crea para entrega (delivery). El pago se cobrará contra entrega (efectivo) o digital según acuerde con el cliente.
+              <strong>Nota:</strong> Este pedido se crea para entrega (delivery). El pago se cobrará contra
+              entrega (efectivo) o digital según acuerde con el cliente.
             </div>
           </div>
         );
+
+      default:
+        return null;
     }
   };
+
+  if (!abierto) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -431,36 +590,57 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
           </Button>
         </div>
 
-        {/* Stepper */}
+        {mostrarHero && (
+          <section className="y-flow-hero" aria-labelledby="admin-delivery-hero-title">
+            <div className="y-flow-hero__content">
+              <span className="y-flow-hero__eyebrow">Atención telefónica</span>
+              <h3 id="admin-delivery-hero-title" className="y-flow-hero__title">
+                Nuevo delivery
+              </h3>
+              <p className="y-flow-hero__description">
+                Registra el pedido del cliente, confirma la dirección y coordina su entrega desde un solo lugar.
+              </p>
+            </div>
+          </section>
+        )}
+
         <div className="px-4 py-3 bg-gray-50 border-b">
-          <div className="flex items-center justify-between">
-            {['Cliente', 'Dirección', 'Productos', 'Confirmar'].map((label, i) => (
-              <div key={i} className="flex items-center">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  i + 1 < paso ? 'bg-green-500 text-white' :
-                  i + 1 === paso ? 'bg-blue-500 text-white' :
-                  'bg-gray-200 text-gray-500'
-                }`}>
-                  {i + 1 < paso ? '✓' : i + 1}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            {['Cliente', 'Dirección', 'Productos', 'Confirmar'].map((label, index) => (
+              <div key={index} className="flex items-center min-w-0">
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                    index + 1 < paso
+                      ? 'bg-green-500 text-white'
+                      : index + 1 === paso
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-200 text-gray-500'
+                  }`}
+                >
+                  {index + 1 < paso ? '✓' : index + 1}
                 </div>
-                <span className={`ml-1 text-xs ${i + 1 <= paso ? 'text-gray-900' : 'text-gray-400'}`}>{label}</span>
-                {i < 3 && <div className={`w-16 h-0.5 mx-1 ${i + 1 < paso ? 'bg-green-500' : 'bg-gray-200'}`} />}
+                <span className={`ml-1 text-xs ${index + 1 <= paso ? 'text-gray-900' : 'text-gray-400'}`}>
+                  {label}
+                </span>
+                {index < 3 && (
+                  <div
+                    className={`w-16 h-0.5 mx-1 ${index + 1 < paso ? 'bg-green-500' : 'bg-gray-200'}`}
+                  />
+                )}
               </div>
             ))}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
-          {renderPaso()}
-        </div>
+        <div className="flex-1 overflow-y-auto p-4">{renderPaso()}</div>
 
         <div className="p-4 border-t flex justify-between">
-          <Button variant="secondary" onClick={() => setPaso(p => Math.max(1, p - 1))} disabled={paso === 1 || loading}>
+          <Button variant="secondary" onClick={() => setPaso((p) => Math.max(1, p - 1))} disabled={paso === 1 || loading}>
             Anterior
           </Button>
           <div className="flex gap-2">
             {paso < 4 ? (
-              <Button onClick={() => setPaso(p => Math.min(4, p + 1))} disabled={loading}>
+              <Button onClick={() => setPaso((p) => Math.min(4, p + 1))} disabled={loading}>
                 Siguiente
               </Button>
             ) : (

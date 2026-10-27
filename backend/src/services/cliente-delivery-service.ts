@@ -1,7 +1,7 @@
 import type { Delivery } from '../models/delivery.js';
 import type { SugerirCostoResult } from '../repositories/delivery-repository.js';
 import { crearDeliveryCliente, getDeliveryDetalle, getDeliveryUbicacion } from '../repositories/cliente-delivery-repository.js';
-import { sugerirCosto } from '../repositories/delivery-repository.js';
+import { getParametrosNegocio, sugerirCosto } from '../repositories/delivery-repository.js';
 import { DeliveryError } from '../models/delivery.js';
 
 export async function crearDeliveryClienteService(input: {
@@ -24,6 +24,10 @@ export async function crearDeliveryClienteService(input: {
 
 export async function sugerirCostoClienteService(lat: number | null, lng: number | null, distritoId: number): Promise<SugerirCostoResult> {
   return sugerirCosto(lat, lng, distritoId);
+}
+
+export async function getCoberturaDeliveryClienteService() {
+  return getParametrosNegocio();
 }
 
 export async function getDeliveryDetalleClienteService(id: number, clienteId: number): Promise<Delivery> {
