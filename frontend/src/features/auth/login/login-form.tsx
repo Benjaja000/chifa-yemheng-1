@@ -1,7 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { EQUIPOS, getEquipo, setEquipo } from '../../../utils/equipo';
 import { useAuth } from './auth-context';
 import { LOGIN_MENSAJES, loginSchema } from './login-types';
 import type { LoginErrorCode, LoginForm } from './login-types';
@@ -19,7 +18,6 @@ export function LoginForm() {
   const { login } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [verClave, setVerClave] = useState(false);
-  const [equipo, setEquipoSel] = useState<string>(() => getEquipo());
   const {
     register,
     handleSubmit,
@@ -29,7 +27,6 @@ export function LoginForm() {
   const onSubmit = handleSubmit(async (data) => {
     setError(null);
     try {
-      setEquipo(equipo);
       const destino = await login(data);
       window.location.assign(destino);
     } catch (e) {
@@ -119,30 +116,6 @@ export function LoginForm() {
           <span className="text-xs text-[#ffdcc3]/90">Recordar sesión</span>
         </label>
         <span className="text-xs text-[#e4beb9]/70">¿Olvidaste tu contraseña? La gestiona tu administrador.</span>
-      </div>
-
-      <div className="space-y-1.5">
-        <label htmlFor="equipo" className="block text-xs font-medium text-[#ffdcc3]">
-          Equipo <span className="font-normal text-[#e4beb9]/70">(opcional — si lo omites se usa la IP)</span>
-        </label>
-        <div className="relative flex items-center">
-          <span className="material-symbols-outlined pointer-events-none absolute left-3.5 text-lg text-[#ffb77d]/70">
-            computer
-          </span>
-          <select
-            id="equipo"
-            value={equipo}
-            onChange={(e) => setEquipoSel(e.target.value)}
-            className="h-11 w-full cursor-pointer appearance-none rounded-lg border border-[#5b403d] bg-[#250d09]/90 pr-3.5 pl-10 text-sm text-[#fff4e8] shadow-inner transition-all outline-none focus:border-[#d97707] focus:ring-1 focus:ring-[#d97707]"
-          >
-            <option value="">Sin equipo (usa IP)</option>
-            {EQUIPOS.map((q) => (
-              <option key={q} value={q}>
-                {q}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       <div className="pt-2">

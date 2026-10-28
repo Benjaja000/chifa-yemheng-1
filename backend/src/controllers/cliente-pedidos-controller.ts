@@ -1,6 +1,12 @@
 import type { Request, Response } from 'express';
 import { PedidoError } from '../models/pedido.js';
-import { comandaQuerySchema, cuentaSchema, detalleAddSchema, pedidoAbrirSchema } from '../schemas/pedido.js';
+import {
+  comandaQuerySchema,
+  cuentaSchema,
+  detalleAddSchema,
+  modoPagoMesaSchema,
+  pedidoAbrirSchema,
+} from '../schemas/pedido.js';
 import {
   agregarDetalleClienteService,
   abrirClienteService,
@@ -9,6 +15,7 @@ import {
   pedirCuentaClienteService,
   pedidosAbiertosPorMesaService,
   recalcularClienteService,
+  configurarModoPagoClienteService,
 } from '../services/cliente-pedidos-service.js';
 
 function errorPedido(res: Response, err: unknown): void {
@@ -16,7 +23,7 @@ function errorPedido(res: Response, err: unknown): void {
     const status =
       err.code === 'NOT_FOUND' || err.code === 'NO_COMANDA_ACTIVA'
         ? 404
-        : err.code === 'NO_PARTICIPANTE'
+        : err.code === 'NO_PARTICIPANTE' || err.code === 'NO_ES_ORGANIZADOR'
           ? 403
           : err.code === 'PEDIDO_FACTURADO' ||
               err.code === 'PEDIDO_ANULADO' ||
@@ -73,8 +80,13 @@ export async function postClienteDetalle(req: Request, res: Response): Promise<v
 }
 
 export async function postClienteRecalcular(req: Request, res: Response): Promise<void> {
+  const user = (req as Request & { user?: { sub: number } }).user;
+  if (!user) {
+    res.status(401).json({ error: 'CREDENCIALES_INVALIDAS' });
+    return;
+  }
   try {
-    const pedido = await recalcularClienteService(Number(req.params['id']));
+    const pedido = await recalcularClienteService(Number(req.params['id']), user.sub);
     res.json(pedido);
   } catch (err) {
     errorPedido(res, err);
@@ -107,8 +119,31 @@ export async function getClienteComandaActiva(req: Request, res: Response): Prom
     return;
   }
   try {
-    const comanda = await comandaActivaClienteService(parsed.data.mesaId);
+    const comanda = await comandaActivaClienteService(parsed.data.mesaId, user.sub);
     res.json(comanda ?? {});
+  } catch (err) {
+    errorPedido(res, err);
+  }
+}
+
+export async function patchClienteModoPago(req: Request, res: Response): Promise<void> {
+  const pedidoId = Number(req.params['id']);
+  const parsed = modoPagoMesaSchema.safeParse(req.body);
+  if (!Number.isInteger(pedidoId) || pedidoId <= 0 || !parsed.success) {
+    res.status(400).json({
+      error: 'VALIDATION_ERROR',
+      details: parsed.success ? undefined : parsed.error.flatten(),
+    });
+    return;
+  }
+  const user = (req as Request & { user?: { sub: number } }).user;
+  if (!user) {
+    res.status(401).json({ error: 'CREDENCIALES_INVALIDAS' });
+    return;
+  }
+  try {
+    const result = await configurarModoPagoClienteService(pedidoId, user.sub, parsed.data.modo);
+    res.json(result);
   } catch (err) {
     errorPedido(res, err);
   }

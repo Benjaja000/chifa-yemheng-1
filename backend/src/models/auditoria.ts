@@ -10,6 +10,7 @@ export interface Auditoria {
   idRegistro: number | null;
   valorAnterior: string | null;
   valorNuevo: string | null;
+  motivo: string | null;
   fecha: string;
   ip: string | null;
   terminal: string | null;

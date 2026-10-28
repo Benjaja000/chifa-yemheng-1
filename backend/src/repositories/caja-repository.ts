@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase.js';
+import { resumirMovimientosPorMedio } from '../utils/caja-totales.js';
 
 export interface Caja {
   id: number;
@@ -9,6 +10,7 @@ export interface Caja {
   turnoId: number | null;
   montoSistema: number | null;
   cierrePendiente: boolean;
+  netoPorMedio: { medio: string; total: number }[];
 }
 
 export interface MetodoPago {
@@ -42,6 +44,14 @@ export interface CierrePendiente {
 export interface CajaResponse {
   cajas: Caja[];
   metodosPago: MetodoPago[];
+  conceptos: ConceptoCaja[];
+}
+
+export interface ConceptoCaja {
+  id: number;
+  nombre: string;
+  tipoMovimiento: string;
+  afectaEfectivo: boolean;
 }
 
 export async function listarCajas(): Promise<Caja[]> {
@@ -60,6 +70,37 @@ export async function listarCajas(): Promise<Caja[]> {
   ]);
   if (error || turnosError) {
     throw new Error(`DB_LIST_FAIL: ${(error ?? turnosError)?.message ?? 'No se pudieron cargar las cajas'}`);
+  }
+  const activeTurns = ((turnos ?? []) as unknown as Record<string, unknown>[])
+    .filter((turno) => turno['situacion'] === 'A');
+  const activeTurnIds = activeTurns.map((turno) => Number(turno['id_aperturacaja']));
+  let movimientos: Record<string, unknown>[] = [];
+  if (activeTurnIds.length > 0) {
+    const { data: cobrados, error: cobrosError } = await supabase
+      .from('movimiento_caja')
+      .select('id_aperturacaja, monto, tipo_movimiento_caja(n_tipomovimiento), metodo_pago(n_metodopago)')
+      .in('id_aperturacaja', activeTurnIds)
+      .eq('estado', 'A');
+    if (cobrosError) throw new Error(`DB_LIST_FAIL: ${cobrosError.message}`);
+    movimientos = (cobrados ?? []) as unknown as Record<string, unknown>[];
+  }
+  const totalsByTurn = new Map<number, Map<string, number>>();
+  const movementsByTurn = new Map<number, { medio: string; monto: number; tipoMovimiento: string }[]>();
+  for (const movement of movimientos) {
+    const turnoId = Number(movement['id_aperturacaja']);
+    const metodo = movement['metodo_pago'] as Record<string, unknown> | null;
+    const tipo = movement['tipo_movimiento_caja'] as Record<string, unknown> | null;
+    const grouped = movementsByTurn.get(turnoId) ?? [];
+    grouped.push({
+      medio: String(metodo?.['n_metodopago'] ?? 'Otro'),
+      monto: Number(movement['monto']),
+      tipoMovimiento: String(tipo?.['n_tipomovimiento'] ?? ''),
+    });
+    movementsByTurn.set(turnoId, grouped);
+  }
+  for (const [turnoId, grouped] of movementsByTurn) {
+    const totals = resumirMovimientosPorMedio(grouped);
+    totalsByTurn.set(turnoId, new Map(totals.map(({ medio, total }) => [medio, total])));
   }
   const turnoPorCaja = new Map(
     ((turnos ?? []) as unknown as Record<string, unknown>[]).map((turno) => [
@@ -80,6 +121,10 @@ export async function listarCajas(): Promise<Caja[]> {
       ? Number(turnoPorCaja.get(Number(r['id_caja']))?.['monto_sistema'] ?? 0)
       : null,
     cierrePendiente: turnoPorCaja.get(Number(r['id_caja']))?.['situacion'] === 'P',
+    netoPorMedio: Array.from(
+      totalsByTurn.get(Number(turnoPorCaja.get(Number(r['id_caja']))?.['id_aperturacaja'])) ?? new Map<string, number>(),
+      ([medio, monto]) => ({ medio, total: monto }),
+    ),
   }));
 }
 
@@ -93,6 +138,7 @@ export async function listarMetodosPago(): Promise<MetodoPago[]> {
   if (error) {
     throw new Error(`DB_LIST_FAIL: ${error.message}`);
   }
+
   return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
     id: Number(r['id_metodopago']),
     nombre: String(r['n_metodopago'] ?? ''),
@@ -100,6 +146,24 @@ export async function listarMetodosPago(): Promise<MetodoPago[]> {
     requiereReferencia: String(r['requiere_referencia'] ?? 'N') === 'S',
     estadoRegistro: (r['estado'] === 'I' ? 'I' : 'A') as 'A' | 'I',
   }));
+}
+
+export async function listarConceptosCaja(): Promise<ConceptoCaja[]> {
+  const { data, error } = await supabase
+    .from('concepto_caja')
+    .select('id_concepto, n_concepto, afecta_efectivo, tipo_movimiento_caja(n_tipomovimiento)')
+    .eq('estado', 'A')
+    .order('n_concepto');
+  if (error) throw new Error(`DB_LIST_FAIL: ${error.message}`);
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => {
+    const tipo = row['tipo_movimiento_caja'] as Record<string, unknown> | null;
+    return {
+      id: Number(row['id_concepto']),
+      nombre: String(row['n_concepto'] ?? ''),
+      tipoMovimiento: String(tipo?.['n_tipomovimiento'] ?? ''),
+      afectaEfectivo: String(row['afecta_efectivo'] ?? 'N') === 'S',
+    };
+  });
 }
 
 /** Turno de caja (apertura_caja) activo del usuario en la caja indicada. */
@@ -776,6 +840,110 @@ export async function cobrarAtomic(args: {
     total: Number(row['total'] ?? 0),
     vuelto: Number(row['vuelto'] ?? 0),
   };
+}
+
+export async function cobrarAtomicConAportes(args: {
+  pedidoId: number;
+  usuarioId: number;
+  aperturaId: number;
+  tipoDocumento: string;
+  clienteId: number | null;
+  metodoPagoId: number;
+  montoRecibido: number | null;
+  referencia: string;
+  aportes: { clienteId: number; monto: number; referencia: string }[];
+}): Promise<{ idVenta: number; serie: string; numero: string; total: number; vuelto: number }> {
+  const { data, error } = await supabase.rpc('fn_cobrar_pedido_aportes_atomic', {
+    p_pedido: args.pedidoId,
+    p_usuario: args.usuarioId,
+    p_apertura: args.aperturaId,
+    p_tipodoc: args.tipoDocumento,
+    p_cliente: args.clienteId,
+    p_metodo: args.metodoPagoId,
+    p_recibido: args.montoRecibido,
+    p_ref: args.referencia,
+    p_aportes: args.aportes,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
+  if (!row) {
+    throw new Error('COBRO_SIN_RESULTADO');
+  }
+  return {
+    idVenta: Number(row['id_venta']),
+    serie: String(row['serie'] ?? ''),
+    numero: String(row['numero'] ?? ''),
+    total: Number(row['total'] ?? 0),
+    vuelto: Number(row['vuelto'] ?? 0),
+  };
+}
+
+export async function cobrarAtomicMixto(args: {
+  pedidoId: number;
+  usuarioId: number;
+  aperturaId: number;
+  tipoDocumento: string;
+  clienteId: number | null;
+  pagos: {
+    metodoPagoId: number;
+    monto: number;
+    montoRecibido: number | null;
+    referencia: string;
+    banco: string;
+    clienteId: number | null;
+  }[];
+  aportes: { clienteId: number; monto: number; referencia: string }[] | undefined;
+}): Promise<{ idVenta: number; serie: string; numero: string; total: number; vuelto: number }> {
+  const { data, error } = await supabase.rpc('fn_cobrar_pedido_mixto_atomic', {
+    p_pedido: args.pedidoId,
+    p_usuario: args.usuarioId,
+    p_apertura: args.aperturaId,
+    p_tipodoc: args.tipoDocumento,
+    p_cliente: args.clienteId,
+    p_pagos: args.pagos,
+    p_aportes: args.aportes ?? null,
+  });
+  if (error) {
+    if (error.code === 'PGRST202') {
+      throw new Error('MIGRACION_CAJA_PAGOS_MIXTOS_PENDIENTE');
+    }
+    throw new Error(error.message);
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
+  if (!row) throw new Error('COBRO_SIN_RESULTADO');
+  return {
+    idVenta: Number(row['id_venta']),
+    serie: String(row['serie'] ?? ''),
+    numero: String(row['numero'] ?? ''),
+    total: Number(row['total'] ?? 0),
+    vuelto: Number(row['vuelto'] ?? 0),
+  };
+}
+
+export async function registrarMovimientoCaja(args: {
+  aperturaId: number;
+  usuarioId: number;
+  conceptoId: number;
+  metodoPagoId: number;
+  monto: number;
+  descripcion: string;
+  referencia: string;
+  banco: string;
+}): Promise<number> {
+  const { data, error } = await supabase.rpc('fn_registrar_movimiento_caja_atomic', {
+    p_apertura: args.aperturaId,
+    p_usuario: args.usuarioId,
+    p_concepto: args.conceptoId,
+    p_metodo: args.metodoPagoId,
+    p_monto: args.monto,
+    p_descripcion: args.descripcion,
+    p_referencia: args.referencia,
+    p_banco: args.banco,
+  });
+  if (error) throw new Error(error.message);
+  return Number(data);
 }
 
 export async function solicitarCierreCaja(args: {

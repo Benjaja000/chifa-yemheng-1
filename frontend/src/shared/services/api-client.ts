@@ -61,19 +61,22 @@ class ApiClient {
 
   // Cliente Delivery
   crearDelivery(data: {
-    items: Array<{ productoId: number; cantidad: number; nota?: string; descuento?: number }>;
+    items: Array<{ productoId: number; cantidad: number; nota?: string }>;
     direccion: string;
     distritoId: number;
     referencia?: string;
     telefono?: string;
     latCliente?: number;
     lngCliente?: number;
-    metodoDigital: 'YAPE' | 'PLIN' | 'TARJETA' | 'TRANSFERENCIA';
   }) {
-    return this.request<{ idPedidoDelivery: number; situacion: string; costoEnvio: number }>('/cliente/delivery', {
+    return this.request<{ idPedidoDelivery: number; situacion: string; costoEnvio: number; costoConfirmado: boolean }>('/cliente/delivery', {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  getDeliveryActivoCliente() {
+    return this.request<{ idPedidoDelivery: number | null }>('/cliente/delivery');
   }
 
   sugerirCosto(distrito: number, lat?: number, lng?: number) {

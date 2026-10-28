@@ -43,6 +43,13 @@ export interface Ticket {
   fecha: string | null;
   comensales: number;
   total: number;
+  modoPagoMesa: 'CUENTA_UNICA' | 'POR_CONSUMO';
+  participantes?: {
+    clienteId: number;
+    nombre: string;
+    esOrganizador: boolean;
+    consumoEstimado: number;
+  }[];
   anulado: 'S' | 'N';
   facturado: 'S' | 'N';
   detalles: TicketLinea[];
@@ -56,6 +63,7 @@ export interface CajaInfo {
   turnoId: number | null;
   montoSistema: number | null;
   cierrePendiente: boolean;
+  netoPorMedio: { medio: string; total: number }[];
 }
 
 export interface MetodoPagoInfo {
@@ -68,6 +76,14 @@ export interface MetodoPagoInfo {
 export interface CajaMaestros {
   cajas: CajaInfo[];
   metodosPago: MetodoPagoInfo[];
+  conceptos: ConceptoCajaInfo[];
+}
+
+export interface ConceptoCajaInfo {
+  id: number;
+  nombre: string;
+  tipoMovimiento: string;
+  afectaEfectivo: boolean;
 }
 
 export interface CobroResult {
@@ -180,17 +196,39 @@ export function aperturarCaja(cajaId: number, montoInicial: number): Promise<{ i
 export function registrarCobro(input: {
   pedidoId: number;
   cajaId: number;
-  metodoPagoId: number;
   tipoDocumento: string;
   clienteId: number | null;
-  montoRecibido: number | null;
-  referencia: string;
+  pagos: {
+    metodoPagoId: number;
+    monto: number;
+    montoRecibido: number | null;
+    referencia: string;
+    banco: string;
+    clienteId: number | null;
+  }[];
+  aportes?: { clienteId: number; monto: number; referencia: string }[];
 }): Promise<CobroResult> {
   return fetch(`${BASE}/caja/cobro`, {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify(input),
   }).then(lanzar<CobroResult>);
+}
+
+export function registrarMovimientoCaja(input: {
+  cajaId: number;
+  conceptoId: number;
+  metodoPagoId: number;
+  monto: number;
+  descripcion: string;
+  referencia: string;
+  banco: string;
+}): Promise<{ movimientoId: number }> {
+  return fetch(`${BASE}/caja/movimientos`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(input),
+  }).then(lanzar<{ movimientoId: number }>);
 }
 
   export function listarCierresPendientes(): Promise<CierrePendiente[]> {

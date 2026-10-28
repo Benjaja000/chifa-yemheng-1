@@ -11,7 +11,7 @@ type Step = 'carta' | 'direccion' | 'confirmar';
 
 interface WizardState {
   step: Step;
-  items: Array<{ productoId: number; cantidad: number; precioUnit: number; nombre?: string; nota?: string; descuento?: number }>;
+  items: Array<{ productoId: number; cantidad: number; precioUnit: number; nombre?: string; nota?: string }>;
   direccion: string;
   distritoId: number | null;
   referencia: string;
@@ -19,7 +19,6 @@ interface WizardState {
   costoEnvio: number;
   latCliente?: number;
   lngCliente?: number;
-  metodoDigital: 'YAPE' | 'PLIN' | 'TARJETA' | 'TRANSFERENCIA';
 }
 
 const STEPS: Step[] = ['carta', 'direccion', 'confirmar'];
@@ -35,7 +34,6 @@ export function DeliveryWizard({ onCreated }: { onCreated?: (idPedidoDelivery: n
     referencia: '',
     telefono: '',
     costoEnvio: 0,
-    metodoDigital: 'YAPE',
   });
   const [loading, setLoading] = useState(false);
 
@@ -70,20 +68,31 @@ export function DeliveryWizard({ onCreated }: { onCreated?: (idPedidoDelivery: n
     setLoading(true);
     try {
       const result = await api.crearDelivery({
-        items: state.items.map(i => ({ productoId: i.productoId, cantidad: i.cantidad, nota: i.nota, descuento: i.descuento })),
+        items: state.items.map(({ productoId, cantidad, nota }) => ({ productoId, cantidad, nota })),
         direccion: state.direccion,
         distritoId: state.distritoId,
         referencia: state.referencia,
         telefono: state.telefono,
         latCliente: state.latCliente,
         lngCliente: state.lngCliente,
-        metodoDigital: state.metodoDigital,
       });
-      toast({ title: '¡Pedido creado!', description: `Delivery #${result.idPedidoDelivery} creado` });
+      toast({
+        title: 'Solicitud recibida',
+        description: `Pedido #${result.idPedidoDelivery} registrado. El equipo confirmará el costo de envío.`,
+      });
       if (onCreated) onCreated(result.idPedidoDelivery);
       else navigate(`/cliente/pedido/${result.idPedidoDelivery}`);
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      const code = error instanceof Error ? error.message : '';
+      const messages: Record<string, string> = {
+        FUERA_DE_COBERTURA: 'La dirección está fuera de la cobertura del restaurante.',
+        PRODUCTO_NO_DISPONIBLE: 'Uno de los productos ya no está disponible. Actualiza tu pedido.',
+        DISTRITO_NOT_FOUND: 'El distrito seleccionado no está disponible. Selecciónalo nuevamente.',
+        CLIENTE_NOT_FOUND: 'No encontramos tu cuenta. Inicia sesión nuevamente.',
+        DELIVERY_CREATE_FAIL: 'No se pudo registrar el pedido. Inténtalo nuevamente en unos minutos.',
+        VALIDATION_ERROR: 'Revisa la dirección, el teléfono y los productos del pedido.',
+      };
+      toast({ title: 'No se pudo crear el pedido', description: messages[code] ?? 'Ocurrió un error inesperado. Inténtalo nuevamente.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -113,9 +122,9 @@ export function DeliveryWizard({ onCreated }: { onCreated?: (idPedidoDelivery: n
         return <ConfirmarStep
           items={state.items}
           direccion={state.direccion}
+          referencia={state.referencia}
+          telefono={state.telefono}
           costoEnvio={state.costoEnvio}
-          metodoDigital={state.metodoDigital}
-          onMetodoChange={metodoDigital => updateState({ metodoDigital })}
           onSubmit={handleSubmit}
           onPrev={prevStep}
           loading={loading}

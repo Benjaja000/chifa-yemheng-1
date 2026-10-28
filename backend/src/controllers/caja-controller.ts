@@ -3,6 +3,7 @@ import {
   confirmarCierreCajaSchema,
   cierreCajaSchema,
   cobroCajaSchema,
+  movimientoCajaSchema,
   turnoCajaSchema,
 } from '../schemas/caja.js';
 import {
@@ -13,6 +14,7 @@ import {
   maestrosCajaService,
   pendientesCajaService,
   solicitarCierreCajaService,
+  registrarMovimientoCajaService,
 } from '../services/caja-service.js';
 import type { AuthenticatedRequest } from '../middlewares/auth-guard.js';
 
@@ -33,6 +35,7 @@ const CODIGOS_409 = new Set([
   'SOLO_CAJERO_APERTURA',
   'VALIDADOR_DEBE_SER_DISTINTO',
   'PEDIDOS_POR_COBRAR',
+  'MODO_NO_INDIVIDUAL',
 ]);
 const CODIGOS_422 = new Set([
   'MONTO_INVALIDO',
@@ -42,11 +45,30 @@ const CODIGOS_422 = new Set([
   'METODO_PAGO_INVALIDO',
   'TIPO_DOCUMENTO_INVALIDO',
   'TOTAL_CERO',
+  'APORTES_REQUERIDOS',
+  'APORTES_INVALIDOS',
+  'APORTES_DUPLICADOS',
+  'APORTE_NO_COINCIDE_CON_CONSUMO',
+  'APORTES_NO_CUBREN_TOTAL',
+  'APORTES_NO_PERMITIDOS',
+  'PAGOS_INVALIDOS',
+  'PAGADOR_REQUERIDO',
+  'PAGADORES_NO_PERMITIDOS',
+  'APORTE_NO_COINCIDE_CON_CONSUMO',
+  'BANCO_REQUERIDO',
+  'MOVIMIENTO_INVALIDO',
+  'PAGOS_NO_CUBREN_TOTAL',
+  'MONTO_RECIBIDO_NO_APLICA',
+  'DESCRIPCION_REQUERIDA',
 ]);
 
 function errorCaja(res: Response, err: unknown): void {
   const msg = err instanceof Error ? err.message : String(err);
   const base = msg.includes(': ') ? msg.slice(msg.indexOf(': ') + 2) : msg;
+  if (base === 'MIGRACION_CAJA_PAGOS_MIXTOS_PENDIENTE') {
+    res.status(503).json({ error: base });
+    return;
+  }
   if (CODIGOS_409.has(base)) {
     res.status(409).json({ error: base });
     return;
@@ -151,11 +173,24 @@ export async function postCajaCobro(req: Request, res: Response): Promise<void> 
         cajaId: input.cajaId,
         tipoDocumento: input.tipoDocumento,
         clienteId: input.clienteId,
-        metodoPagoId: input.metodoPagoId,
-        montoRecibido: input.montoRecibido,
-        referencia: input.referencia,
+        pagos: input.pagos,
+        aportes: input.aportes,
       }),
     );
+  } catch (err) {
+    errorCaja(res, err);
+  }
+}
+
+export async function postCajaMovimiento(req: Request, res: Response): Promise<void> {
+  const parsed = movimientoCajaSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() });
+    return;
+  }
+  const s = sesion(req);
+  try {
+    res.status(201).json(await registrarMovimientoCajaService({ ...parsed.data, usuarioId: s.id }));
   } catch (err) {
     errorCaja(res, err);
   }

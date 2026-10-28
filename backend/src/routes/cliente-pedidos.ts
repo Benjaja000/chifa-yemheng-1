@@ -4,6 +4,7 @@ import {
   getClientePedidoDetalle,
   getClientePedidosActivos,
   patchClienteCuenta,
+  patchClienteModoPago,
   postClienteDetalle,
   postClientePedido,
   postClienteRecalcular,
@@ -20,4 +21,5 @@ clientePedidosRouter.get('/:id', getClientePedidoDetalle);
 clientePedidosRouter.post('/', postClientePedido);
 clientePedidosRouter.post('/:id/detalles', postClienteDetalle);
 clientePedidosRouter.post('/:id/recalcular', postClienteRecalcular);
+clientePedidosRouter.patch('/:id/modo-pago', patchClienteModoPago);
 clientePedidosRouter.patch('/cuenta', patchClienteCuenta);

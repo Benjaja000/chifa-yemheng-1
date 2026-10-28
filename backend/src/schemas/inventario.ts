@@ -12,7 +12,7 @@ export const movimientoQuerySchema = z.object({
 export const movimientoCreateSchema = z.object({
   productoId: z.number().int().positive(),
   tipo: tipoMovimientoSchema,
-  cantidad: z.number().min(0),
+  cantidad: z.number().positive(),
   costo: z.number().min(0).default(0),
   motivo: z.string().max(200).optional(),
 });
@@ -29,7 +29,13 @@ export const recetaCreateSchema = z.object({
   cantidad: z.number().positive(),
 });
 
+export const recetaUpdateSchema = z.object({
+  cantidad: z.number().positive().optional(),
+  estado: z.enum(['A', 'I']).optional(),
+}).refine((value) => value.cantidad !== undefined || value.estado !== undefined);
+
 export type MovimientoQuery = z.infer<typeof movimientoQuerySchema>;
 export type MovimientoCreate = z.infer<typeof movimientoCreateSchema>;
 export type RecetaQuery = z.infer<typeof recetaQuerySchema>;
 export type RecetaCreate = z.infer<typeof recetaCreateSchema>;
+export type RecetaUpdate = z.infer<typeof recetaUpdateSchema>;

@@ -6,6 +6,7 @@ import {
   postCajaCierre,
   postCajaCobro,
   postCajaConfirmarCierre,
+  postCajaMovimiento,
   postCajaTurno,
 } from '../controllers/caja-controller.js';
 import { authGuard } from '../middlewares/auth-guard.js';
@@ -37,3 +38,4 @@ cajaRouter.post(
   requirePermisos('VEN_COBRAR', 'VEN_EMITIR'),
   postCajaCobro,
 );
+cajaRouter.post('/movimientos', requirePermisos('CAJ_EGRESO'), postCajaMovimiento);

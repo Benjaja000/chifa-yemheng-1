@@ -71,4 +71,14 @@ describe('calcularSugerenciaCosto', () => {
     expect(enLimite.dentroCobertura).toBe(true);
     expect(sinLimite.dentroCobertura).toBe(true);
   });
+
+  it('rechaza parámetros no finitos para no producir costos NaN', () => {
+    expect(() => calcularSugerenciaCosto({
+      ...parametrosBase,
+      costoBase: Number.NaN,
+      distanciaTarifaKm: null,
+      distanciaCoberturaKm: null,
+      radioCoberturaKm: null,
+    })).toThrow('INVALID_DELIVERY_COST_INPUT');
+  });
 });

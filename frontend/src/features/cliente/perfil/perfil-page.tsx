@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Receipt, CalendarDays, MapPin, LogOut, ChevronRight, Star } from 'lucide-react';
+import { X, Receipt, CalendarDays, MapPin, LogOut, ChevronRight } from 'lucide-react';
 import { useClienteAuth } from '../auth/cliente-auth-context';
 
 export function ClientePerfilPage() {
@@ -9,10 +9,21 @@ export function ClientePerfilPage() {
   const [datosAbiertos, setDatosAbiertos] = useState(false);
 
   return (
-    <div className="y-shell" style={{ padding: '24px 16px 140px', maxWidth: 520, margin: '0 auto' }}>
+    <div className="y-shell">
+      <main className="y-cliente-page">
+        <section className="y-flow-hero y-cliente-flow-hero" aria-labelledby="perfil-title">
+          <div className="y-flow-hero__content">
+            <span className="y-flow-hero__eyebrow">Tu cuenta</span>
+            <h1 id="perfil-title" className="y-flow-hero__title">Hola{cliente?.nombre ? `, ${cliente.nombre}` : ''}.</h1>
+            <p className="y-flow-hero__description">
+              Revisa los datos asociados a tu cuenta y accede a tus pedidos y reservas.
+            </p>
+            {cliente && <div className="y-cliente-hero__details"><span className="y-cliente-hero__detail">{cliente.puntos} puntos</span></div>}
+          </div>
+        </section>
       <div className="y-panel" style={{ padding: 22 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <h2 className="font-d" style={{ margin: 0, fontSize: 24 }}>Mi perfil</h2>
+          <h2 className="font-d" style={{ margin: 0, fontSize: 24 }}>Datos de la cuenta</h2>
           <Link to="/cliente/inicio" aria-label="Cerrar" className="y-icon-btn" style={{ width: 32, height: 32 }}>
             <X size={16} />
           </Link>
@@ -25,15 +36,13 @@ export function ClientePerfilPage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <b style={{ fontSize: 16, display: 'block' }}>{cliente?.nombre ?? 'Cliente'}</b>
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>{cliente?.email ?? '—'}</span>
-            <span className="y-chip ok" style={{ marginTop: 4, display: 'inline-flex' }}>
-              <Star size={10} /> Cliente frecuente
-            </span>
           </div>
         </div>
 
         <button
           onClick={() => setDatosAbiertos((v) => !v)}
-          style={{ width: '100%', marginTop: 16, padding: '12px 14px', borderRadius: 12, border: '1px solid var(--line2)', background: 'rgba(255,255,255,.04)', color: 'var(--cream)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14, fontWeight: 600 }}
+          className="y-row y-profile-toggle"
+          aria-expanded={datosAbiertos}
         >
           <span>Mis datos</span>
           <ChevronRight size={16} style={{ transform: datosAbiertos ? 'rotate(90deg)' : 'none', transition: '0.2s' }} />
@@ -60,7 +69,7 @@ export function ClientePerfilPage() {
                 </div>
               </div>
               <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, textAlign: 'center' }}>
-                Tus datos se gestionan desde tu cuenta de Google. Para cambiar nombre o foto, actualiza tu perfil de Google.
+                Los datos mostrados corresponden a la sesión de tu cuenta.
               </p>
             </motion.div>
           )}
@@ -74,7 +83,7 @@ export function ClientePerfilPage() {
             <CalendarDays size={18} /> Mis reservas <span className="r">Ver reservas <ChevronRight size={14} /></span>
           </Link>
           <Link to="/cliente/delivery" className="y-row">
-            <MapPin size={18} /> Direcciones <span className="r">Gestionar <ChevronRight size={14} /></span>
+            <MapPin size={18} /> Delivery <span className="r">Hacer un pedido <ChevronRight size={14} /></span>
           </Link>
         </div>
 
@@ -82,6 +91,7 @@ export function ClientePerfilPage() {
           <LogOut size={14} /> Cerrar sesión
         </button>
       </div>
+      </main>
     </div>
   );
 }

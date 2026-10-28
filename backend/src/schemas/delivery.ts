@@ -6,6 +6,7 @@ export const deliveryQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   estado: estadoSchema.optional(),
+  repartidorId: z.coerce.number().int().positive().optional(),
 });
 
 export const deliveryCreateSchema = z.object({
@@ -21,6 +22,7 @@ export const deliveryCreateSchema = z.object({
 
 export const deliveryAsignarSchema = z.object({
   repartidorId: z.number().int().positive(),
+  costoEnvio: z.number().finite().min(0).optional(),
 });
 
 export const sugerirCostoQuerySchema = z.object({

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, X, ChefHat, ConciergeBell, PackageCheck, Receipt } from 'lucide-react';
+import { ChefHat, ConciergeBell, PackageCheck, Receipt } from 'lucide-react';
 import { Loading } from '../../../components/ui';
 import DishImg from '../../../components/DishImg';
 import { useClienteAuth } from '../auth/cliente-auth-context';
@@ -101,14 +101,14 @@ export function ClientePedidoTrackingPage() {
       if (!res.ok) {
         setErrCuenta(
           body.error === 'YA_POR_COBRAR'
-            ? 'Ya pediste la cuenta; el mozo/ cajero la traerá en breve.'
+            ? 'La solicitud de cuenta ya figura para esta mesa.'
             : body.error === 'NO_COMANDA_ACTIVA'
               ? 'No hay comanda activa en tu mesa.'
               : body.error ?? 'No se pudo pedir la cuenta.',
         );
         return;
       }
-      setMsgCuenta('Cuenta pedida ✔ Un mozo o cajero se acerca a tu mesa.');
+      setMsgCuenta('Solicitud de cuenta enviada.');
       await cargar();
     } finally {
       setPidiendo(false);
@@ -145,13 +145,32 @@ export function ClientePedidoTrackingPage() {
           <p className="y-flow-hero__description">
             Pedido {pedido.numero} · {pedido.estadoComandaDerivado}
           </p>
+          <div className="y-flow-hero__actions y-client-actions">
+            {pedido.mesaId != null && pedido.anulado === 'N' && pedido.estadoComandaDerivado !== 'FACTURADO' && (
+              <Link className="y-btn y-btn-hero y-client-action-primary" to="/cliente/menu">
+                Agregar otra tanda
+              </Link>
+            )}
+            {pedido.mesaId != null && (
+              <Link className="y-btn y-btn-hero-secondary y-client-action-secondary" to="/cliente/mi-consumo">
+                Ver mi mesa
+              </Link>
+            )}
+            {puedePedirCuenta && (
+              <button
+                className="y-btn y-btn-hero-secondary y-client-action-secondary"
+                disabled={pidiendo || porCobrar}
+                onClick={() => void pedirCuenta()}
+              >
+                {porCobrar ? 'Cuenta pedida ✔' : pidiendo ? 'Pidiendo…' : 'Pedir la cuenta'}
+              </button>
+            )}
+          </div>
         </div>
       </section>
       <div className="y-panel" style={{ padding: 18 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <Link to="/cliente/inicio" style={{ color: 'var(--muted)' }}><ArrowLeft size={18} /></Link>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
           <h2 className="font-d" style={{ margin: 0, fontSize: 20 }}>{pedido.numero}</h2>
-          <Link to="/cliente/inicio" style={{ color: 'var(--muted)' }}><X size={18} /></Link>
         </div>
 
         {pedido.anulado === 'S' ? (
@@ -202,23 +221,9 @@ export function ClientePedidoTrackingPage() {
           <div className="y-banner" style={{ marginTop: 14 }}>{msgCuenta}</div>
         )}
         {errCuenta && (
-          <div className="y-banner" style={{ marginTop: 14, borderColor: 'rgba(239,68,68,.4)', background: 'rgba(239,68,68,.08)', color: '#fca5a5' }}>{errCuenta}</div>
+          <div className="y-banner" style={{ marginTop: 14, borderColor: '#ba1a1a', background: '#ffdad6', color: '#93000a' }}>{errCuenta}</div>
         )}
 
-        {puedePedirCuenta ? (
-          <button
-            className="y-btn red"
-            style={{ width: '100%', marginTop: 16 }}
-            disabled={pidiendo || porCobrar}
-            onClick={() => void pedirCuenta()}
-          >
-            {porCobrar ? 'Cuenta pedida ✔' : pidiendo ? 'Pidiendo…' : 'Pedir la cuenta'}
-          </button>
-        ) : (
-          <Link className="y-btn line" to="/cliente/inicio" style={{ width: '100%', marginTop: 16, justifyContent: 'center' }}>
-            Volver al inicio
-          </Link>
-        )}
       </div>
     </div>
   );

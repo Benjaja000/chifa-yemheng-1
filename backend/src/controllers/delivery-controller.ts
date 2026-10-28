@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import type { AuthenticatedRequest } from '../middlewares/auth-guard.js';
 import { deliveryAsignarSchema, deliveryCreateSchema, deliveryQuerySchema, parametrosNegocioUpdateSchema, sugerirCostoQuerySchema, tarifaUpsertSchema } from '../schemas/delivery.js';
 import { asignarRepartidorService, crearDeliveryService, despacharService, entregarService, listarDeliveryService, sugerirCostoService, getParametrosService, updateParametrosService, listarTarifasService, upsertTarifaService } from '../services/delivery-service.js';
+import { DeliveryError } from '../models/delivery.js';
 import { getPc } from '../utils/auditoria.js';
 
 function sesion(req: Request): { id: number; logeo: string; pc: string } {
@@ -24,18 +25,39 @@ export async function patchAsignar(req: Request, res: Response): Promise<void> {
   const parsed = deliveryAsignarSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() }); return; }
   const s = sesion(req);
-  try { res.json(await asignarRepartidorService(Number(req.params['id']), parsed.data, s.logeo, s.pc)); }
-  catch { res.status(404).json({ error: 'NOT_FOUND' }); }
+  try {
+    res.json(await asignarRepartidorService(Number(req.params['id']), parsed.data, s.logeo, s.pc));
+  } catch (e) {
+    if (e instanceof DeliveryError && e.code === 'NOT_FOUND') {
+      res.status(404).json({ error: 'NOT_FOUND' });
+      return;
+    }
+    throw e;
+  }
 }
 export async function patchDespachar(req: Request, res: Response): Promise<void> {
   const s = sesion(req);
-  try { res.json(await despacharService(Number(req.params['id']), s.logeo, s.pc)); }
-  catch { res.status(404).json({ error: 'NOT_FOUND' }); }
+  try {
+    res.json(await despacharService(Number(req.params['id']), s.logeo, s.pc));
+  } catch (e) {
+    if (e instanceof DeliveryError && e.code === 'NOT_FOUND') {
+      res.status(404).json({ error: 'NOT_FOUND' });
+      return;
+    }
+    throw e;
+  }
 }
 export async function patchEntregar(req: Request, res: Response): Promise<void> {
   const s = sesion(req);
-  try { res.json(await entregarService(Number(req.params['id']), s.logeo, s.pc)); }
-  catch { res.status(404).json({ error: 'NOT_FOUND' }); }
+  try {
+    res.json(await entregarService(Number(req.params['id']), s.logeo, s.pc));
+  } catch (e) {
+    if (e instanceof DeliveryError && e.code === 'NOT_FOUND') {
+      res.status(404).json({ error: 'NOT_FOUND' });
+      return;
+    }
+    throw e;
+  }
 }
 export async function getSugerirCosto(req: Request, res: Response): Promise<void> {
   const parsed = sugerirCostoQuerySchema.safeParse(req.query);

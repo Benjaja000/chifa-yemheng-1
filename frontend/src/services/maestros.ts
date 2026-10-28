@@ -1,5 +1,4 @@
 import { leerToken } from '../features/auth/login/auth-service';
-import { headerEquipo } from '../utils/equipo';
 
 /** Ítem de lista maestra viva (endpoint /maestros/*). Fuente única (cero consts). */
 export interface Maestro {
@@ -15,7 +14,6 @@ function headers(): HeadersInit {
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${leerToken() ?? ''}`,
-    ...headerEquipo(),
   };
 }
 

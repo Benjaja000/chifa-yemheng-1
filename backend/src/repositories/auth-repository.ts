@@ -26,6 +26,39 @@ export async function rpcPermisos(idUsuario: number): Promise<PermisoEfectivo[]>
   return (data ?? []) as PermisoEfectivo[];
 }
 
+export interface EstadoSesion {
+  authVersion: number;
+  estado: string;
+  bloqueado: string;
+  empleado: { estado: string; f_cese: string | null } | null;
+}
+
+export async function leerEstadoSesion(idUsuario: number): Promise<EstadoSesion | null> {
+  const { data, error } = await supabase
+    .from('usuario')
+    .select('auth_version, estado, bloqueado, empleado(estado, f_cese)')
+    .eq('id_usuario', idUsuario)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`DB_SESSION_STATE_FAIL: ${error.message}`);
+  }
+  if (!data) {
+    return null;
+  }
+  const row = data as unknown as {
+    auth_version: number;
+    estado: string;
+    bloqueado: string;
+    empleado: { estado: string; f_cese: string | null } | null;
+  };
+  return {
+    authVersion: Number(row.auth_version),
+    estado: row.estado,
+    bloqueado: row.bloqueado,
+    empleado: row.empleado,
+  };
+}
+
 export async function rpcCambiarClave(
   idUsuario: number,
   actual: string,
@@ -48,16 +81,24 @@ export async function leerEstadoUsuario(
 ): Promise<{ existe: boolean; bloqueado: boolean; inactivo: boolean }> {
   const { data, error } = await supabase
     .from('usuario')
-    .select('estado, bloqueado')
+    .select('estado, bloqueado, empleado(estado, f_cese)')
     .eq('logeo', logeo)
     .maybeSingle();
   if (error || !data) {
     return { existe: false, bloqueado: false, inactivo: false };
   }
-  const row = data as { estado: string; bloqueado: string };
+  const row = data as unknown as {
+    estado: string;
+    bloqueado: string;
+    empleado: { estado: string; f_cese: string | null } | null;
+  };
   return {
     existe: true,
     bloqueado: row.bloqueado === 'S',
-    inactivo: row.estado === 'I' || row.estado === 'E',
+    inactivo:
+      row.estado === 'I' ||
+      row.estado === 'E' ||
+      row.empleado?.estado !== 'A' ||
+      (row.empleado.f_cese !== null && row.empleado.f_cese <= new Date().toISOString().slice(0, 10)),
   };
 }

@@ -11,13 +11,14 @@ interface AuditoriaRow {
   id_registro: number | null;
   valor_anterior: string | null;
   valor_nuevo: string | null;
+  motivo: string | null;
   f_evento: string;
   ip: string | null;
   terminal: string | null;
 }
 
 const SELECT =
-  'id_auditoria, id_usuario, usuario(logeo), n_tabla, accion, id_registro, valor_anterior, valor_nuevo, f_evento, ip, terminal';
+  'id_auditoria, id_usuario, usuario(logeo), n_tabla, accion, id_registro, valor_anterior, valor_nuevo, motivo, f_evento, ip, terminal';
 
 function mapRow(row: AuditoriaRow): Auditoria {
   return {
@@ -29,6 +30,7 @@ function mapRow(row: AuditoriaRow): Auditoria {
     idRegistro: row.id_registro,
     valorAnterior: row.valor_anterior,
     valorNuevo: row.valor_nuevo,
+    motivo: row.motivo,
     fecha: row.f_evento,
     ip: row.ip,
     terminal: row.terminal,
@@ -59,7 +61,9 @@ export async function listarAuditoria(q: AuditoriaQuery): Promise<AuditoriaLista
     query = query.gte('f_evento', q.desde);
   }
   if (q.hasta) {
-    query = query.lte('f_evento', q.hasta);
+    const hastaExclusivo = new Date(`${q.hasta}T00:00:00.000Z`);
+    hastaExclusivo.setUTCDate(hastaExclusivo.getUTCDate() + 1);
+    query = query.lt('f_evento', `${hastaExclusivo.toISOString().slice(0, 10)}T00:00:00`);
   }
 
   const { data, error, count } = await query;

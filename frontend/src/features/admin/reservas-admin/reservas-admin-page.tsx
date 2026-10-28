@@ -3,10 +3,19 @@ import { motion } from 'framer-motion';
 import { Empty, Skeleton } from '../../../components/ui';
 import type { Reserva, EstadoReserva } from './reservas-types';
 import { ESTADO_RESERVA } from './reservas-types';
-import { listarReservas, crearReserva, confirmarReserva, anularReserva } from './reservas-service';
+import {
+  listarReservas,
+  crearReserva,
+  confirmarReserva,
+  atenderReserva,
+  listarMesasDisponibles,
+  anularReserva,
+  type MesaDisponible,
+} from './reservas-service';
 import { ESTADO_RESERVA as ER } from './reservas-types';
 import { PageHeader } from '../../../components/ui';
 import type { FiltrosReservas } from './reservas-service';
+import { listarMesas } from '../mesas/mesas-service';
 
 const LIMITE = 20;
 
@@ -15,6 +24,7 @@ export function AdminReservasPage() {
   const [tab, setTab] = useState<'lista' | 'calendario'>('lista');
   const [filtros, setFiltros] = useState<FiltrosReservas>({ page: 1, limit: LIMITE, fecha: '', mesaId: '', estado: '' });
   const [datos, setDatos] = useState<Reserva[]>([]);
+  const [mesas, setMesas] = useState<{ id: number; numero: string }[]>([]);
   const [total, setTotal] = useState(0);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +32,12 @@ export function AdminReservasPage() {
   const [form, setForm] = useState({ clienteId: 0, mesaId: 0, fecha: '', hora: '', comensales: 1, observacion: '' });
   const [guardando, setGuardando] = useState(false);
   const [modalConfirmar, setModalConfirmar] = useState<{ id: number; mesaId?: number; observacion?: string } | null>(null);
+  const [mesasDisponibles, setMesasDisponibles] = useState<MesaDisponible[]>([]);
+  const [mesaConfirmar, setMesaConfirmar] = useState('');
+  const [observacionConfirmar, setObservacionConfirmar] = useState('');
+  const [cargandoMesas, setCargandoMesas] = useState(false);
+  const [guardandoConfirmacion, setGuardandoConfirmacion] = useState(false);
+  const [errorConfirmar, setErrorConfirmar] = useState<string | null>(null);
   const [modalAnular, setModalAnular] = useState<{ id: number } | null>(null);
   const [modalAtender, setModalAtender] = useState<{ id: number } | null>(null);
   const [fCalendario, setFCalendario] = useState<Date>(new Date());
@@ -41,6 +57,11 @@ export function AdminReservasPage() {
   };
 
   useEffect(() => { void cargar(); }, [filtros.fecha, filtros.mesaId, filtros.estado, filtros.page, tab]);
+  useEffect(() => {
+    void listarMesas({ page: 1, limit: 100, ambiente: '', estado: 'A', buscar: '' })
+      .then((res) => setMesas(res.data.map(({ id, numero }) => ({ id, numero }))))
+      .catch((e: unknown) => setError((e as Error).message || 'No se pudieron cargar las mesas.'));
+  }, []);
 
   const totalPaginas = Math.max(1, Math.ceil(total / LIMITE));
   const totalDiasMes = new Date(fCalendario.getFullYear(), fCalendario.getMonth() + 1, 0).getDate();
@@ -86,14 +107,39 @@ export function AdminReservasPage() {
     }
   };
 
-  const handleConfirmar = async (id: number) => {
-    setModalConfirmar({ id, mesaId: undefined, observacion: undefined });
+  const handleConfirmar = async (reserva: Reserva) => {
+    setModalConfirmar({ id: reserva.id });
+    setMesasDisponibles([]);
+    setMesaConfirmar('');
+    setObservacionConfirmar(reserva.observacion ?? '');
+    setErrorConfirmar(null);
+    setCargandoMesas(true);
+    try {
+      const mesas = await listarMesasDisponibles(reserva.fecha, reserva.hora, reserva.comensales);
+      setMesasDisponibles(mesas.filter((mesa) => mesa.disponible));
+    } catch (e) {
+      setErrorConfirmar((e as Error).message || 'No se pudieron cargar las mesas disponibles.');
+    } finally {
+      setCargandoMesas(false);
+    }
   };
 
-  const handleConfirmarGuardar = async (id: number) => {
-    try { await confirmarReserva(id); await cargar(); }
-    catch { setError('No se pudo confirmar.'); }
-    setModalConfirmar(null);
+  const handleConfirmarGuardar = async () => {
+    if (!modalConfirmar || !mesaConfirmar) return;
+    setGuardandoConfirmacion(true);
+    setErrorConfirmar(null);
+    try {
+      await confirmarReserva(modalConfirmar.id, {
+        mesaId: Number(mesaConfirmar),
+        observacion: observacionConfirmar.trim() || undefined,
+      });
+      setModalConfirmar(null);
+      await cargar();
+    } catch (e) {
+      setErrorConfirmar((e as Error).message || 'No se pudo confirmar la reserva.');
+    } finally {
+      setGuardandoConfirmacion(false);
+    }
   };
 
   const handleAnular = async (id: number) => {
@@ -111,7 +157,7 @@ export function AdminReservasPage() {
   };
 
   const handleAtenderEjecutar = async (id: number) => {
-    try { await confirmarReserva(id); await cargar(); }
+    try { await atenderReserva(id); await cargar(); }
     catch { setError('No se pudo atender.'); }
     setModalAtender(null);
   };
@@ -187,7 +233,7 @@ export function AdminReservasPage() {
               className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm outline-none"
             >
               <option value="">Todas las mesas</option>
-              {/* Aquí cargaríamos lista de mesas, omitido por brevedad */}
+              {mesas.map((mesa) => <option key={mesa.id} value={mesa.id}>Mesa {mesa.numero}</option>)}
             </select>
             <input
               type="date"
@@ -218,6 +264,7 @@ export function AdminReservasPage() {
                   <th className="px-3 py-2">Fecha</th>
                   <th className="px-3 py-2">Hora</th>
                   <th className="px-3 py-2">Comensales</th>
+                  <th className="px-3 py-2">Observación</th>
                   <th className="px-3 py-2">Estado</th>
                   <th className="px-3 py-2">Acciones</th>
                 </tr>
@@ -231,6 +278,7 @@ export function AdminReservasPage() {
                     <td className="px-3 py-2">{r.fecha}</td>
                     <td className="px-3 py-2">{r.hora}</td>
                     <td className="px-3 py-2">{r.comensales}</td>
+                    <td className="max-w-48 px-3 py-2 text-[#333333]/70">{r.observacion || '—'}</td>
                     <td className="px-3 py-2">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${colorEstado(r.estado)}`}>
                         {ESTADO_RESERVA[r.estado]}
@@ -239,7 +287,7 @@ export function AdminReservasPage() {
                     <td className="px-3 py-2 flex gap-1">
                       {r.estado === 'P' && (
                         <button
-                          onClick={() => handleConfirmar(r.id)}
+                          onClick={() => void handleConfirmar(r)}
                           className="rounded bg-yellow-100 px-2 py-1 text-xs text-yellow-700 hover:bg-yellow-200"
                         >
                           Confirmar
@@ -364,7 +412,7 @@ export function AdminReservasPage() {
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <form className="flex flex-col gap-4 p-6">
+            <form onSubmit={(event) => { event.preventDefault(); void handleCrear(); }} className="flex flex-col gap-4 p-6">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="flex flex-col gap-1">
@@ -438,13 +486,14 @@ export function AdminReservasPage() {
               </div>
               <div className="flex justify-end gap-3 mt-4">
                 <button
+                  type="button"
                   onClick={() => setModal(false)}
                   className="rounded-xl bg-[#F5F5F5] px-5 py-2.5 text-sm font-semibold hover:bg-[#D9D9D9]"
                 >
                   Cancelar
                 </button>
                 <button
-                  onClick={() => void handleCrear()}
+                  type="submit"
                   disabled={guardando}
                   className="rounded-xl bg-[#A61E22] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#7F1518] disabled:opacity-60"
                 >
@@ -458,55 +507,82 @@ export function AdminReservasPage() {
 
       {modalConfirmar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-start justify-between border-b border-[#F5F5F5] px-6 py-4">
+          <div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between bg-gradient-to-r from-[#7F1518] to-[#A61E22] px-6 py-5 text-white">
               <div>
-                <h2 className="text-xl font-bold text-[#7F1518]">Confirmar Reserva #{modalConfirmar.id}</h2>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Aprobación de reserva</p>
+                <h2 className="mt-1 text-2xl font-bold">Reserva #{modalConfirmar.id}</h2>
               </div>
               <button
+                type="button"
                 onClick={() => setModalConfirmar(null)}
                 aria-label="Cerrar"
-                className="rounded-lg p-2 transition-colors hover:bg-[#D9D9D9]"
+                className="rounded-full p-2 transition-colors hover:bg-white/15"
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <form className="grid grid-cols-2 gap-4 p-6">
-              <div>
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs font-bold uppercase opacity-60">Mesa *</span>
+            <form
+              onSubmit={(event) => { event.preventDefault(); void handleConfirmarGuardar(); }}
+              className="space-y-5 p-6"
+            >
+              <div className="rounded-2xl bg-[#FAF6F2] p-4">
+                <p className="text-sm font-semibold text-[#7F1518]">Asigna una mesa disponible</p>
+                <p className="mt-1 text-xs text-[#333333]/65">
+                  Las opciones consideran el horario y la cantidad de comensales de la reserva.
+                </p>
+              </div>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#333333]/60">Mesa disponible *</span>
                   <select
                     id="mesaConfirmar"
-                    className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm outline-none"
+                    required
+                    value={mesaConfirmar}
+                    onChange={(event) => setMesaConfirmar(event.target.value)}
+                    disabled={cargandoMesas || mesasDisponibles.length === 0}
+                    className="rounded-xl border border-[#E8E1DB] bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-[#A61E22] focus:ring-2 focus:ring-[#A61E22]/15 disabled:bg-[#F5F5F5]"
                   >
-                    <option value="">Seleccione mesa</option>
-                    {/* Llenar con mesas libres via API */}
+                    <option value="">{cargandoMesas ? 'Buscando mesas disponibles…' : 'Selecciona una mesa'}</option>
+                    {mesasDisponibles.map((mesa) => (
+                      <option key={mesa.mesaId} value={mesa.mesaId}>
+                        Mesa {mesa.numero} · {mesa.capacidad} personas{mesa.ambiente ? ` · ${mesa.ambiente}` : ''}
+                      </option>
+                    ))}
                   </select>
-                </label>
-              </div>
-              <div>
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs font-bold uppercase opacity-60">Observación</span>
-                  <textarea
-                    className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm resize-none"
-                    rows={3}
-                    placeholder="Observación de confirmación..."
-                  />
-                </label>
-              </div>
-              <div className="flex justify-end gap-3 mt-6">
+                {mesasDisponibles.length === 0 && !cargandoMesas && !errorConfirmar && (
+                  <span className="mt-2 block text-sm text-amber-700">No hay mesas disponibles para esta fecha, hora y grupo.</span>
+                )}
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#333333]/60">Observación</span>
+                <textarea
+                  value={observacionConfirmar}
+                  onChange={(event) => setObservacionConfirmar(event.target.value)}
+                  maxLength={200}
+                  className="min-h-24 resize-y rounded-xl border border-[#E8E1DB] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#A61E22] focus:ring-2 focus:ring-[#A61E22]/15"
+                  placeholder="Indicaciones para el equipo o el cliente..."
+                />
+                <span className="text-right text-xs text-[#333333]/45">{observacionConfirmar.length}/200</span>
+              </label>
+              {errorConfirmar && (
+                <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {errorConfirmar}
+                </p>
+              )}
+              <div className="flex justify-end gap-3 border-t border-[#F0EBE7] pt-4">
                 <button
+                  type="button"
                   onClick={() => setModalConfirmar(null)}
-                  className="rounded-xl bg-[#F5F5F5] px-5 py-2.5 text-sm font-semibold hover:bg-[#D9D9D9]"
+                  className="rounded-xl border border-[#E8E1DB] px-5 py-2.5 text-sm font-semibold text-[#514A45] transition hover:bg-[#FAF6F2]"
                 >
                   Cancelar
                 </button>
                 <button
-                  onClick={() => void handleConfirmarGuardar(modalConfirmar.id)}
-                  disabled={!modalConfirmar.id}
-                  className="rounded-xl bg-[#A61E22] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#7F1518] disabled:opacity-60"
+                  type="submit"
+                  disabled={!mesaConfirmar || cargandoMesas || guardandoConfirmacion}
+                  className="rounded-xl bg-[#A61E22] px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#7F1518] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Confirmar
+                  {guardandoConfirmacion ? 'Confirmando…' : 'Confirmar reserva'}
                 </button>
               </div>
             </form>

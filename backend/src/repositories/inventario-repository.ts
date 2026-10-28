@@ -1,5 +1,5 @@
 import { supabase } from '../config/supabase.js';
-import type { MovimientoCreate, MovimientoQuery, RecetaCreate, RecetaQuery } from '../schemas/inventario.js';
+import type { MovimientoCreate, MovimientoQuery, RecetaCreate, RecetaQuery, RecetaUpdate } from '../schemas/inventario.js';
 import type { MovimientoInventario, MovimientoLista, Receta } from '../models/inventario.js';
 import { createAudit, updateAudit } from '../utils/auditoria.js';
 
@@ -22,10 +22,11 @@ interface RecetaRow {
   id_insumo: number;
   insumo: { n_producto: string; unidad_medida: { n_unidad: string } | null } | null;
   cantidad: number;
+  estado: 'A' | 'I' | 'E';
 }
 
 const MOV_SELECT = 'id_movimientoinv, id_producto, producto(n_producto), tipo_movimiento, cantidad, costo_unitario, observacion, f_movimiento, id_usuario';
-const RECETA_SELECT = 'id_receta, id_producto, producto!fk_receta_producto(n_producto), id_insumo, insumo:producto!fk_receta_insumo(n_producto, unidad_medida(n_unidad)), cantidad';
+const RECETA_SELECT = 'id_receta, id_producto, producto!fk_receta_producto(n_producto), id_insumo, insumo:producto!fk_receta_insumo(n_producto, unidad_medida(n_unidad)), cantidad, estado';
 
 function mapMovimiento(row: MovimientoRow): MovimientoInventario {
   return {
@@ -50,6 +51,7 @@ function mapReceta(row: RecetaRow): Receta {
     insumo: row.insumo?.n_producto ?? '',
     cantidad: Number(row.cantidad ?? 0),
     unidad: row.insumo?.unidad_medida?.n_unidad ?? '',
+    estado: row.estado ?? 'A',
   };
 }
 
@@ -78,49 +80,32 @@ export async function listarMovimientos(q: MovimientoQuery): Promise<MovimientoL
 }
 
 export async function crearMovimiento(input: MovimientoCreate, usuarioId: number, usucre: string, pc = ''): Promise<MovimientoInventario> {
-  // Obtener stock actual del producto
-  const { data: prod, error: prodErr } = await supabase
-    .from('producto')
-    .select('stock_actual, controla_stock')
-    .eq('id_producto', input.productoId)
-    .maybeSingle();
-  if (prodErr) throw new Error(`DB_PROD_FAIL: ${prodErr.message}`);
-  if (!prod) throw new Error('PRODUCTO_INVALIDO');
-
-  const stockActual = Number((prod as { stock_actual: number }).stock_actual ?? 0);
-
-  // Calcular nuevo stock según tipo
-  let nuevoStock = stockActual;
-  if (input.tipo === 'E' || input.tipo === 'A') {
-    nuevoStock = stockActual + input.cantidad;
-  } else if (input.tipo === 'S' || input.tipo === 'M') {
-    nuevoStock = Math.max(0, stockActual - input.cantidad);
+  const { data: id, error } = await supabase.rpc('fn_registrar_movimiento_inventario', {
+    p_producto: input.productoId,
+    p_usuario: usuarioId,
+    p_tipo: input.tipo,
+    p_cantidad: input.cantidad,
+    p_costo: input.costo,
+    p_observacion: input.motivo ?? null,
+    p_usucre: usucre,
+    p_pc: pc,
+  });
+  if (error) {
+    if (error.message.includes('PRODUCTO_INVALIDO') || error.message.includes('STOCK_INSUFICIENTE')) {
+      throw new Error(error.message);
+    }
+    throw new Error(`DB_CREATE_FAIL: ${error.message}`);
   }
-
-  // Insertar movimiento
-  const { data, error } = await supabase
+  const movimientoId = Number(id);
+  if (!Number.isInteger(movimientoId) || movimientoId <= 0) {
+    throw new Error('DB_CREATE_FAIL: movimiento sin identificador');
+  }
+  const { data, error: getError } = await supabase
     .from('movimiento_inventario')
-    .insert({
-      id_producto: input.productoId,
-      id_usuario: usuarioId,
-      tipo_movimiento: input.tipo,
-      cantidad: input.cantidad,
-      stock_anterior: stockActual,
-      stock_nuevo: nuevoStock,
-      costo_unitario: input.costo,
-      observacion: input.motivo || null,
-      ...createAudit(usucre, pc),
-    })
     .select(MOV_SELECT)
+    .eq('id_movimientoinv', movimientoId)
     .single();
-  if (error) throw new Error(`DB_CREATE_FAIL: ${error.message}`);
-
-  // Actualizar stock del producto
-  await supabase
-    .from('producto')
-    .update({ stock_actual: nuevoStock, ...updateAudit(usucre, pc) })
-    .eq('id_producto', input.productoId);
-
+  if (getError) throw new Error(`DB_GET_FAIL: ${getError.message}`);
   return mapMovimiento(data as unknown as MovimientoRow);
 }
 
@@ -147,14 +132,31 @@ export async function listarRecetas(q: RecetaQuery): Promise<{ data: Receta[]; p
 }
 
 export async function crearReceta(input: RecetaCreate, usucre: string, pc = ''): Promise<Receta> {
-  // Verificar que el insumo existe
-  const { data: insumo, error: insumoErr } = await supabase
+  const { data: productos, error: productoErr } = await supabase
     .from('producto')
-    .select('id_producto')
-    .eq('id_producto', input.insumoId)
+    .select('id_producto, tipo_producto, estado')
+    .in('id_producto', [input.productoId, input.insumoId]);
+  if (productoErr) throw new Error(`DB_PRODUCTO_FAIL: ${productoErr.message}`);
+  const rows = (productos ?? []) as { id_producto: number; tipo_producto: string; estado: string }[];
+  const producto = rows.find((row) => row.id_producto === input.productoId);
+  const insumo = rows.find((row) => row.id_producto === input.insumoId);
+  if (!producto || producto.estado !== 'A' || producto.tipo_producto === 'I') {
+    throw new Error('PRODUCTO_INVALIDO');
+  }
+  if (!insumo || insumo.estado !== 'A' || insumo.tipo_producto !== 'I') {
+    throw new Error('INSUMO_INVALIDO');
+  }
+
+  const { data: existente, error: recetaErr } = await supabase
+    .from('receta')
+    .select('id_receta')
+    .eq('id_producto', input.productoId)
+    .eq('id_insumo', input.insumoId)
+    .eq('estado', 'A')
+    .limit(1)
     .maybeSingle();
-  if (insumoErr) throw new Error(`DB_INSUMO_FAIL: ${insumoErr.message}`);
-  if (!insumo) throw new Error('INSUMO_INVALIDO');
+  if (recetaErr) throw new Error(`DB_GET_FAIL: ${recetaErr.message}`);
+  if (existente) throw new Error('RECETA_DUPLICADA');
 
   const { data, error } = await supabase
     .from('receta')
@@ -168,4 +170,58 @@ export async function crearReceta(input: RecetaCreate, usucre: string, pc = ''):
     .single();
   if (error) throw new Error(`DB_CREATE_FAIL: ${error.message}`);
   return mapReceta(data as unknown as RecetaRow);
+}
+
+export async function actualizarReceta(
+  id: number,
+  input: RecetaUpdate,
+  usumod: string,
+  pc = '',
+): Promise<Receta | null> {
+  const { data: actual, error: actualError } = await supabase
+    .from('receta')
+    .select('id_producto, id_insumo, estado')
+    .eq('id_receta', id)
+    .maybeSingle();
+  if (actualError) throw new Error(`DB_GET_FAIL: ${actualError.message}`);
+  if (!actual) return null;
+  const recetaActual = actual as { id_producto: number; id_insumo: number; estado: string };
+  if (input.estado === 'A' && recetaActual.estado !== 'A') {
+    const { data: productos, error: productoError } = await supabase
+      .from('producto')
+      .select('id_producto, tipo_producto, estado')
+      .in('id_producto', [recetaActual.id_producto, recetaActual.id_insumo]);
+    if (productoError) throw new Error(`DB_PRODUCTO_FAIL: ${productoError.message}`);
+    const rows = (productos ?? []) as { id_producto: number; tipo_producto: string; estado: string }[];
+    const producto = rows.find((row) => row.id_producto === recetaActual.id_producto);
+    const insumo = rows.find((row) => row.id_producto === recetaActual.id_insumo);
+    if (!producto || producto.estado !== 'A' || producto.tipo_producto === 'I') {
+      throw new Error('PRODUCTO_INVALIDO');
+    }
+    if (!insumo || insumo.estado !== 'A' || insumo.tipo_producto !== 'I') {
+      throw new Error('INSUMO_INVALIDO');
+    }
+    const { data: activa, error: activaError } = await supabase
+      .from('receta')
+      .select('id_receta')
+      .eq('id_producto', recetaActual.id_producto)
+      .eq('id_insumo', recetaActual.id_insumo)
+      .eq('estado', 'A')
+      .neq('id_receta', id)
+      .limit(1)
+      .maybeSingle();
+    if (activaError) throw new Error(`DB_GET_FAIL: ${activaError.message}`);
+    if (activa) throw new Error('RECETA_DUPLICADA');
+  }
+  const patch: Record<string, unknown> = { ...updateAudit(usumod, pc) };
+  if (input.cantidad !== undefined) patch['cantidad'] = input.cantidad;
+  if (input.estado !== undefined) patch['estado'] = input.estado;
+  const { data, error } = await supabase
+    .from('receta')
+    .update(patch)
+    .eq('id_receta', id)
+    .select(RECETA_SELECT)
+    .maybeSingle();
+  if (error) throw new Error(`DB_UPDATE_FAIL: ${error.message}`);
+  return data ? mapReceta(data as unknown as RecetaRow) : null;
 }

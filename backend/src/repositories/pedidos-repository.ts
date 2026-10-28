@@ -1,7 +1,8 @@
 import { supabase } from '../config/supabase.js';
-import type { DetallePedido, Pedido, PedidoLista } from '../models/pedido.js';
+import { PedidoError, type DetallePedido, type ModoPagoMesa, type ParticipantePedido, type Pedido, type PedidoLista } from '../models/pedido.js';
 import type { PedidoQuery } from '../schemas/pedido.js';
 import { createAudit, updateAudit } from '../utils/auditoria.js';
+import { distribuirConsumoPedido } from '../utils/pedido-consumo.js';
 
 interface DetalleRow {
   id_detallepedido: number;
@@ -55,6 +56,7 @@ interface PedidoRow {
   id_mesa: number | null;
   id_tipopedido: number;
   canal_origen: 'QR' | 'WEB' | 'PRESENCIAL';
+  modo_pago_mesa: ModoPagoMesa;
   id_estadopedido: number;
   id_usuario: number;
   id_empleado: number | null;
@@ -77,12 +79,31 @@ interface PedidoRow {
 }
 
 const SELECT_PEDIDO =
-  'id_pedido, numero_pedido, id_cliente, id_mesa, id_tipopedido, canal_origen, id_estadopedido, id_usuario, id_empleado, f_pedido, f_cierre, n_comensales, subtotal, descuento, servicio, igv, total, facturado, anulado, motivo_anulacion, observacion, estado, tipo_pedido(n_tipopedido), estado_pedido(descripcion), mesa(numero)';
+  'id_pedido, numero_pedido, id_cliente, id_mesa, id_tipopedido, canal_origen, modo_pago_mesa, id_estadopedido, id_usuario, id_empleado, f_pedido, f_cierre, n_comensales, subtotal, descuento, servicio, igv, total, facturado, anulado, motivo_anulacion, observacion, estado, tipo_pedido(n_tipopedido), estado_pedido(descripcion), mesa(numero)';
 
 const SELECT_DETALLE =
   'id_detallepedido, id_pedido, id_producto, cantidad, precio_unitario, descuento, sub_total, nota_cocina, estado_preparacion, es_cortesia, f_solicitud, f_atencion, f_entrega_mozo, id_usuario_entrega, id_cliente, estado, producto(n_producto)';
 
 const SELECT_PEDIDO_COCINA = `${SELECT_PEDIDO}, detalle_pedido(${SELECT_DETALLE})`;
+
+function lanzarErrorComanda(error: { message: string }, fallback: string): never {
+  const codigos = [
+    'MESA_POR_COBRAR',
+    'YA_POR_COBRAR',
+    'PEDIDO_FACTURADO',
+    'PEDIDO_ANULADO',
+    'NO_PARTICIPANTE',
+    'NO_ES_ORGANIZADOR',
+    'NO_COMANDA_ACTIVA',
+    'PRODUCTO_NO_DISPONIBLE',
+    'MESA_OCUPADA',
+  ] as const;
+  const codigo = codigos.find((candidate) => error.message.includes(candidate));
+  if (codigo) {
+    throw new PedidoError(codigo);
+  }
+  throw new Error(`${fallback}: ${error.message}`);
+}
 
 function mapDetalle(row: DetalleRow): DetallePedido {
   return {
@@ -115,6 +136,7 @@ function mapPedido(row: PedidoRow, detalles?: DetallePedido[]): Pedido {
     tipoId: row.id_tipopedido,
     tipo: row.tipo_pedido?.n_tipopedido ?? '',
     canalOrigen: row.canal_origen ?? 'PRESENCIAL',
+    modoPagoMesa: row.modo_pago_mesa ?? 'CUENTA_UNICA',
     estadoId: row.id_estadopedido,
     estado: row.estado_pedido?.descripcion ?? '',
     usuarioId: row.id_usuario,
@@ -197,7 +219,7 @@ export async function abrirPedido(
   obs: string,
   canalOrigen: 'QR' | 'WEB' | 'PRESENCIAL' = 'PRESENCIAL',
 ): Promise<{ id: number; numero: string }> {
-  const { data, error } = await supabase.rpc('fn_abrir_pedido', {
+  const { data, error } = await supabase.rpc('fn_abrir_pedido_validado', {
     p_tipo: tipo,
     p_usuario: usuario,
     p_mesa: mesa,
@@ -207,9 +229,9 @@ export async function abrirPedido(
     p_obs: obs,
   });
   if (error) {
-    throw new Error(`DB_OPEN_FAIL: ${error.message}`);
+    lanzarErrorComanda(error, 'DB_OPEN_FAIL');
   }
-  const result = data as { o_id: number; o_num: string } | null;
+  const result = (Array.isArray(data) ? data[0] : data) as { o_id: number; o_num: string } | null;
   if (!result || !result.o_id) {
     throw new Error('DB_OPEN_FAIL: sin retorno');
   }
@@ -223,6 +245,36 @@ export async function abrirPedido(
     }
   }
   return { id: result.o_id, numero: result.o_num };
+}
+
+export async function abrirOUnirseComandaQR(args: {
+  tipo: number;
+  usuario: number;
+  mesa: number;
+  cliente: number;
+  comensales: number;
+  obs: string;
+}): Promise<{ id: number; numero: string; esNuevo: boolean }> {
+  const { data, error } = await supabase.rpc('fn_abrir_o_unirse_comanda_qr', {
+    p_tipo: args.tipo,
+    p_usuario: args.usuario,
+    p_mesa: args.mesa,
+    p_cliente: args.cliente,
+    p_comensales: args.comensales,
+    p_obs: args.obs,
+  });
+  if (error) {
+    lanzarErrorComanda(error, 'DB_OPEN_FAIL');
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as {
+    id_pedido?: number;
+    numero_pedido?: string;
+    es_nuevo?: boolean;
+  } | null;
+  if (!row?.id_pedido || !row.numero_pedido) {
+    throw new Error('DB_OPEN_FAIL: sin retorno');
+  }
+  return { id: Number(row.id_pedido), numero: row.numero_pedido, esNuevo: row.es_nuevo === true };
 }
 
 export async function agregarDetalle(
@@ -240,7 +292,28 @@ export async function agregarDetalle(
     p_desc: descuento,
   });
   if (error) {
-    throw new Error(`DB_ADD_FAIL: ${error.message}`);
+    lanzarErrorComanda(error, 'DB_ADD_FAIL');
+  }
+}
+
+export async function agregarDetalleDeCliente(
+  pedidoId: number,
+  productoId: number,
+  cantidad: number,
+  nota: string,
+  descuento: number,
+  clienteId: number,
+): Promise<void> {
+  const { error } = await supabase.rpc('fn_agregar_detalle_pedido_cliente', {
+    p_pedido: pedidoId,
+    p_prod: productoId,
+    p_cant: cantidad,
+    p_nota: nota,
+    p_desc: descuento,
+    p_cliente: clienteId,
+  });
+  if (error) {
+    lanzarErrorComanda(error, 'DB_ADD_FAIL');
   }
 }
 
@@ -338,8 +411,8 @@ export async function idEstadoMesaPorNombre(descripcion: string): Promise<number
 
 export async function clienteParticipa(pedidoId: number, clienteId: number): Promise<boolean> {
   const { data, error } = await supabase
-    .from('detalle_pedido')
-    .select('id_detallepedido')
+    .from('pedido_participante')
+    .select('id_cliente')
     .eq('id_pedido', pedidoId)
     .eq('id_cliente', clienteId)
     .limit(1)
@@ -350,13 +423,117 @@ export async function clienteParticipa(pedidoId: number, clienteId: number): Pro
   return data != null;
 }
 
-export async function pedirCuentaMesa(mesaId: number, idEstadoPorCobrar: number): Promise<void> {
+export async function registrarParticipanteMesa(
+  pedidoId: number,
+  clienteId: number,
+): Promise<{ organizadorClienteId: number; esOrganizador: boolean; modoPagoMesa: ModoPagoMesa }> {
+  const { data, error } = await supabase.rpc('fn_registrar_participante_comanda', {
+    p_pedido: pedidoId,
+    p_cliente: clienteId,
+  });
+  if (error) {
+    lanzarErrorComanda(error, 'DB_JOIN_FAIL');
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as {
+    organizador_cliente_id?: number;
+    es_organizador?: boolean;
+    modo_pago_mesa?: ModoPagoMesa;
+  } | null;
+  if (!row?.organizador_cliente_id) {
+    throw new Error('DB_JOIN_FAIL: no se pudo registrar la participación');
+  }
+  return {
+    organizadorClienteId: Number(row.organizador_cliente_id),
+    esOrganizador: row.es_organizador === true,
+    modoPagoMesa: row.modo_pago_mesa ?? 'CUENTA_UNICA',
+  };
+}
+
+export async function listarParticipantesPedido(pedidoId: number): Promise<ParticipantePedido[]> {
+  const participantes = await listarParticipantesPedidos([pedidoId]);
+  return participantes.get(pedidoId) ?? [];
+}
+
+export async function listarParticipantesPedidos(
+  pedidoIds: number[],
+): Promise<Map<number, ParticipantePedido[]>> {
+  const result = new Map<number, ParticipantePedido[]>();
+  if (pedidoIds.length === 0) {
+    return result;
+  }
+  const { data, error } = await supabase
+    .from('pedido_participante')
+    .select('id_pedido, id_cliente, es_organizador, cliente:cliente(persona(nombre, ap_paterno, ap_materno))')
+    .in('id_pedido', pedidoIds)
+    .order('id_cliente', { ascending: true });
+  if (error) {
+    throw new Error(`DB_LIST_FAIL: ${error.message}`);
+  }
+  for (const pedidoId of pedidoIds) {
+    result.set(pedidoId, []);
+  }
+  for (const row of ((data ?? []) as unknown as {
+    id_pedido: number;
+    id_cliente: number;
+    es_organizador: boolean;
+    cliente: {
+      persona: { nombre: string; ap_paterno: string | null; ap_materno: string | null } | null;
+    } | {
+      persona: { nombre: string; ap_paterno: string | null; ap_materno: string | null } | null;
+    }[] | null;
+  }[])) {
+    const cliente = Array.isArray(row.cliente) ? row.cliente[0] : row.cliente;
+    const persona = cliente?.persona;
+    const participantes = result.get(row.id_pedido);
+    participantes?.push({
+      clienteId: row.id_cliente,
+      nombre: persona
+        ? `${persona.nombre} ${persona.ap_paterno ?? ''} ${persona.ap_materno ?? ''}`.trim()
+        : `Cliente ${row.id_cliente}`,
+      esOrganizador: row.es_organizador,
+    });
+  }
+  return result;
+}
+
+export async function configurarModoPagoMesa(
+  pedidoId: number,
+  clienteId: number,
+  modo: ModoPagoMesa,
+): Promise<ModoPagoMesa> {
+  const { data, error } = await supabase.rpc('fn_configurar_modo_pago_comanda', {
+    p_pedido: pedidoId,
+    p_cliente: clienteId,
+    p_modo: modo,
+  });
+  if (error) {
+    lanzarErrorComanda(error, 'DB_PAYMENT_MODE_FAIL');
+  }
+  return data as ModoPagoMesa;
+}
+
+export async function pedirCuentaMesa(
+  mesaId: number,
+  idEstadoPorCobrar: number,
+  logeo: string,
+  pc: string,
+): Promise<void> {
   const { error } = await supabase
     .from('mesa')
-    .update({ id_estadomesa: idEstadoPorCobrar, ...updateAudit('SYSTEM', '') })
+    .update({ id_estadomesa: idEstadoPorCobrar, ...updateAudit(logeo, pc) })
     .eq('id_mesa', mesaId);
   if (error) {
     throw new Error(`DB_CUENTA_FAIL: ${error.message}`);
+  }
+}
+
+export async function pedirCuentaComanda(pedidoId: number, clienteId: number): Promise<void> {
+  const { error } = await supabase.rpc('fn_pedir_cuenta_comanda', {
+    p_pedido: pedidoId,
+    p_cliente: clienteId,
+  });
+  if (error) {
+    lanzarErrorComanda(error, 'DB_CUENTA_FAIL');
   }
 }
 
@@ -428,5 +605,10 @@ export async function listarPedidosPorCobrar(): Promise<Pedido[]> {
       .map((mesa) => Number(mesa.id_mesa)),
   );
 
-  return pedidos.filter((pedido) => pedido.mesaId != null && mesasPorCobrar.has(pedido.mesaId));
+  const pendientes = pedidos.filter((pedido) => pedido.mesaId != null && mesasPorCobrar.has(pedido.mesaId));
+  const porPedido = await listarParticipantesPedidos(pendientes.map((pedido) => pedido.id));
+  return pendientes.map((pedido) => ({
+    ...pedido,
+    participantes: distribuirConsumoPedido(pedido, porPedido.get(pedido.id) ?? []),
+  }));
 }

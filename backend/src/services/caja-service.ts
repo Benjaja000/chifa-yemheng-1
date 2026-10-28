@@ -2,20 +2,31 @@ import type { CajaResponse } from '../repositories/caja-repository.js';
 import type { Pedido } from '../models/pedido.js';
 import {
   abrirCaja,
-  cobrarAtomic,
+  cobrarAtomicMixto,
   confirmarCierreCaja,
   listarCierresPendientes,
   listarCajas,
   listarMetodosPago,
+  listarConceptosCaja,
+  registrarMovimientoCaja,
   solicitarCierreCaja,
   turnoAbiertoDeCaja,
   type CierrePendiente,
 } from '../repositories/caja-repository.js';
-import { listarPedidosPorCobrar } from '../repositories/pedidos-repository.js';
+import { listarPedidosPorCobrar, obtenerPedido } from '../repositories/pedidos-repository.js';
 
 export async function maestrosCajaService(): Promise<CajaResponse> {
-  const [cajas, metodosPago] = await Promise.all([listarCajas(), listarMetodosPago()]);
-  return { cajas, metodosPago };
+  const [cajas, metodosPago, conceptos] = await Promise.all([listarCajas(), listarMetodosPago(), listarConceptosCaja()]);
+  return {
+    cajas,
+    metodosPago,
+    conceptos: conceptos.filter((concepto) => !esConceptoCobro(concepto.nombre)),
+  };
+}
+
+function esConceptoCobro(nombre: string): boolean {
+  const clave = nombre.trim().toUpperCase();
+  return clave === 'VENTA AL CONTADO' || clave.startsWith('COBRO CON TARJETA') || clave.startsWith('COBRO BILLETERA');
 }
 
 export async function pendientesCajaService(): Promise<Pedido[]> {
@@ -40,25 +51,102 @@ export async function cobrarService(args: {
   cajaId: number;
   tipoDocumento: string;
   clienteId: number | null;
-  metodoPagoId: number;
-  montoRecibido: number | null;
-  referencia: string;
+  pagos: {
+    metodoPagoId: number;
+    monto: number;
+    montoRecibido: number | null;
+    referencia: string;
+    banco: string;
+    clienteId: number | null;
+  }[];
+  aportes?: { clienteId: number; monto: number; referencia: string }[];
 }): Promise<{ idVenta: number; serie: string; numero: string; total: number; vuelto: number }> {
   const apertura = await turnoAbiertoDeCaja(args.cajaId);
   if (!apertura) {
     throw new Error('NO_CAJA_ABIERTA');
   }
-  const result = await cobrarAtomic({
+  const pedido = await obtenerPedido(args.pedidoId);
+  if (!pedido) {
+    throw new Error('PEDIDO_NOT_FOUND');
+  }
+  if (pedido.modoPagoMesa === 'POR_CONSUMO' && !args.aportes) {
+    throw new Error('APORTES_REQUERIDOS');
+  }
+  if (pedido.modoPagoMesa === 'CUENTA_UNICA' && args.aportes) {
+    throw new Error('APORTES_NO_PERMITIDOS');
+  }
+  const cents = (amount: number) => Math.round(amount * 100);
+  const paymentTotal = args.pagos.reduce((sum, payment) => sum + cents(payment.monto), 0);
+  if (args.pagos.length === 0 || paymentTotal <= 0) throw new Error('PAGOS_INVALIDOS');
+
+  const metodos = await listarMetodosPago();
+  for (const payment of args.pagos) {
+    const method = metodos.find((item) => item.id === payment.metodoPagoId);
+    if (!method) throw new Error('METODO_PAGO_INVALIDO');
+    if (method.requiereReferencia && !payment.referencia.trim()) throw new Error('REFERENCIA_REQUERIDA');
+    if (method.nombre.toUpperCase().includes('TRANSF') && !payment.banco.trim()) throw new Error('BANCO_REQUERIDO');
+    if (method.afectaEfectivo && cents(payment.montoRecibido ?? payment.monto) < cents(payment.monto)) {
+      throw new Error('EFECTIVO_INSUFICIENTE');
+    }
+  }
+  if (args.aportes) {
+    const byPayer = new Map<number, number>();
+    for (const payment of args.pagos) {
+      if (!payment.clienteId) throw new Error('PAGADOR_REQUERIDO');
+      byPayer.set(payment.clienteId, (byPayer.get(payment.clienteId) ?? 0) + cents(payment.monto));
+    }
+    const shares = new Map(args.aportes.map((share) => [share.clienteId, cents(share.monto)]));
+    if (
+      byPayer.size !== shares.size
+      || [...shares].some(([clientId, amount]) => byPayer.get(clientId) !== amount)
+      || paymentTotal !== [...shares.values()].reduce((sum, amount) => sum + amount, 0)
+    ) {
+      throw new Error('APORTE_NO_COINCIDE_CON_CONSUMO');
+    }
+  } else if (args.pagos.some((payment) => payment.clienteId !== null)) {
+    throw new Error('PAGADORES_NO_PERMITIDOS');
+  }
+
+  const result = await cobrarAtomicMixto({
     pedidoId: args.pedidoId,
     usuarioId: args.usuarioId,
     aperturaId: apertura.id,
     tipoDocumento: args.tipoDocumento,
     clienteId: args.clienteId,
-    metodoPagoId: args.metodoPagoId,
-    montoRecibido: args.montoRecibido,
-    referencia: args.referencia,
+    pagos: args.pagos,
+    aportes: args.aportes,
   });
-  return result;
+  const change = args.pagos.reduce((sum, payment) => {
+    const method = metodos.find((item) => item.id === payment.metodoPagoId);
+    if (!method?.afectaEfectivo) return sum;
+    return sum + Math.max(0, cents(payment.montoRecibido ?? payment.monto) - cents(payment.monto));
+  }, 0) / 100;
+  return { ...result, vuelto: change };
+}
+
+export async function registrarMovimientoCajaService(args: {
+  cajaId: number;
+  usuarioId: number;
+  conceptoId: number;
+  metodoPagoId: number;
+  monto: number;
+  descripcion: string;
+  referencia: string;
+  banco: string;
+}): Promise<{ movimientoId: number }> {
+  const turno = await turnoAbiertoDeCaja(args.cajaId);
+  if (!turno) throw new Error('NO_CAJA_ABIERTA');
+  const [conceptos, metodos] = await Promise.all([listarConceptosCaja(), listarMetodosPago()]);
+  const concepto = conceptos.find((item) => item.id === args.conceptoId && !esConceptoCobro(item.nombre));
+  const metodo = metodos.find((item) => item.id === args.metodoPagoId);
+  if (!concepto || !metodo) throw new Error('MOVIMIENTO_INVALIDO');
+  if (metodo.requiereReferencia && !args.referencia.trim()) throw new Error('REFERENCIA_REQUERIDA');
+  if (metodo.nombre.toUpperCase().includes('TRANSF') && !args.banco.trim()) throw new Error('BANCO_REQUERIDO');
+  const movimientoId = await registrarMovimientoCaja({
+    ...args,
+    aperturaId: turno.id,
+  });
+  return { movimientoId };
 }
 
 export async function cierresPendientesService(): Promise<CierrePendiente[]> {
@@ -74,9 +162,6 @@ export async function solicitarCierreCajaService(args: {
   const turno = await turnoAbiertoDeCaja(args.cajaId);
   if (!turno) {
     throw new Error('TURNO_NO_ABIERTO');
-  }
-  if (turno.usuarioId !== args.usuarioId) {
-    throw new Error('SOLO_CAJERO_APERTURA');
   }
   const result = await solicitarCierreCaja({
     aperturaId: turno.id,

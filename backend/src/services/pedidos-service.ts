@@ -147,8 +147,8 @@ export async function recalcularService(pedidoId: number, roles: string[] = []):
 export async function pedirCuentaStaffService(
   pedidoId: number,
   idUsuario: number,
-  _logeo: string,
-  _pc = '',
+  logeo: string,
+  pc = '',
   roles: string[] = [],
 ): Promise<{ ok: true; pedidoId: number; estado: string }> {
   const pedido = await repoObtener(pedidoId);
@@ -175,7 +175,7 @@ export async function pedirCuentaStaffService(
   if (!idPorCobrar) {
     throw new PedidoError('VALIDATION_ERROR');
   }
-  await pedirCuentaMesa(pedido.mesaId, idPorCobrar);
+  await pedirCuentaMesa(pedido.mesaId, idPorCobrar, logeo, pc);
   await auditar(idUsuario, 'PEDIR_CUENTA_STAFF', pedidoId, `Mesa ${pedido.mesaId}`);
   return { ok: true as const, pedidoId, estado: 'POR COBRAR' };
 }

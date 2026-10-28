@@ -386,6 +386,7 @@ interface PedidoAbiertoRow {
   id_pedido: number;
   id_mesa: number;
   numero_pedido: string;
+  canal_origen: 'QR' | 'WEB' | 'PRESENCIAL' | null;
   total: number;
   n_comensales: number;
   empleado: { persona: { nombre: string; ap_paterno: string | null; ap_materno: string | null } | null } | null;
@@ -395,7 +396,7 @@ interface PedidoAbiertoRow {
 export async function ocupacionMesas(): Promise<OcupacionMesa[]> {
   const { data, error } = await supabase
     .from('pedido')
-    .select('id_pedido, id_mesa, numero_pedido, total, n_comensales, empleado(persona(nombre, ap_paterno, ap_materno))')
+    .select('id_pedido, id_mesa, numero_pedido, canal_origen, total, n_comensales, empleado(persona(nombre, ap_paterno, ap_materno))')
     .eq('facturado', 'N')
     .eq('anulado', 'N')
     .eq('estado', 'A')
@@ -464,6 +465,7 @@ export async function ocupacionMesas(): Promise<OcupacionMesa[]> {
     return {
       mesaId,
       pedido: r.numero_pedido,
+      canalOrigen: r.canal_origen ?? null,
       total: Number(r.total ?? 0),
       comensales: Number(r.n_comensales ?? 0),
       mozo: mozo || '—',

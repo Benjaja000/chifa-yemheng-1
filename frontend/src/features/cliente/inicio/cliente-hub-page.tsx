@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { CalendarDays, ClipboardList, ReceiptText, ShoppingBag, Star, UserRound, UtensilsCrossed } from 'lucide-react';
 import { useClienteAuth } from '../auth/cliente-auth-context';
 import { useCart } from '../../../contexts/CartContext';
 
@@ -7,54 +8,97 @@ export function ClienteHubPage() {
   const { mesaId, count, total } = useCart();
 
   return (
-    <div className="y-shell" style={{ padding: '24px 16px 140px', maxWidth: 520, margin: '0 auto' }}>
-      <h1 className="font-d" style={{ fontSize: 28, margin: '0 0 8px' }}>Hola, {cliente?.nombre ?? 'Cliente'}</h1>
-      <p style={{ color: 'var(--muted)', margin: '0 0 24px' }}>Tus puntos: {cliente?.puntos ?? 0}</p>
-
-      {mesaId ? (
-        <div className="y-panel" style={{ padding: 16, marginBottom: 16 }}>
-          <p style={{ margin: 0, fontSize: 13 }}>Mesa asignada: <b>{mesaId}</b> · Carrito: {count} items (S/ {total.toFixed(2)})</p>
-          <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-            <Link className="y-btn red sm" to="/cliente/menu">Ver carta</Link>
-            <Link className="y-btn line sm" to="/cliente/comanda">Mi comanda</Link>
+    <div className="y-shell">
+      <main className="y-cliente-page">
+        <section className="y-flow-hero y-cliente-flow-hero" aria-labelledby="cliente-home-title">
+          <div className="y-flow-hero__content">
+            <span className="y-flow-hero__eyebrow">Chifa Yemheng</span>
+            <h1 id="cliente-home-title" className="y-flow-hero__title">
+              {cliente?.nombre ? `Hola, ${cliente.nombre}.` : 'Bienvenido.'}
+            </h1>
+            <p className="y-flow-hero__description">
+              Consulta la carta, revisa tus pedidos y gestiona tus reservas desde aquí.
+            </p>
+            <div className="y-cliente-hero__details">
+              {cliente && (
+                <span className="y-cliente-hero__detail"><Star size={15} /> {cliente.puntos} puntos</span>
+              )}
+              {mesaId && <span className="y-cliente-hero__detail">Mesa {mesaId}</span>}
+              {count > 0 && (
+                <span className="y-cliente-hero__detail">
+                  <ShoppingBag size={15} /> {count} {count === 1 ? 'producto' : 'productos'} · S/ {total.toFixed(2)}
+                </span>
+              )}
+            </div>
+            <div className="y-flow-hero__actions y-client-actions">
+              {mesaId && count > 0 ? (
+                <Link className="y-btn y-btn-hero y-client-action-primary" to="/cliente/menu">
+                  Agregar platos
+                </Link>
+              ) : (
+                <Link className="y-btn y-btn-hero y-client-action-primary" to={mesaId ? '/cliente/mi-consumo' : '/cliente/menu'}>
+                  {mesaId ? `Ver mi mesa · ${mesaId}` : 'Ver carta'}
+                </Link>
+              )}
+              {mesaId && count > 0 && <Link className="y-btn y-btn-hero-secondary y-client-action-secondary" to="/cliente/mi-consumo">Ver mi comanda</Link>}
+              {mesaId && count === 0 && <Link className="y-btn y-btn-hero-secondary y-client-action-secondary" to="/cliente/menu">Agregar platos</Link>}
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="y-panel" style={{ padding: 16, marginBottom: 16 }}>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>No tienes mesa asignada. Escanea el QR de tu mesa para pedir.</p>
-          <Link className="y-btn red sm" to="/cliente/login" style={{ marginTop: 12, display: 'inline-flex' }}>Escanear mesa</Link>
-        </div>
-      )}
+        </section>
 
-      <div className="y-tiles" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <Link to="/cliente/menu" className="y-tile" style={{ padding: 16 }}>
-          <div className="ic"><span style={{ fontSize: 20 }}>🍽️</span></div>
-          <b style={{ fontSize: 13 }}>Carta</b>
-          <span style={{ fontSize: 11, color: 'var(--muted)' }}>Ver menú y pedir</span>
-        </Link>
-        <Link to="/cliente/reservas" className="y-tile" style={{ padding: 16 }}>
-          <div className="ic"><span style={{ fontSize: 20 }}>📅</span></div>
-          <b style={{ fontSize: 13 }}>Reservas</b>
-          <span style={{ fontSize: 11, color: 'var(--muted)' }}>Reservar mesa</span>
-        </Link>
-        <Link to="/cliente/historial" className="y-tile" style={{ padding: 16 }}>
-          <div className="ic"><span style={{ fontSize: 20 }}>📋</span></div>
-          <b style={{ fontSize: 13 }}>Historial</b>
-          <span style={{ fontSize: 11, color: 'var(--muted)' }}>Mis pedidos</span>
-        </Link>
-        <Link to="/cliente/mi-consumo" className="y-tile" style={{ padding: 16 }}>
-          <div className="ic"><span style={{ fontSize: 20 }}>🧾</span></div>
-          <b style={{ fontSize: 13 }}>Mi consumo</b>
-          <span style={{ fontSize: 11, color: 'var(--muted)' }}>Comanda en vivo</span>
-        </Link>
-        <Link to="/cliente/perfil" className="y-tile" style={{ padding: 16 }}>
-          <div className="ic"><span style={{ fontSize: 20 }}>👤</span></div>
-          <b style={{ fontSize: 13 }}>Perfil</b>
-          <span style={{ fontSize: 11, color: 'var(--muted)' }}>Mis datos</span>
-        </Link>
-      </div>
+        <section aria-labelledby="cliente-secciones-title">
+          <div className="y-cliente-section-heading">
+            <div>
+              <span className="y-cliente-kicker">Tu cuenta</span>
+              <h2 id="cliente-secciones-title" className="font-d">¿Qué necesitas hoy?</h2>
+            </div>
+          </div>
+          {mesaId ? (
+            <div className="y-panel y-cliente-table-card">
+              <div>
+                <b>Mesa vinculada: {mesaId}</b>
+                <p>{count > 0 ? 'Tu selección actual está guardada en el carrito.' : 'Aún no tienes productos en el carrito.'}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="y-banner y-cliente-table-card">
+              <p>Para asociar un pedido a una mesa, escanea su QR desde la carta.</p>
+            </div>
+          )}
+        </section>
 
-      <button onClick={() => void logoutCliente()} className="y-btn line" style={{ marginTop: 24, width: '100%' }}>Cerrar sesión</button>
+        <div className="y-tiles y-cliente-tiles">
+          <Link to="/cliente/menu" className="y-tile">
+            <div className="ic"><UtensilsCrossed size={20} /></div>
+            <b>Carta</b>
+            <span>Consulta los platos disponibles.</span>
+          </Link>
+          <Link to="/cliente/reservas" className="y-tile">
+            <div className="ic"><CalendarDays size={20} /></div>
+            <b>Reservas</b>
+            <span>Solicita o consulta una reserva.</span>
+          </Link>
+          <Link to="/cliente/historial" className="y-tile">
+            <div className="ic"><ClipboardList size={20} /></div>
+            <b>Historial</b>
+            <span>Consulta pedidos y reservas.</span>
+          </Link>
+          <Link to="/cliente/mi-consumo" className="y-tile">
+            <div className="ic"><ReceiptText size={20} /></div>
+            <b>Mi consumo</b>
+            <span>Revisa la comanda de tu mesa.</span>
+          </Link>
+          <Link to="/cliente/perfil" className="y-tile">
+            <div className="ic"><UserRound size={20} /></div>
+            <b>Perfil</b>
+            <span>Consulta los datos de tu cuenta.</span>
+          </Link>
+        </div>
+
+        {cliente && (
+          <button onClick={() => void logoutCliente()} className="y-btn line y-cliente-logout">Cerrar sesión</button>
+        )}
+      </main>
     </div>
   );
 }

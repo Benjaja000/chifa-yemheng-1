@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
 import { useCart } from '../../../contexts/CartContext';
+import { useClienteAuth } from '../auth/cliente-auth-context';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1';
 
@@ -18,6 +19,7 @@ interface MesaInfo {
 export default function MesaQrPage() {
   const { id } = useParams();
   const { setMesaId } = useCart();
+  const { cliente } = useClienteAuth();
   const [mesa, setMesa] = useState<MesaInfo | null>(null);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(true);
@@ -92,9 +94,19 @@ export default function MesaQrPage() {
         <p style={{ color: 'var(--muted)', fontSize: 12, margin: '14px 0' }}>
           Abre la cámara de tu celular y escanea el código. Tus acompañantes comparten esta misma comanda.
         </p>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <Link className="y-btn red" to="/cliente/login">Ver carta y pedir</Link>
-          <Link className="y-btn line" to="/cliente/login">Mi comanda</Link>
+        <div className="y-client-actions">
+          <Link
+            className="y-btn y-btn-hero y-client-action-primary"
+            to={cliente ? '/cliente/menu' : `/cliente/login?mesa=${encodeURIComponent(mesa.qr ?? id ?? '')}`}
+          >
+            Ver carta y pedir
+          </Link>
+          <Link
+            className="y-btn y-btn-hero-secondary y-client-action-secondary"
+            to={cliente ? '/cliente/mi-consumo' : `/cliente/login?mesa=${encodeURIComponent(mesa.qr ?? id ?? '')}`}
+          >
+            Mi comanda
+          </Link>
         </div>
       </motion.div>
     </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { LayoutDashboard, LayoutGrid, ShoppingBag, Tag, Users, UserRound, BarChart3, Menu, X, LogOut, Flame, CalendarDays, Armchair, ShieldCheck, Wallet, Bike, Package } from 'lucide-react';
 import { useAuth } from '../features/auth/login/auth-context';
 import { useTheme } from '../theme/theme-context';
@@ -47,6 +47,7 @@ export default function StaffLayout() {
   const { tema, cambiarTema } = useTheme();
   const nav = useNavigate();
   const { pathname } = useLocation();
+  const reduceMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
   const [verClave, setVerClave] = useState(false);
   const [actual, setActual] = useState('');
@@ -123,7 +124,17 @@ export default function StaffLayout() {
             <button className="y-icon-btn" onClick={() => cambiarTema(tema === 'claro' ? 'oscuro' : 'claro')} aria-label="Tema">{tema === 'claro' ? '🌙' : '☀️'}</button>
           </div>
         </div>
-        <motion.div id="contenido" tabIndex={-1} key={pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }} style={{ padding: 22, maxWidth: 1240 }}><Outlet /></motion.div>
+        <motion.div
+          id="contenido"
+          tabIndex={-1}
+          key={pathname}
+          initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }}
+          style={{ padding: 22, maxWidth: 1240 }}
+        >
+          <Outlet />
+        </motion.div>
       </div>
 
       {verClave && (

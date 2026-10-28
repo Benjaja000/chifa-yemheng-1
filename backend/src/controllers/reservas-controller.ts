@@ -26,8 +26,29 @@ export async function patchConfirmar(req: Request, res: Response): Promise<void>
   const parsed = reservaConfirmarSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() }); return; }
   const s = sesion(req);
-  try { res.json(await confirmarService(Number(req.params['id']), parsed.data, s.logeo, s.pc)); }
-  catch { res.status(404).json({ error: 'NOT_FOUND' }); }
+  try {
+    res.json(await confirmarService(Number(req.params['id']), parsed.data, s.logeo, s.pc));
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    if (error.message === 'NOT_FOUND') {
+      res.status(404).json({ error: 'NOT_FOUND' });
+      return;
+    }
+    if (error.message === 'MESA_NOT_FOUND') {
+      res.status(404).json({ error: 'MESA_NOT_FOUND' });
+      return;
+    }
+    if (
+      error.message === 'ESTADO_INVALIDO'
+      || error.message.startsWith('CAPACIDAD_INSUFICIENTE')
+      || error.message.startsWith('MESA_NO_LIBRE')
+      || error.message.startsWith('MESA_NO_DISPONIBLE')
+    ) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function patchAtender(req: Request, res: Response): Promise<void> {

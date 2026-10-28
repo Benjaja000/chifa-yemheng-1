@@ -115,10 +115,12 @@ export async function confirmarReserva(id: number, input: ReservaConfirmar, usum
   // Buscamos la reserva actual para obtener comensales
   const { data: reservaActual, error: errRes } = await supabase
     .from('reserva')
-    .select('n_personas')
+    .select('n_personas, situacion, f_reserva')
     .eq('id_reserva', id)
     .maybeSingle();
   if (errRes) throw new Error(`DB_GET_FAIL: ${errRes.message}`);
+  if (!reservaActual) throw new Error('NOT_FOUND');
+  if (reservaActual.situacion !== 'P') throw new Error('ESTADO_INVALIDO');
 
   const comensales = reservaActual?.n_personas ?? 1;
 
@@ -132,14 +134,26 @@ export async function confirmarReserva(id: number, input: ReservaConfirmar, usum
     throw new Error('MESA_NO_LIBRE: la mesa no está en estado LIBRE');
   }
 
-  // Opcional: validar que no haya otro pedido/reserva activo en esa fecha/hora
-  // (aquí simplificamos omitiendo cruce de horarios complejos)
+  if (mesa.estado !== 'A') throw new Error('MESA_NO_LIBRE: la mesa está inactiva');
+
+  const fechaReserva = String(reservaActual.f_reserva).slice(0, 10);
+  const horaReserva = String(reservaActual.f_reserva).slice(11, 16);
+  const disponibilidad = await verificarDisponibilidad({
+    fecha: fechaReserva,
+    hora: horaReserva,
+    comensales,
+  });
+  const mesaEnHorario = disponibilidad.find((item) => item.mesaId === input.mesaId);
+  if (!mesaEnHorario?.disponible) {
+    throw new Error(`MESA_NO_DISPONIBLE: ${mesaEnHorario?.razon ?? 'La mesa ya no está disponible'}`);
+  }
 
   const { data, error } = await supabase
     .from('reserva')
     .update({ 
       situacion: 'C', 
       id_mesa: input.mesaId,
+      ...(input.observacion !== undefined ? { observacion: input.observacion || null } : {}),
       ...updateAudit(usumod, pc) 
     })
     .eq('id_reserva', id)
@@ -150,10 +164,11 @@ export async function confirmarReserva(id: number, input: ReservaConfirmar, usum
   if (!data) throw new Error('NOT_FOUND');
 
   // Actualizar estado operativo de la mesa a RESERVADA (id_estadomesa = 3)
-  await supabase
+  const { error: mesaError } = await supabase
     .from('mesa')
-    .update({ id_estadomesa: 3 }) // 3 = RESERVADA según BD seed
+    .update({ id_estadomesa: 3, ...updateAudit(usumod, pc) }) // 3 = RESERVADA según BD seed
     .eq('id_mesa', input.mesaId);
+  if (mesaError) throw new Error(`DB_UPDATE_FAIL: ${mesaError.message}`);
 
   // Registrar adelanto en MOVIMIENTO_CAJA si aplica (BR-DER-053)
   const reservaData = data as Record<string, unknown>;
@@ -171,10 +186,10 @@ export async function confirmarReserva(id: number, input: ReservaConfirmar, usum
         signo: '+',
         monto: (reservaData['adelanto'] as number),
         usucre: usumod,
-        pccre: '',
+        pccre: pc || null,
         feccre: new Date().toISOString(),
         usumod: '',
-        pcmod: '',
+        pcmod: null,
         fecmod: null,
       });
     }
@@ -202,10 +217,11 @@ export async function atenderReserva(id: number, usumod: string, pc = ''): Promi
     .maybeSingle();
   if (errR) throw new Error(`DB_GET_FAIL: ${errR.message}`);
   if (r?.id_mesa) {
-    await supabase
+    const { error: mesaError } = await supabase
       .from('mesa')
-      .update({ id_estadomesa: 1 }) // LIBRE
+      .update({ id_estadomesa: 1, ...updateAudit(usumod, pc) }) // LIBRE
       .eq('id_mesa', r.id_mesa);
+    if (mesaError) throw new Error(`DB_UPDATE_FAIL: ${mesaError.message}`);
   }
 
   return mapRow(data as unknown as ReservaRow);
@@ -229,10 +245,11 @@ export async function anularReserva(id: number, usumod: string, pc = ''): Promis
     .maybeSingle();
   if (errR) throw new Error(`DB_GET_FAIL: ${errR.message}`);
   if (r?.id_mesa) {
-    await supabase
+    const { error: mesaError } = await supabase
       .from('mesa')
-      .update({ id_estadomesa: 1 }) // LIBRE
+      .update({ id_estadomesa: 1, ...updateAudit(usumod, pc) }) // LIBRE
       .eq('id_mesa', r.id_mesa);
+    if (mesaError) throw new Error(`DB_UPDATE_FAIL: ${mesaError.message}`);
   }
 
   return mapRow(data as unknown as ReservaRow);
@@ -280,7 +297,7 @@ export async function reprogramarReserva(id: number, input: ReservaReprogramar, 
 }
 
 export async function verificarDisponibilidad(q: DisponibilidadQuery): Promise<DisponibilidadMesa[]> {
-  const { fecha, hora, comensales: _comensales } = q;
+  const { fecha, hora, comensales } = q;
 
   const horaMin = `${hora}:00`;
 
@@ -303,6 +320,14 @@ export async function verificarDisponibilidad(q: DisponibilidadQuery): Promise<D
     let disponible = true;
     let razon = '';
 
+    if (mesa.estado !== 'A') {
+      disponible = false;
+      razon = 'Mesa inactiva';
+    } else if (mesa.capacidad < comensales) {
+      disponible = false;
+      razon = `Capacidad insuficiente: mesa para ${mesa.capacidad}, reserva para ${comensales}`;
+    }
+
     // Verificar solapa con reservas en el mismo horario
     const ocupadaPorReserva = (reservas ?? []).some((r: any) => {
       const rFec = r.f_reserva?.slice(0, 10);
@@ -316,23 +341,16 @@ export async function verificarDisponibilidad(q: DisponibilidadQuery): Promise<D
       // Verificar fecha coincidente y solape de hora (simplificación: misma hora exacta)
       const solapa = rFec === fecha && rHora === horaMin;
       if (solapa) {
-        // Verificar capacidad
-        if (rPersonas > mesa.capacidad) {
-          disponible = false;
-          razon = `Capacidad insuficiente: reserva para ${rPersonas} personas, mesa tiene ${mesa.capacidad}`;
-          return true; // already occupied
-        }
-        // Si la mesa ya fue marcada ocupada, también
-        if (!disponible) return true;
         disponible = false;
         razon = `Mesa ocupada por reserva a las ${rHora} para ${rPersonas} personas`;
+        return true;
       }
       return false;
     });
 
     if (ocupadaPorReserva) {
       // Ya setting disponible=false y razon; continuar
-    } else {
+    } else if (disponible) {
       // Verificar si la mesa está LIBRE operativamente
       if (mesa.id_estadomesa !== 1) { // 1 = LIBRE
         disponible = false;

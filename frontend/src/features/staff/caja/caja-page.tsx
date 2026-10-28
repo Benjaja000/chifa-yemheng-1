@@ -3,6 +3,7 @@ import { ErrorBox, Loading } from '../../../components/ui';
 import { Ico } from '../../../components/Icon';
 import { fmtPEN } from '../../../lib/format';
 import { leerPermisos } from '../../auth/login/auth-service';
+import { StaffFeedbackModal, type StaffFeedback } from '../staff-feedback-modal';
 import {
   aperturarCaja,
   confirmarCierreCaja,
@@ -10,16 +11,19 @@ import {
   listarCajaMaestros,
   listarCajaPendientes,
   registrarCobro,
+  registrarMovimientoCaja,
   solicitarCierreCaja,
   type CajaInfo,
+  type CajaMaestros,
   type CierrePendiente,
+  type ConceptoCajaInfo,
   type MetodoPagoInfo,
   type Ticket,
 } from '../staff-service';
 
 function mensajeCaja(codigo: string): string {
   const mensajes: Record<string, string> = {
-    EFECTIVO_INSUFICIENTE: 'El monto recibido no cubre el total de la cuenta.',
+    EFECTIVO_INSUFICIENTE: 'El efectivo recibido no cubre el importe asignado a efectivo.',
     REFERENCIA_REQUERIDA: 'Ingresa el número de operación para este método de pago.',
     PEDIDO_NO_POR_COBRAR: 'La cuenta todavía no fue solicitada por la mesa.',
     PEDIDO_FACTURADO: 'Este pedido ya fue cobrado.',
@@ -31,16 +35,28 @@ function mensajeCaja(codigo: string): string {
     RUC_INVALIDO: 'El RUC asociado al cliente no es válido.',
     FACTURA_REQUIERE_EMPRESA: 'Selecciona un cliente asociado a una empresa con RUC.',
     MONTO_INVALIDO: 'Ingresa un monto válido.',
+    APORTES_PENDIENTES: 'Asigna a cada participante pagos que cubran exactamente su consumo.',
+    PAGOS_NO_CUBREN_TOTAL: 'La suma de los medios de pago debe cubrir exactamente la cuenta.',
+    BANCO_REQUERIDO: 'Selecciona o ingresa el banco de la transferencia.',
+    PAGADOR_REQUERIDO: 'Asigna cada pago al integrante que lo realiza.',
+    APORTE_NO_COINCIDE_CON_CONSUMO: 'El total pagado por cada integrante debe coincidir con su consumo asignado.',
+    PAGO_INCOMPLETO: 'Completa el importe, efectivo recibido, referencia o banco requerido en cada pago.',
+    MIGRACION_CAJA_PAGOS_MIXTOS_PENDIENTE: 'Falta aplicar en Supabase la migración de pagos mixtos y reportes antes de cobrar.',
   };
-  return mensajes[codigo] ?? codigo;
+  if (mensajes[codigo]) return mensajes[codigo];
+  if (codigo.startsWith('DB_') || /failed to fetch|networkerror|network_error/i.test(codigo)) {
+    return 'No se pudo conectar con el servicio. Revisa la conexión e inténtalo nuevamente.';
+  }
+  return 'No se pudo completar la operación. Revisa los datos e inténtalo nuevamente.';
 }
 
 export function StaffCajaPage() {
   const [pendientes, setPendientes] = useState<Ticket[] | null>(null);
-  const [maestros, setMaestros] = useState<{ cajas: CajaInfo[]; metodosPago: MetodoPagoInfo[] } | null>(null);
+  const [maestros, setMaestros] = useState<CajaMaestros | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [seleccion, setSeleccion] = useState<Ticket | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<StaffFeedback | null>(null);
   const [cajaTurno, setCajaTurno] = useState<number>(0);
   const [montoInicial, setMontoInicial] = useState('');
   const [aperturando, setAperturando] = useState(false);
@@ -72,7 +88,7 @@ export function StaffCajaPage() {
       );
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo cargar la caja');
+      setError(e instanceof Error ? mensajeCaja(e.message) : 'No se pudo cargar la caja. Intenta actualizar.');
     }
   }, [puedeValidarCierre]);
 
@@ -98,7 +114,11 @@ export function StaffCajaPage() {
       setMontoInicial('');
       await cargar();
     } catch (e) {
-      setMensaje(e instanceof Error ? mensajeCaja(e.message) : 'No se pudo aperturar la caja');
+      setFeedback({
+        kind: 'error',
+        title: 'No se pudo aperturar la caja',
+        description: e instanceof Error ? mensajeCaja(e.message) : 'Inténtalo nuevamente.',
+      });
     } finally {
       setAperturando(false);
     }
@@ -119,7 +139,11 @@ export function StaffCajaPage() {
       setObservacionCierre('');
       await cargar();
     } catch (e) {
-      setMensaje(e instanceof Error ? mensajeCaja(e.message) : 'No se pudo solicitar el cierre');
+      setFeedback({
+        kind: 'error',
+        title: 'No se pudo solicitar el cierre',
+        description: e instanceof Error ? mensajeCaja(e.message) : 'Inténtalo nuevamente.',
+      });
     } finally {
       setSolicitandoCierre(false);
     }
@@ -132,7 +156,11 @@ export function StaffCajaPage() {
       setMensaje(`Cierre de ${cierre.cajaNombre} validado: ${result.resultado.toLowerCase()}.`);
       await cargar();
     } catch (e) {
-      setMensaje(e instanceof Error ? mensajeCaja(e.message) : 'No se pudo validar el cierre');
+      setFeedback({
+        kind: 'error',
+        title: 'No se pudo validar el cierre',
+        description: e instanceof Error ? mensajeCaja(e.message) : 'Inténtalo nuevamente.',
+      });
     } finally {
       setValidandoCierre(null);
     }
@@ -219,6 +247,16 @@ export function StaffCajaPage() {
                   <span className="ys-status" style={{ color: '#22c55e', background: '#22c55e22' }}>
                     <i /> Turno abierto · sistema {fmtPEN(cajaSel?.montoSistema ?? 0)}
                   </span>
+                  {!!cajaSel.netoPorMedio.length && (
+                    <div style={{ display: 'grid', gap: 4, width: '100%', color: 'var(--text-muted)', fontSize: 12 }}>
+                      <span>Saldo neto por medio (ingresos menos egresos del turno)</span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {cajaSel.netoPorMedio.map((saldo) => (
+                          <span key={saldo.medio}>{saldo.medio}: <b>{fmtPEN(saldo.total)}</b></span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {puedeCerrar && cajaSel?.turnoId && (
                     <div className="caja-cierre-form">
                       <label>
@@ -289,6 +327,17 @@ export function StaffCajaPage() {
               ))}
             </section>
           )}
+          {cajaSel?.aperturada === 'S' && !cajaSel.cierrePendiente && permisos.includes('CAJ_EGRESO') && (
+            <CajaMovimientoForm
+              cajaId={cajaSel.id}
+              conceptos={maestros.conceptos}
+              metodos={maestros.metodosPago}
+              onRegistrado={async () => {
+                setMensaje('Movimiento de caja registrado.');
+                await cargar();
+              }}
+            />
+          )}
           {pendientes.length === 0 ? (
             <div className="card" style={{ padding: 32, textAlign: 'center' }}>
               <Ico n="ok" size={40} />
@@ -341,9 +390,14 @@ export function StaffCajaPage() {
       {mensaje && !seleccion && (
         <p className="caja-feedback" role="status">{mensaje}</p>
       )}
+      {feedback && (
+        <StaffFeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
+      )}
     </div>
   );
 }
+
+let nextPagoDraftKey = 1;
 
 function CobroModal({
   ticket,
@@ -359,29 +413,75 @@ function CobroModal({
   onCobrar: (payload: {
     pedidoId: number;
     cajaId: number;
-    metodoPagoId: number;
     tipoDocumento: string;
     clienteId: number | null;
-    montoRecibido: number | null;
-    referencia: string;
+    pagos: {
+      metodoPagoId: number;
+      monto: number;
+      montoRecibido: number | null;
+      referencia: string;
+      banco: string;
+      clienteId: number | null;
+    }[];
+    aportes?: { clienteId: number; monto: number; referencia: string }[];
   }) => Promise<void>;
 }) {
+  type Draft = {
+    key: number;
+    metodoPagoId: number;
+    monto: string;
+    recibido: string;
+    referencia: string;
+    banco: string;
+    clienteId: number | null;
+  };
+  const crearLinea = (clienteId: number | null, monto: number): Draft => ({
+    key: nextPagoDraftKey++,
+    metodoPagoId: metodos[0]?.id ?? 0,
+    monto: monto.toFixed(2),
+    recibido: monto.toFixed(2),
+    referencia: '',
+    banco: '',
+    clienteId,
+  });
   const [cajaId, setCaja] = useState<number>(cajas[0]?.id ?? 0);
-  const [metodoId, setMetodo] = useState<number>(metodos[0]?.id ?? 0);
   const [tipoDocumento, setTipoDocumento] = useState('03');
   const [clienteTexto, setClienteTexto] = useState('');
-  const [recibido, setRecibido] = useState<string>(ticket.total.toFixed(2));
-  const [referencia, setReferencia] = useState('');
+  const [pagos, setPagos] = useState<Draft[]>(() => {
+    const participantes = (ticket.participantes ?? []).filter((p) => p.consumoEstimado > 0);
+    if (ticket.modoPagoMesa === 'POR_CONSUMO' && participantes.length > 0) {
+      return participantes.map((p) => crearLinea(p.clienteId, p.consumoEstimado));
+    }
+    return [crearLinea(null, ticket.total)];
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const metodo = metodos.find((m) => m.id === metodoId);
-  const esEfectivo = metodo?.afectaEfectivo ?? false;
-  const montoRecibido = esEfectivo && recibido !== '' ? Number(recibido) : null;
-  const efectivoInsuficiente = esEfectivo && (montoRecibido === null || montoRecibido < ticket.total);
-  const requiereReferencia = metodo?.requiereReferencia ?? false;
-  const faltaReferencia = requiereReferencia && referencia.trim() === '';
   const cajaCerrada = (cajas.find((c) => c.id === cajaId)?.aperturada ?? 'N') === 'N';
+  const participantes = (ticket.participantes ?? []).filter((p) => p.consumoEstimado > 0);
+  const pagoPorConsumo = ticket.modoPagoMesa === 'POR_CONSUMO';
+  const cents = (value: string | number) => Math.round(Number(value) * 100);
+  const totalPagos = pagos.reduce((sum, pago) => sum + (Number.isFinite(Number(pago.monto)) ? cents(pago.monto) : 0), 0);
+  const pagosCubrenTotal = totalPagos === cents(ticket.total);
+  const faltanAportes = pagoPorConsumo && (
+    participantes.length === 0 ||
+    participantes.some((participante) => pagos
+      .filter((pago) => pago.clienteId === participante.clienteId)
+      .reduce((sum, pago) => sum + (Number.isFinite(Number(pago.monto)) ? cents(pago.monto) : 0), 0)
+      !== cents(participante.consumoEstimado))
+  );
+  const lineaInvalida = pagos.some((pago) => {
+    const metodo = metodos.find((item) => item.id === pago.metodoPagoId);
+    const monto = Number(pago.monto);
+    if (!metodo || !Number.isFinite(monto) || monto <= 0) return true;
+    if (metodo.afectaEfectivo && (!Number.isFinite(Number(pago.recibido)) || cents(pago.recibido) < cents(pago.monto))) return true;
+    if (metodo.requiereReferencia && !pago.referencia.trim()) return true;
+    return metodo.nombre.toUpperCase().includes('TRANSF') && !pago.banco.trim();
+  });
+
+  const actualizarPago = (key: number, patch: Partial<Draft>) => {
+    setPagos((actuales) => actuales.map((pago) => pago.key === key ? { ...pago, ...patch } : pago));
+  };
 
   const enviar = useCallback(async () => {
     setBusy(true);
@@ -390,26 +490,43 @@ function CobroModal({
       if (clienteTexto && !/^\d+$/.test(clienteTexto)) {
         throw new Error('ID_CLIENTE_INVALIDO');
       }
-      if (esEfectivo && (recibido === '' || !Number.isFinite(Number(recibido)))) {
-        throw new Error('MONTO_RECIBIDO_INVALIDO');
-      }
-      if (efectivoInsuficiente) throw new Error('EFECTIVO_INSUFICIENTE');
-      if (faltaReferencia) throw new Error('REFERENCIA_REQUERIDA');
+      if (!pagosCubrenTotal) throw new Error('PAGOS_NO_CUBREN_TOTAL');
+      if (lineaInvalida) throw new Error('PAGO_INCOMPLETO');
+      if (faltanAportes) throw new Error('APORTES_PENDIENTES');
       await onCobrar({
         pedidoId: ticket.id,
         cajaId,
-        metodoPagoId: metodoId,
         tipoDocumento,
         clienteId: clienteTexto ? Number(clienteTexto) : null,
-        montoRecibido,
-        referencia,
+        pagos: pagos.map((pago) => {
+          const metodo = metodos.find((item) => item.id === pago.metodoPagoId);
+          return {
+            metodoPagoId: pago.metodoPagoId,
+            monto: Number(pago.monto),
+            montoRecibido: metodo?.afectaEfectivo ? Number(pago.recibido) : null,
+            referencia: pago.referencia.trim(),
+            banco: pago.banco.trim(),
+            clienteId: pago.clienteId,
+          };
+        }),
+        ...(pagoPorConsumo
+          ? {
+              aportes: participantes.map((participante) => ({
+                clienteId: participante.clienteId,
+                monto: Number((pagos
+                  .filter((pago) => pago.clienteId === participante.clienteId)
+                  .reduce((sum, pago) => sum + Number(pago.monto || 0), 0)).toFixed(2)),
+                referencia: pagos.find((pago) => pago.clienteId === participante.clienteId)?.referencia ?? '',
+              })),
+            }
+          : {}),
       });
     } catch (e) {
       setError(e instanceof Error ? mensajeCaja(e.message) : 'No se pudo registrar el cobro');
     } finally {
       setBusy(false);
     }
-  }, [onCobrar, ticket, cajaId, metodoId, tipoDocumento, clienteTexto, montoRecibido, referencia, esEfectivo, recibido, efectivoInsuficiente, faltaReferencia]);
+  }, [onCobrar, ticket, cajaId, tipoDocumento, clienteTexto, pagos, metodos, pagosCubrenTotal, lineaInvalida, pagoPorConsumo, participantes, faltanAportes]);
 
   useEffect(() => {
     const cerrarConEscape = (event: KeyboardEvent) => {
@@ -453,14 +570,136 @@ function CobroModal({
             ))}
           </select>
 
-          <label style={{ color: 'var(--text-muted)', fontSize: 12 }}>Método de pago</label>
-          <select className="select" value={metodoId} onChange={(e) => setMetodo(Number(e.target.value))}>
-            {metodos.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.nombre}
-              </option>
-            ))}
-          </select>
+          {pagoPorConsumo && (
+            <section style={{ display: 'grid', gap: 8, padding: 12, border: '1px solid var(--border)', borderRadius: 10 }}>
+              <strong>Pagos por consumo de cada integrante</strong>
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12 }}>
+                Asigna cada medio a quien paga. Los pagos de cada persona deben cubrir exactamente su consumo.
+              </p>
+              {participantes.map((participante) => {
+                const asignado = pagos.filter((pago) => pago.clienteId === participante.clienteId)
+                  .reduce((sum, pago) => sum + (Number.isFinite(Number(pago.monto)) ? cents(pago.monto) : 0), 0);
+                return <div key={participante.clienteId} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13 }}>
+                  <span>{participante.nombre}{participante.esOrganizador ? ' · Organizador' : ''}</span>
+                  <span>Consumo {fmtPEN(participante.consumoEstimado)} · Asignado {fmtPEN(asignado / 100)}</span>
+                </div>;
+              })}
+            </section>
+          )}
+
+          <section style={{ display: 'grid', gap: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+              <strong>Medios de pago</strong>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={pagos.length >= 20}
+                onClick={() => {
+                  const restante = Math.max(0, (cents(ticket.total) - totalPagos) / 100);
+                  const siguiente = participantes.find((participante) => {
+                    const asignado = pagos
+                      .filter((pago) => pago.clienteId === participante.clienteId)
+                      .reduce((sum, pago) => sum + (Number.isFinite(Number(pago.monto)) ? cents(pago.monto) : 0), 0);
+                    return asignado < cents(participante.consumoEstimado);
+                  });
+                  const asignado = siguiente
+                    ? pagos.filter((pago) => pago.clienteId === siguiente.clienteId)
+                      .reduce((sum, pago) => sum + (Number.isFinite(Number(pago.monto)) ? cents(pago.monto) : 0), 0)
+                    : 0;
+                  const montoSiguiente = pagoPorConsumo && siguiente
+                    ? Math.min(restante, Math.max(0, cents(siguiente.consumoEstimado) - asignado) / 100)
+                    : restante;
+                  setPagos((actuales) => [
+                    ...actuales,
+                    crearLinea(pagoPorConsumo ? siguiente?.clienteId ?? null : null, montoSiguiente),
+                  ]);
+                }}
+              >
+                Agregar medio
+              </button>
+            </div>
+            {pagos.map((pago) => {
+              const metodo = metodos.find((item) => item.id === pago.metodoPagoId);
+              const efectivo = metodo?.afectaEfectivo ?? false;
+              const transferencia = metodo?.nombre.toUpperCase().includes('TRANSF') ?? false;
+              return <article key={pago.key} style={{ display: 'grid', gap: 8, padding: 12, border: '1px solid var(--border)', borderRadius: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(100px, .7fr) auto', gap: 8 }}>
+                  <select
+                    className="select"
+                    value={pago.metodoPagoId}
+                    onChange={(event) => actualizarPago(pago.key, { metodoPagoId: Number(event.target.value) })}
+                  >
+                    {metodos.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+                  </select>
+                  <input
+                    className="input"
+                    aria-label="Importe de este medio de pago"
+                    inputMode="decimal"
+                    value={pago.monto}
+                    onChange={(event) => actualizarPago(pago.key, { monto: event.target.value })}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    aria-label="Eliminar medio de pago"
+                    disabled={pagos.length === 1}
+                    onClick={() => setPagos((actuales) => actuales.filter((item) => item.key !== pago.key))}
+                  >
+                    Quitar
+                  </button>
+                </div>
+                {pagoPorConsumo && (
+                  <select
+                    className="select"
+                    aria-label="Integrante que realiza el pago"
+                    value={pago.clienteId ?? ''}
+                    onChange={(event) => actualizarPago(pago.key, { clienteId: event.target.value ? Number(event.target.value) : null })}
+                  >
+                    <option value="">Selecciona quién paga</option>
+                    {participantes.map((person) => <option key={person.clienteId} value={person.clienteId}>{person.nombre}</option>)}
+                  </select>
+                )}
+                {efectivo && (
+                  <label style={{ display: 'grid', gap: 4, color: 'var(--text-muted)', fontSize: 12 }}>
+                    Efectivo recibido
+                    <input
+                      className="input"
+                      inputMode="decimal"
+                      value={pago.recibido}
+                      onChange={(event) => actualizarPago(pago.key, { recibido: event.target.value })}
+                    />
+                  </label>
+                )}
+                {!efectivo && (
+                  <label style={{ display: 'grid', gap: 4, color: 'var(--text-muted)', fontSize: 12 }}>
+                    Número de operación{metodo?.requiereReferencia ? '' : ' (opcional)'}
+                    <input
+                      className="input"
+                      maxLength={50}
+                      value={pago.referencia}
+                      onChange={(event) => actualizarPago(pago.key, { referencia: event.target.value })}
+                    />
+                  </label>
+                )}
+                {transferencia && (
+                  <label style={{ display: 'grid', gap: 4, color: 'var(--text-muted)', fontSize: 12 }}>
+                    Banco
+                    <input
+                      className="input"
+                      maxLength={60}
+                      value={pago.banco}
+                      onChange={(event) => actualizarPago(pago.key, { banco: event.target.value })}
+                    />
+                  </label>
+                )}
+              </article>;
+            })}
+            <div className="caja-vuelto">
+              <span>Cuenta <b>{fmtPEN(ticket.total)}</b></span>
+              <span>Distribuido <b>{fmtPEN(totalPagos / 100)}</b></span>
+              <span>Pendiente <b>{fmtPEN((cents(ticket.total) - totalPagos) / 100)}</b></span>
+            </div>
+          </section>
 
           <label style={{ color: 'var(--text-muted)', fontSize: 12 }}>Comprobante</label>
           <select className="select" value={tipoDocumento} onChange={(e) => setTipoDocumento(e.target.value)}>
@@ -480,39 +719,6 @@ function CobroModal({
             </>
           )}
 
-          {esEfectivo && (
-            <>
-              <label htmlFor="cobro-efectivo" style={{ color: 'var(--text-muted)', fontSize: 12 }}>Monto recibido</label>
-              <input
-                id="cobro-efectivo"
-                className="input"
-                inputMode="decimal"
-                placeholder={ticket.total.toFixed(2)}
-                value={recibido}
-                onChange={(e) => setRecibido(e.target.value)}
-              />
-              <div className="caja-vuelto">
-                <span>Total a pagar <b>{fmtPEN(ticket.total)}</b></span>
-                <span>Vuelto estimado <b>{fmtPEN(Math.max(0, Number(recibido || 0) - ticket.total))}</b></span>
-              </div>
-            </>
-          )}
-
-          {(!esEfectivo || requiereReferencia) && (
-            <>
-              <label htmlFor="cobro-referencia" style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                Número de operación{requiereReferencia ? '' : ' (opcional)'}
-              </label>
-              <input
-                id="cobro-referencia"
-                className="input"
-                maxLength={30}
-                placeholder="N° de operación"
-                value={referencia}
-                onChange={(e) => setReferencia(e.target.value)}
-              />
-            </>
-          )}
         </div>
 
         {error && (
@@ -527,15 +733,105 @@ function CobroModal({
         <button
           className="btn btn-gold"
           style={{ marginTop: 14 }}
-          disabled={busy || cajaCerrada || efectivoInsuficiente || faltaReferencia}
+          disabled={busy || cajaCerrada || lineaInvalida || !pagosCubrenTotal || faltanAportes || pagos.length === 0}
           onClick={() => void enviar()}
         >
           {busy ? 'Procesando cobro…' : 'Confirmar cobro'}
         </button>
         <p style={{ marginTop: 8, color: 'var(--text-muted)', fontSize: 12 }}>
-          El cobro se registrará en una sola operación. Revisa el método y el total antes de confirmar.
+          Se emitirá una venta y un comprobante. Los medios se registran individualmente y solo el efectivo aumenta el arqueo físico.
         </p>
       </div>
     </div>
+  );
+}
+
+function CajaMovimientoForm({
+  cajaId,
+  conceptos,
+  metodos,
+  onRegistrado,
+}: {
+  cajaId: number;
+  conceptos: ConceptoCajaInfo[];
+  metodos: MetodoPagoInfo[];
+  onRegistrado: () => Promise<void>;
+}) {
+  const [conceptoId, setConceptoId] = useState(conceptos[0]?.id ?? 0);
+  const [metodoPagoId, setMetodoPagoId] = useState(metodos[0]?.id ?? 0);
+  const [monto, setMonto] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [referencia, setReferencia] = useState('');
+  const [banco, setBanco] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [feedback, setFeedback] = useState<StaffFeedback | null>(null);
+  const metodo = metodos.find((item) => item.id === metodoPagoId);
+  const requiereBanco = metodo?.nombre.toUpperCase().includes('TRANSF') ?? false;
+
+  const registrar = async () => {
+    setEnviando(true);
+    setFeedback(null);
+    try {
+      await registrarMovimientoCaja({
+        cajaId,
+        conceptoId,
+        metodoPagoId,
+        monto: Number(monto),
+        descripcion,
+        referencia,
+        banco,
+      });
+      setMonto('');
+      setDescripcion('');
+      setReferencia('');
+      setBanco('');
+      await onRegistrado();
+    } catch (cause) {
+      setFeedback({
+        kind: 'error',
+        title: 'No se pudo registrar el movimiento',
+        description: cause instanceof Error ? mensajeCaja(cause.message) : 'Inténtalo nuevamente.',
+      });
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  if (conceptos.length === 0 || metodos.length === 0) return null;
+
+  return (
+    <section className="card" style={{ padding: 16, marginBottom: 16 }} aria-labelledby="caja-movimientos-title">
+      <h2 id="caja-movimientos-title" style={{ margin: '0 0 10px' }}>Registrar movimiento</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8 }}>
+        <select className="select" value={conceptoId} onChange={(event) => setConceptoId(Number(event.target.value))} aria-label="Concepto">
+          {conceptos.map((item) => <option key={item.id} value={item.id}>{item.tipoMovimiento} · {item.nombre}</option>)}
+        </select>
+        <select className="select" value={metodoPagoId} onChange={(event) => setMetodoPagoId(Number(event.target.value))} aria-label="Medio del movimiento">
+          {metodos.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
+        </select>
+        <input className="input" type="number" min="0.01" step="0.01" placeholder="Monto" value={monto} onChange={(event) => setMonto(event.target.value)} />
+        <input className="input" maxLength={200} placeholder="Descripción" value={descripcion} onChange={(event) => setDescripcion(event.target.value)} />
+        {metodo?.requiereReferencia && (
+          <input className="input" maxLength={30} placeholder="Operación / referencia" value={referencia} onChange={(event) => setReferencia(event.target.value)} />
+        )}
+        {requiereBanco && (
+          <input className="input" maxLength={60} placeholder="Banco" value={banco} onChange={(event) => setBanco(event.target.value)} />
+        )}
+        <button
+          type="button"
+          className="btn btn-gold"
+          disabled={enviando || !Number.isFinite(Number(monto)) || Number(monto) <= 0 || descripcion.trim().length < 3 || (metodo?.requiereReferencia && !referencia.trim()) || (requiereBanco && !banco.trim())}
+          onClick={() => void registrar()}
+        >
+          {enviando ? 'Registrando…' : 'Registrar'}
+        </button>
+      </div>
+      <p style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 0 }}>
+        Ingresos, egresos, devoluciones y ajustes quedan asociados al turno activo. Los medios digitales no alteran el efectivo esperado.
+      </p>
+      {feedback && (
+        <StaffFeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
+      )}
+    </section>
   );
 }

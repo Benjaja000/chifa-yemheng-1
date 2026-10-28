@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import type { AuthenticatedRequest } from '../middlewares/auth-guard.js';
-import { movimientoCreateSchema, movimientoQuerySchema, recetaCreateSchema, recetaQuerySchema } from '../schemas/inventario.js';
-import { crearMovimientoService, crearRecetaService, listarMovimientosService, listarRecetasService } from '../services/inventario-service.js';
+import { movimientoCreateSchema, movimientoQuerySchema, recetaCreateSchema, recetaQuerySchema, recetaUpdateSchema } from '../schemas/inventario.js';
+import { actualizarRecetaService, crearMovimientoService, crearRecetaService, listarMovimientosService, listarRecetasService } from '../services/inventario-service.js';
 import { getPc } from '../utils/auditoria.js';
 
 function sesion(req: Request): { id: number; logeo: string; pc: string } {
@@ -32,6 +32,10 @@ export async function postMovimiento(req: Request, res: Response): Promise<void>
       res.status(422).json({ error: 'PRODUCTO_INVALIDO' });
       return;
     }
+    if (msg.includes('STOCK_INSUFICIENTE')) {
+      res.status(409).json({ error: 'STOCK_INSUFICIENTE' });
+      return;
+    }
     res.status(500).json({ error: 'INTERNAL_ERROR', detalle: msg });
   }
 }
@@ -54,6 +58,46 @@ export async function postReceta(req: Request, res: Response): Promise<void> {
     res.status(201).json(await crearRecetaService(parsed.data, s.logeo, s.pc));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('INSUMO_INVALIDO')) {
+      res.status(422).json({ error: 'INSUMO_INVALIDO' });
+      return;
+    }
+    if (msg.includes('PRODUCTO_INVALIDO')) {
+      res.status(422).json({ error: 'PRODUCTO_INVALIDO' });
+      return;
+    }
+    if (msg.includes('RECETA_DUPLICADA')) {
+      res.status(409).json({ error: 'RECETA_DUPLICADA' });
+      return;
+    }
+    res.status(500).json({ error: 'INTERNAL_ERROR', detalle: msg });
+  }
+}
+
+export async function patchReceta(req: Request, res: Response): Promise<void> {
+  const parsed = recetaUpdateSchema.safeParse(req.body);
+  const id = Number(req.params['id']);
+  if (!parsed.success || !Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.success ? undefined : parsed.error.flatten() });
+    return;
+  }
+  const s = sesion(req);
+  try {
+    res.json(await actualizarRecetaService(id, parsed.data, s.logeo, s.pc));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('NOT_FOUND')) {
+      res.status(404).json({ error: 'NOT_FOUND' });
+      return;
+    }
+    if (msg.includes('RECETA_DUPLICADA')) {
+      res.status(409).json({ error: 'RECETA_DUPLICADA' });
+      return;
+    }
+    if (msg.includes('PRODUCTO_INVALIDO')) {
+      res.status(422).json({ error: 'PRODUCTO_INVALIDO' });
+      return;
+    }
     if (msg.includes('INSUMO_INVALIDO')) {
       res.status(422).json({ error: 'INSUMO_INVALIDO' });
       return;

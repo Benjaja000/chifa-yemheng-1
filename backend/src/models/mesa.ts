@@ -38,6 +38,7 @@ export interface Ambiente {
 export interface OcupacionMesa {
   mesaId: number;
   pedido: string;
+  canalOrigen: 'QR' | 'WEB' | 'PRESENCIAL' | null;
   total: number;
   comensales: number;
   mozo: string;

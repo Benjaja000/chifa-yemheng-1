@@ -39,7 +39,7 @@ const PEDIDO_EMBED = `
   f_entrega,
   pedido:pedido!inner(
     id_cliente,
-    cliente:cliente!inner(
+    cliente:cliente!fk_pedido_cliente!inner(
       persona:persona!inner(nombre, ap_paterno)
     ),
     venta:venta!inner(

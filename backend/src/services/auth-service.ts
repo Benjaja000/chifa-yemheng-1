@@ -4,6 +4,7 @@ import type { LoginResponse } from '../models/auth.js';
 import { ClaveError, LoginError } from '../models/auth.js';
 import {
   leerEstadoUsuario,
+  leerEstadoSesion,
   rpcCambiarClave,
   rpcLogin,
   rpcPermisos,
@@ -67,6 +68,17 @@ export async function loginService(input: LoginInput): Promise<LoginResponse> {
   }
 
   const permisos = await rpcPermisos(fn.id_usuario);
+  const estadoSesion = await leerEstadoSesion(fn.id_usuario);
+  if (
+    !estadoSesion ||
+    estadoSesion.estado !== 'A' ||
+    estadoSesion.bloqueado !== 'N' ||
+    estadoSesion.empleado?.estado !== 'A' ||
+    (estadoSesion.empleado.f_cese !== null &&
+      estadoSesion.empleado.f_cese <= new Date().toISOString().slice(0, 10))
+  ) {
+    throw new LoginError('INACTIVO');
+  }
   const tipo = (fn.tipo_usuario ?? 'MOZO').toUpperCase();
   const payload = {
     sub: fn.id_usuario,
@@ -74,6 +86,7 @@ export async function loginService(input: LoginInput): Promise<LoginResponse> {
     tipo,
     roles: [tipo],
     permisos: permisos.map((p) => p.clave),
+    authVersion: estadoSesion.authVersion,
   };
   const token = jwt.sign(payload, env.JWT_SECRET, { expiresIn: '8h' });
 

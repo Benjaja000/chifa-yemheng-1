@@ -11,20 +11,38 @@ import {
 } from '../staff-service';
 import { EstadoBadge } from '../../../shared/ui/EstadoBadge';
 import { supabase } from '../../../shared/services/supabase';
+import { StaffFeedbackModal, type StaffFeedback } from '../staff-feedback-modal';
 
 const TONE: Record<string, string> = { P: '#f59e0b', E: '#3b82f6', S: '#22c55e', A: '#ef4444' };
+
+function describirErrorCocina(error: unknown, fallback: string): string {
+  const raw = error instanceof Error ? error.message : '';
+  const code = raw.split(':', 1)[0]?.trim().toUpperCase() ?? '';
+  const known: Record<string, string> = {
+    NOT_FOUND: 'La comanda o el producto ya no está disponible. Actualiza el tablero.',
+    VALIDATION_ERROR: 'No se pudo aplicar ese cambio. Actualiza el tablero e inténtalo nuevamente.',
+    NETWORK_ERROR: 'No se pudo conectar. Revisa la conexión e inténtalo nuevamente.',
+    TRANSICION_ESTADO_INVALIDA: 'El estado del producto cambió en otro dispositivo. Actualiza el tablero.',
+  };
+  if (known[code]) return known[code];
+  if (code.startsWith('DB_') || /failed to fetch|networkerror/i.test(raw)) {
+    return 'No se pudo conectar con el servicio. Revisa la conexión e inténtalo nuevamente.';
+  }
+  return fallback;
+}
 
 export function StaffCocinaPage() {
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
+  const [feedback, setFeedback] = useState<StaffFeedback | null>(null);
 
   const cargar = useCallback(async () => {
     try {
       setTickets(await listarPedidosCocina());
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo cargar la cocina');
+      setError(describirErrorCocina(e, 'No se pudo cargar la cocina. Intenta actualizar el tablero.'));
     }
   }, []);
 
@@ -52,7 +70,11 @@ export function StaffCocinaPage() {
         await cambiarPreparacion(ticketId, detalleId, estado);
         await cargar();
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'No se pudo actualizar');
+        setFeedback({
+          kind: 'error',
+          title: 'No se pudo actualizar el producto',
+          description: describirErrorCocina(e, 'Actualiza el tablero e inténtalo nuevamente.'),
+        });
       } finally {
         setBusy(null);
       }
@@ -123,6 +145,17 @@ export function StaffCocinaPage() {
             </div>
           ))}
         </div>
+      )}
+      {feedback && (
+        <StaffFeedbackModal
+          feedback={feedback}
+          onClose={() => setFeedback(null)}
+          onAction={async () => {
+            setTickets(await listarPedidosCocina());
+            setError(null);
+          }}
+          actionLabel="Actualizar tablero"
+        />
       )}
     </div>
   );

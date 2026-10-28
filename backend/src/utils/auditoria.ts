@@ -1,24 +1,23 @@
 import type { Request } from 'express';
+import { isIP } from 'node:net';
 
-/** Etiquetas de equipo permitidas (pccre/pcmod, varchar 30). QR-cliente no manda X-PC. */
-export const EQUIPOS = [
-  'CAJA-01',
-  'BARRA-01',
-  'COCINA-01',
-  'SALON-01',
-  'DELIVERY-01',
-  'OFICINA-01',
-  'ALMACEN-01',
-] as const;
-
-/** Lee X-PC validado o cae a IP. Nunca lanza. */
+/** Guarda la IP del cliente resuelta por Express; no confía en cabeceras enviadas por el navegador. */
 export function getPc(req: Request): string {
-  const h = String(req.header('X-PC') ?? '').trim().toUpperCase().slice(0, 30);
-  if ((EQUIPOS as readonly string[]).includes(h)) {
-    return h;
+  const candidates = [req.ip, req.socket?.remoteAddress];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const ip = normalizarIp(candidate);
+    if (ip) return ip;
   }
-  const ip = String((req as Request & { ip?: string }).ip ?? req.socket?.remoteAddress ?? '').slice(0, 30);
-  return ip;
+  return 'UNKNOWN';
+}
+
+function normalizarIp(value: string): string | null {
+  const address = value.trim().replace(/^\[([^\]]+)\](?::\d+)?$/, '$1');
+  const normalized = address.toLowerCase().startsWith('::ffff:')
+    ? address.slice('::ffff:'.length)
+    : address;
+  return isIP(normalized) ? normalized : null;
 }
 
 export function createAudit(logeo: string, pc: string): { usucre: string; pccre: string | null; feccre: string } {

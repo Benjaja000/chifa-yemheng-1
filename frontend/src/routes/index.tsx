@@ -110,7 +110,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'cliente/menu',
-        element: <ClienteAuthGuard><ClienteMenuPage /></ClienteAuthGuard>,
+        element: <ClienteMenuPage />,
       },
       {
         path: 'cliente/comanda',
@@ -130,7 +130,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'cliente/reservas',
-        element: <ClienteAuthGuard><ClienteReservasPage /></ClienteAuthGuard>,
+        element: <ClienteReservasPage />,
       },
       {
         path: 'cliente/reservar',
@@ -138,7 +138,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'cliente/delivery',
-        element: <ClienteAuthGuard><ClienteDeliveryPage /></ClienteAuthGuard>,
+        element: <ClienteDeliveryPage />,
       },
       {
         path: 'cliente/pedido/:id',

@@ -1,25 +1,26 @@
 import type { Delivery } from '../models/delivery.js';
 import type { SugerirCostoResult } from '../repositories/delivery-repository.js';
-import { crearDeliveryCliente, getDeliveryDetalle, getDeliveryUbicacion } from '../repositories/cliente-delivery-repository.js';
+import { crearDeliveryCliente, getDeliveryActivoCliente, getDeliveryDetalle, getDeliveryUbicacion } from '../repositories/cliente-delivery-repository.js';
 import { getParametrosNegocio, sugerirCosto } from '../repositories/delivery-repository.js';
 import { DeliveryError } from '../models/delivery.js';
 
+const AUTOSERVICIO_USER_ID = 1;
+
 export async function crearDeliveryClienteService(input: {
   clienteId: number;
-  items: Array<{ productoId: number; cantidad: number; nota?: string; descuento?: number }>;
+  items: Array<{ productoId: number; cantidad: number; nota?: string }>;
   direccion: string;
   distritoId: number;
   referencia?: string;
   telefono?: string;
   latCliente?: number;
   lngCliente?: number;
-  metodoDigital: 'YAPE' | 'PLIN' | 'TARJETA' | 'TRANSFERENCIA';
-}, usucre: string, pc?: string): Promise<Delivery> {
+}, pc: string): Promise<{ id: number; estado: Delivery['estado']; costo: number; costoConfirmado: boolean }> {
   // El monto de envio es autoridad del servidor: nunca se acepta el valor del cliente (BR-GPS-001/002).
   const { costoSugerido, dentroCobertura } = await sugerirCosto(input.latCliente ?? null, input.lngCliente ?? null, input.distritoId);
   // Limite duro de entrega para el cliente (BR-GPS-003); el staff puede forzar desde su propio flujo.
   if (!dentroCobertura) throw new DeliveryError('FUERA_DE_COBERTURA');
-  return crearDeliveryCliente({ ...input, costoEnvio: costoSugerido }, usucre, pc);
+  return crearDeliveryCliente({ ...input, costoEnvio: costoSugerido }, pc, AUTOSERVICIO_USER_ID);
 }
 
 export async function sugerirCostoClienteService(lat: number | null, lng: number | null, distritoId: number): Promise<SugerirCostoResult> {
@@ -34,6 +35,10 @@ export async function getDeliveryDetalleClienteService(id: number, clienteId: nu
   const r = await getDeliveryDetalle(id, clienteId);
   if (!r) throw new DeliveryError('NOT_FOUND');
   return r;
+}
+
+export async function getDeliveryActivoClienteService(clienteId: number): Promise<number | null> {
+  return getDeliveryActivoCliente(clienteId);
 }
 
 export async function getDeliveryUbicacionClienteService(id: number, clienteId: number) {

@@ -1,6 +1,7 @@
 /** Tipos del módulo pedidos (pedido/detalle_pedido/estado_pedido/tipo_pedido). */
 export type EstadoPedido = 'A' | 'I';
 export type CanalPedido = 'QR' | 'WEB' | 'PRESENCIAL';
+export type ModoPagoMesa = 'CUENTA_UNICA' | 'POR_CONSUMO';
 
 export interface Pedido {
   id: number;
@@ -11,6 +12,7 @@ export interface Pedido {
   tipoId: number;
   tipo: string;
   canalOrigen: CanalPedido;
+  modoPagoMesa: ModoPagoMesa;
   estadoId: number;
   estado: string;
   usuarioId: number;
@@ -29,6 +31,7 @@ export interface Pedido {
   observacion: string | null;
   estadoRegistro: EstadoPedido;
   detalles?: DetallePedido[];
+  participantes?: ParticipantePedido[];
 }
 
 export interface DetallePedido {
@@ -66,12 +69,20 @@ export type PedidoErrorCode =
   | 'PEDIDO_ANULADO'
   | 'PRODUCTO_NO_DISPONIBLE'
   | 'NO_PARTICIPANTE'
+  | 'NO_ES_ORGANIZADOR'
   | 'NO_COMANDA_ACTIVA'
   | 'MESA_POR_COBRAR'
+  | 'YA_POR_COBRAR'
   | 'MOZO_PEDIDO_DIGITAL'
   | 'ENTREGA_NO_DISPONIBLE'
-  | 'YA_POR_COBRAR'
   | 'VALIDATION_ERROR';
+
+export interface ParticipantePedido {
+  clienteId: number;
+  nombre: string;
+  esOrganizador: boolean;
+  consumoEstimado?: number;
+}
 
 export class PedidoError extends Error {
   readonly code: PedidoErrorCode;

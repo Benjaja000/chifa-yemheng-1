@@ -13,8 +13,8 @@ interface Producto {
 }
 
 interface CartaStepProps {
-  items: Array<{ productoId: number; cantidad: number; precioUnit: number; nombre?: string; nota?: string; descuento?: number }>;
-  onItemsChange: (items: Array<{ productoId: number; cantidad: number; precioUnit: number; nombre?: string; nota?: string; descuento?: number }>) => void;
+  items: Array<{ productoId: number; cantidad: number; precioUnit: number; nombre?: string; nota?: string }>;
+  onItemsChange: (items: Array<{ productoId: number; cantidad: number; precioUnit: number; nombre?: string; nota?: string }>) => void;
   onNext: () => void;
 }
 

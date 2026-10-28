@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Minus, Plus, CalendarCheck } from 'lucide-react';
+import { Minus, Plus, CalendarCheck, CalendarDays, Clock3, Coins, MessageSquareText, UsersRound } from 'lucide-react';
 import { fmtDate, fmtPEN, errText } from '../lib/format';
 import { Txt } from './Icon';
 import type { Reserva } from '../types/db';
@@ -24,7 +24,7 @@ export function ReservaCard({ r, nombre }: { r: Reserva; nombre?: string }) {
   );
 }
 
-export function ReservaForm({ onDone, baseUrl }: { onDone: () => void; baseUrl?: string }) {
+export function ReservaForm({ onDone, baseUrl, token }: { onDone: () => void; baseUrl?: string; token?: string | null }) {
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState('20:00');
   const [personas, setPersonas] = useState(2);
@@ -34,8 +34,13 @@ export function ReservaForm({ onDone, baseUrl }: { onDone: () => void; baseUrl?:
   const [ok, setOk] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const save = async () => {
+  const hoy = new Date();
+  const fechaMinima = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+
+  const save = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     if (!fecha) { setMsg('Elige la fecha.'); return; }
+    if (baseUrl && !token) { setMsg('Tu sesión venció. Inicia sesión nuevamente para solicitar una reserva.'); return; }
     setBusy(true); setMsg('');
     try {
       const body = JSON.stringify({
@@ -49,11 +54,21 @@ export function ReservaForm({ onDone, baseUrl }: { onDone: () => void; baseUrl?:
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'NETWORK_ERROR');
+      const data = await res.json().catch(() => ({})) as { error?: string; details?: string };
+      if (!res.ok) {
+        const messages: Record<string, string> = {
+          CREDENCIALES_INVALIDAS: 'Tu sesión venció. Inicia sesión nuevamente.',
+          TOKEN_INVALIDO: 'Tu sesión venció. Inicia sesión nuevamente.',
+          CLIENTE_NOT_FOUND: 'No encontramos tu cuenta de cliente. Vuelve a iniciar sesión.',
+          DATOS_RESERVA_INVALIDOS: 'Revisa la cantidad de personas, el adelanto y la observación.',
+          DB_CREATE_FAIL: data.details ?? 'No se pudo guardar la solicitud de reserva.',
+        };
+        throw new Error(messages[data.error ?? ''] ?? data.error ?? 'No se pudo registrar la reserva.');
+      }
       setOk(true);
       setTimeout(onDone, 1500);
     } catch (e) { setMsg(`:err: ${errText(e, 'Error')}`); } finally { setBusy(false); }
@@ -67,22 +82,68 @@ export function ReservaForm({ onDone, baseUrl }: { onDone: () => void; baseUrl?:
     </motion.div>
   );
   return (
-    <div className="y-panel" style={{ padding: 18, display: 'grid', gap: 12 }}>
-      <div className="grid2">
-        <div><label className="label">Fecha</label><input type="date" className="input" value={fecha} onChange={(e) => setFecha(e.target.value)} /></div>
-        <div><label className="label">Hora</label><input type="time" className="input" value={hora} onChange={(e) => setHora(e.target.value)} /></div>
+    <form className="y-panel y-reserva-form" onSubmit={(event) => void save(event)}>
+      <header className="y-reserva-form__header">
+        <span className="y-reserva-form__icon"><CalendarCheck size={22} /></span>
+        <div>
+          <h2>Planifica tu visita</h2>
+          <p>Completa los detalles y enviaremos tu solicitud al equipo.</p>
+        </div>
+      </header>
+
+      <div className="y-reserva-form__fields">
+        <div className="y-reserva-field">
+          <label htmlFor="reserva-fecha">Fecha de visita</label>
+          <div className="y-reserva-field__control">
+            <CalendarDays size={18} aria-hidden="true" />
+            <input id="reserva-fecha" type="date" className="input" value={fecha} min={fechaMinima} required onChange={(e) => setFecha(e.target.value)} />
+          </div>
+        </div>
+        <div className="y-reserva-field">
+          <label htmlFor="reserva-hora">Hora aproximada</label>
+          <div className="y-reserva-field__control">
+            <Clock3 size={18} aria-hidden="true" />
+            <input id="reserva-hora" type="time" className="input" value={hora} required onChange={(e) => setHora(e.target.value)} />
+          </div>
+        </div>
+        <div className="y-reserva-field">
+          <label id="reserva-personas-label">Personas</label>
+          <div className="y-reserva-quantity" role="group" aria-labelledby="reserva-personas-label">
+            <UsersRound size={18} aria-hidden="true" />
+            <button type="button" onClick={() => setPersonas((value) => Math.max(1, value - 1))} aria-label="Restar una persona" disabled={personas <= 1}>
+              <Minus size={15} />
+            </button>
+            <output aria-live="polite">{personas}</output>
+            <button type="button" onClick={() => setPersonas((value) => Math.min(20, value + 1))} aria-label="Agregar una persona" disabled={personas >= 20}>
+              <Plus size={15} />
+            </button>
+            <span>{personas === 1 ? 'persona' : 'personas'}</span>
+          </div>
+        </div>
+        <div className="y-reserva-field">
+          <label htmlFor="reserva-adelanto">Adelanto <span>(opcional)</span></label>
+          <div className="y-reserva-field__control">
+            <Coins size={18} aria-hidden="true" />
+            <input id="reserva-adelanto" type="number" min={0} step="0.01" className="input" value={adelanto} onChange={(e) => setAdelanto(Math.max(0, Number(e.target.value)))} />
+            <span className="y-reserva-currency">S/</span>
+          </div>
+        </div>
+        <div className="y-reserva-field y-reserva-field--full">
+          <label htmlFor="reserva-observacion">¿Algo que debamos saber? <span>(opcional)</span></label>
+          <div className="y-reserva-field__control y-reserva-field__control--textarea">
+            <MessageSquareText size={18} aria-hidden="true" />
+            <textarea id="reserva-observacion" className="textarea" rows={3} maxLength={200} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Cumpleaños, preferencia de mesa u otra indicación..." />
+          </div>
+          <span className="y-reserva-character-count">{obs.length}/200</span>
+        </div>
       </div>
-      <div className="grid2">
-        <div><label className="label">Personas</label>
-          <div className="y-qty" style={{ marginTop: 0, display: 'flex', justifyContent: 'space-between' }}>
-            <button onClick={() => setPersonas(Math.max(1, personas - 1))} aria-label="Menos"><Minus size={12} /></button><b>{personas}</b>
-            <button onClick={() => setPersonas(Math.min(20, personas + 1))} aria-label="Más"><Plus size={12} /></button>
-          </div></div>
-        <div><label className="label">Adelanto opcional (S/)</label><input type="number" min={0} className="input" value={adelanto} onChange={(e) => setAdelanto(Number(e.target.value))} /></div>
-      </div>
-      <div><label className="label">Observación</label><textarea className="textarea" rows={3} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Cumpleaños, mesa cerca a la ventana..." /></div>
-      <button className="y-btn red" style={{ padding: 14 }} disabled={busy} onClick={save}>{busy ? 'Registrando...' : 'Solicitar reserva'}</button>
-      {msg && <p style={{ margin: 0, fontSize: 13, textAlign: 'center' }}><Txt>{msg}</Txt></p>}
-    </div>
+
+      <p className="y-reserva-form__note">La solicitud quedará pendiente hasta que el equipo confirme disponibilidad.</p>
+      <button className="y-btn red y-reserva-submit" type="submit" disabled={busy}>
+        {busy ? 'Enviando solicitud…' : 'Solicitar reserva'}
+        {!busy && <CalendarCheck size={18} />}
+      </button>
+      {msg && <p className="y-reserva-form__message" role="alert"><Txt>{msg}</Txt></p>}
+    </form>
   );
 }

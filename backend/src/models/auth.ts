@@ -33,6 +33,7 @@ export interface JwtPayload {
   tipo: string;
   roles: string[];
   permisos: string[];
+  authVersion: number;
 }
 
 /** Respuesta cruda de fn_login (JSON). */

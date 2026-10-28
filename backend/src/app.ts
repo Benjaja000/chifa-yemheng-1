@@ -3,6 +3,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 import { errorHandler, notFoundHandler } from './middlewares/error-handler.js';
+import { env } from './config/env.js';
 import { authRouter } from './routes/auth.js';
 import { auditoriaRouter } from './routes/auditoria.js';
 import { clienteAuthRouter } from './routes/cliente-auth.js';
@@ -32,6 +33,7 @@ import { ventasRouter } from './routes/ventas.js';
 
 export function createApp() {
   const app = express();
+  app.set('trust proxy', env.TRUST_PROXY_HOPS);
 
   app.use(cors());
   app.use(express.json());

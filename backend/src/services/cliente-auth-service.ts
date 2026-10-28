@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
+import { supabase } from '../config/supabase.js';
 import { auditarCliente, buscarClienteActivoPorPersona, buscarPersonaPorEmail, crearClienteGmail, crearPersonaGmail } from '../repositories/cliente-auth-repository.js';
 
 interface GoogleTokenInfo {
@@ -22,6 +23,42 @@ export class ClienteAuthError extends Error {
   constructor(public code: string) {
     super(code);
   }
+}
+
+async function crearSesionCliente(
+  email: string,
+  nombre: string,
+  apPaterno: string | null,
+  ip?: string,
+): Promise<ClienteAuthResult> {
+  let persona = await buscarPersonaPorEmail(email);
+  let idPersona: number;
+  if (!persona) {
+    idPersona = await crearPersonaGmail(nombre, apPaterno, null, email, 'CLIENTE', ip ?? '');
+    persona = { id_persona: idPersona, nombre, ap_paterno: apPaterno, ap_materno: null, email };
+  } else {
+    idPersona = persona.id_persona;
+  }
+
+  let cliente = await buscarClienteActivoPorPersona(idPersona);
+  if (!cliente) {
+    const idCliente = await crearClienteGmail(idPersona, 'CLIENTE', ip ?? '');
+    cliente = { id_cliente: idCliente, puntos: 0 };
+  }
+
+  const nombreCompleto = [persona.nombre, persona.ap_paterno, persona.ap_materno].filter(Boolean).join(' ').trim() || email;
+  await auditarCliente('LOGIN', cliente.id_cliente, email, ip);
+
+  const token = jwt.sign(
+    { sub: cliente.id_cliente, rol: 'CLIENTE', email, nombre: nombreCompleto },
+    env.JWT_SECRET,
+    { expiresIn: '7d' },
+  );
+
+  return {
+    token,
+    cliente: { id: cliente.id_cliente, nombre: nombreCompleto, email, puntos: cliente.puntos },
+  };
 }
 
 async function verifyGoogleIdToken(idToken: string): Promise<GoogleTokenInfo> {
@@ -48,37 +85,23 @@ async function verifyGoogleIdToken(idToken: string): Promise<GoogleTokenInfo> {
 
 export async function clienteLoginService(idToken: string, ip?: string): Promise<ClienteAuthResult> {
   const info = await verifyGoogleIdToken(idToken);
+  const nombre = info.given_name || (info.name ? info.name.split(' ')[0] : info.email.split('@')[0]);
+  return crearSesionCliente(info.email, nombre, info.family_name || null, ip);
+}
 
-  let persona = await buscarPersonaPorEmail(info.email);
-  let idPersona: number;
-  if (!persona) {
-    const nombre = info.given_name || (info.name ? info.name.split(' ')[0] : info.email.split('@')[0]);
-    const apPaterno = info.family_name || null;
-    idPersona = await crearPersonaGmail(nombre, apPaterno, null, info.email, 'CLIENTE', ip ?? '');
-    persona = { id_persona: idPersona, nombre, ap_paterno: apPaterno, ap_materno: null, email: info.email };
-  } else {
-    idPersona = persona.id_persona;
+export async function clienteEmailLoginService(accessToken: string, ip?: string): Promise<ClienteAuthResult> {
+  const { data, error } = await supabase.auth.getUser(accessToken);
+  const user = data.user;
+  if (error || !user?.email || !user.email_confirmed_at) {
+    throw new ClienteAuthError(user?.email && !user.email_confirmed_at ? 'EMAIL_NO_VERIFICADO' : 'CREDENCIALES_INVALIDAS');
   }
 
-  let cliente = await buscarClienteActivoPorPersona(idPersona);
-  if (!cliente) {
-    const idCliente = await crearClienteGmail(idPersona, 'CLIENTE', ip ?? '');
-    cliente = { id_cliente: idCliente, puntos: 0 };
-  }
-
-  const nombreCompleto = [persona.nombre, persona.ap_paterno, persona.ap_materno].filter(Boolean).join(' ').trim() || info.email;
-  await auditarCliente('LOGIN', cliente.id_cliente, info.email, ip);
-
-  const token = jwt.sign(
-    { sub: cliente.id_cliente, rol: 'CLIENTE', email: info.email, nombre: nombreCompleto },
-    env.JWT_SECRET,
-    { expiresIn: '7d' },
-  );
-
-  return {
-    token,
-    cliente: { id: cliente.id_cliente, nombre: nombreCompleto, email: info.email, puntos: cliente.puntos },
-  };
+  const nombreMetadata = user.user_metadata['nombre'];
+  const nombre = typeof nombreMetadata === 'string' && nombreMetadata.trim()
+    ? nombreMetadata.trim()
+    : user.email.split('@')[0];
+  const [primerNombre, ...apellidos] = nombre.split(/\s+/);
+  return crearSesionCliente(user.email, primerNombre || nombre, apellidos.join(' ') || null, ip);
 }
 
 export async function clienteSesionService(token: string): Promise<{ id: number; nombre: string; email: string; puntos: number }> {

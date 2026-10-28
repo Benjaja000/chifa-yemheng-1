@@ -23,6 +23,15 @@ export interface FiltrosReservas {
   estado: '' | EstadoReserva;
 }
 
+export interface MesaDisponible {
+  mesaId: number;
+  numero: string;
+  capacidad: number;
+  ambiente: string;
+  disponible: boolean;
+  razon?: string;
+}
+
 export function listarReservas(f: FiltrosReservas): Promise<ReservaLista> {
   const q = new URLSearchParams({ page: String(f.page), limit: String(f.limit) });
   if (f.fecha) q.set('fecha', f.fecha);
@@ -42,10 +51,26 @@ export function crearReserva(input: {
   return fetch(BASE, { method: 'POST', headers: headers(), body: JSON.stringify(input) }).then(lanzar<Reserva>);
 }
 
-export function confirmarReserva(id: number): Promise<Reserva> {
-  return fetch(`${BASE}/${id}/confirmar`, { method: 'PATCH', headers: headers() }).then(lanzar<Reserva>);
+export function listarMesasDisponibles(fecha: string, hora: string, comensales: number): Promise<MesaDisponible[]> {
+  const q = new URLSearchParams({ fecha, hora, comensales: String(comensales) });
+  return fetch(`${BASE}/disponibilidad?${q.toString()}`, { headers: headers() }).then(lanzar<MesaDisponible[]>);
+}
+
+export function confirmarReserva(
+  id: number,
+  input: { mesaId: number; observacion?: string; adelanto?: number },
+): Promise<Reserva> {
+  return fetch(`${BASE}/${id}/confirmar`, {
+    method: 'PATCH',
+    headers: headers(),
+    body: JSON.stringify(input),
+  }).then(lanzar<Reserva>);
 }
 
 export function anularReserva(id: number): Promise<Reserva> {
   return fetch(`${BASE}/${id}/anular`, { method: 'PATCH', headers: headers() }).then(lanzar<Reserva>);
+}
+
+export function atenderReserva(id: number): Promise<Reserva> {
+  return fetch(`${BASE}/${id}/atender`, { method: 'PATCH', headers: headers() }).then(lanzar<Reserva>);
 }

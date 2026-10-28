@@ -1,68 +1,117 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { ArrowLeft, Check } from 'lucide-react';
-import { DEMO_IMG } from '../../../lib/demoData';
+import { ArrowLeft, MapPin, ShoppingBag, WalletCards } from 'lucide-react';
 import { useClienteAuth } from '../auth/cliente-auth-context';
 import { DeliveryWizard } from './components/DeliveryWizard';
 import { DeliveryTracking } from './components/DeliveryTracking';
+import { api } from '@/shared/services/api-client';
 
 export function ClienteDeliveryPage() {
   const { cliente } = useClienteAuth();
   const [deliveryId, setDeliveryId] = useState<number | null>(null);
+  const [loadingDelivery, setLoadingDelivery] = useState(Boolean(cliente));
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
+
+  useEffect(() => {
+    if (!cliente) {
+      setLoadingDelivery(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingDelivery(true);
+    setDeliveryError(null);
+    api.getDeliveryActivoCliente()
+      .then(({ idPedidoDelivery }) => {
+        if (!cancelled) setDeliveryId(idPedidoDelivery);
+      })
+      .catch((error: unknown) => {
+        console.error('Error consultando delivery activo:', error);
+        if (!cancelled) setDeliveryError('No pudimos consultar tu pedido activo. Intenta nuevamente antes de crear otro.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDelivery(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cliente?.id, retryKey]);
 
   // Guest view: presentación informativa (sin datos de negocio hardcodeados).
   if (!cliente) {
     return (
+      <div className="y-shell">
+        <main className="y-cliente-page">
+          <div className="y-head">
+            <Link to="/cliente/inicio" className="y-icon-btn" aria-label="Volver"><ArrowLeft size={18} /></Link>
+            <h2 className="font-d" style={{ margin: 0, fontSize: 22 }}>Delivery</h2>
+          </div>
+          <section className="y-flow-hero y-cliente-flow-hero" aria-labelledby="delivery-guest-title">
+            <div className="y-flow-hero__content">
+              <span className="y-flow-hero__eyebrow">Pedido a domicilio</span>
+              <h1 id="delivery-guest-title" className="y-flow-hero__title">Prepara tu pedido desde aquí.</h1>
+              <p className="y-flow-hero__description">
+                Explora la carta y conoce cómo preparar un pedido para recibirlo en casa.
+              </p>
+            </div>
+          </section>
+          <section className="y-guest-content" aria-label="Cómo funciona el delivery">
+            <div className="y-guest-section-heading">
+              <span className="y-cliente-kicker">El sabor llega a casa</span>
+              <h2>Un pedido sencillo y claro</h2>
+              <p>Revisa cada paso y el costo de envío antes de confirmar.</p>
+            </div>
+            <div className="y-guest-steps">
+              <article className="y-panel y-guest-step">
+                <span className="y-guest-step__icon"><ShoppingBag size={23} /></span>
+                <span className="y-guest-step__number">01</span>
+                <h2>Elige tus platos</h2>
+                <p>Revisa la carta y agrega al pedido lo que te gustaría disfrutar.</p>
+              </article>
+              <article className="y-panel y-guest-step">
+                <span className="y-guest-step__icon"><MapPin size={23} /></span>
+                <span className="y-guest-step__number">02</span>
+                <h2>Indica dónde recibirlo</h2>
+                <p>Ingresa tu dirección y distrito para comprobar la cobertura.</p>
+              </article>
+              <article className="y-panel y-guest-step">
+                <span className="y-guest-step__icon"><WalletCards size={23} /></span>
+                <span className="y-guest-step__number">03</span>
+                <h2>Revisa antes de confirmar</h2>
+                <p>Verás el costo de envío y el resumen antes de enviar el pedido.</p>
+              </article>
+            </div>
+            <div className="y-guest-explore-links">
+              <Link to="/cliente/menu">Explora los platos disponibles <span aria-hidden="true">→</span></Link>
+              <Link to="/cliente/reservas">¿Vienes al local? Conoce las reservas <span aria-hidden="true">→</span></Link>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
+  if (loadingDelivery) {
+    return (
+      <div className="y-shell y-responsive-page">
+        <div className="y-panel" style={{ padding: 22 }}>Consultando tu pedido activo…</div>
+      </div>
+    );
+  }
+
+  if (deliveryError) {
+    return (
       <div className="y-shell y-responsive-page">
         <div className="y-head">
           <Link to="/cliente/inicio" className="y-icon-btn" aria-label="Volver"><ArrowLeft size={18} /></Link>
-          <h2 className="font-d" style={{ margin: 0, fontSize: 22 }}>Delivery a domicilio</h2>
+          <h2 className="font-d" style={{ margin: 0, fontSize: 22 }}>Delivery</h2>
         </div>
-
-        <section className="y-hero">
-          <motion.div className="bg" style={{ backgroundImage: `url(${DEMO_IMG.hero})`, y: 0 }} initial={{ scale: 1.18 }} animate={{ scale: 1.05 }} transition={{ duration: 2.4, ease: 'easeOut' }} />
-          <div className="fade" />
-
-          <div className="p-8 max-w-2xl mx-auto pt-20">
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Entrega en tu puerta</h3>
-            <p style={{ margin: '4px 0 0', fontSize: 13, opacity: 0.85 }}>Pide desde la app y sigue tu pedido en vivo.</p>
-
-            <div className="grid grid-cols-1 gap-4 mt-8">
-              <div className="y-panel" style={{ padding: 16 }}>
-                <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700 }}>¿Cómo funciona?</h4>
-                <div style={{ display: 'grid', gap: 8, fontSize: 13, color: 'var(--muted)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--red)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>1</span>
-                    <span>Elige tus platos de la carta y agrégalos al carrito.</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--red)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>2</span>
-                    <span>Ingresa tu dirección y distrito de entrega.</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--red)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>3</span>
-                    <span>Sigue tu pedido en vivo hasta que llegue a tu puerta.</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="y-panel" style={{ padding: 16 }}>
-                <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700 }}>Beneficios</h4>
-                <div style={{ display: 'grid', gap: 6, fontSize: 13, color: 'var(--muted)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Check size={14} style={{ color: 'var(--gold2)' }} /> Pedidos sin llamar por teléfono</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Check size={14} style={{ color: 'var(--gold2)' }} /> Seguimiento en tiempo real</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Check size={14} style={{ color: 'var(--gold2)' }} /> Pago digital (Yape/Plin) o efectivo</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Check size={14} style={{ color: 'var(--gold2)' }} /> Acumula puntos con tu cuenta</div>
-                </div>
-              </div>
-            </div>
-
-            <Link className="y-btn red" to="/cliente/login" style={{ marginTop: 12, display: 'inline-flex' }}>Iniciar sesión para hacer un pedido</Link>
-          </div>
-
-          <div className="y-scroll" />
-        </section>
+        <div className="y-panel" role="alert" style={{ padding: 22 }}>
+          <p>{deliveryError}</p>
+          <button className="y-btn red" onClick={() => setRetryKey((key) => key + 1)}>Volver a intentar</button>
+        </div>
       </div>
     );
   }
@@ -73,15 +122,23 @@ export function ClienteDeliveryPage() {
   }
 
   return (
-    <div className="y-shell y-responsive-page">
+    <div className="y-shell">
+      <main className="y-cliente-page">
       <div className="y-head">
         <Link to="/cliente/inicio" className="y-icon-btn" aria-label="Volver"><ArrowLeft size={18} /></Link>
-        <h2 className="font-d" style={{ margin: 0, fontSize: 22 }}>Delivery a domicilio</h2>
+        <h2 className="font-d" style={{ margin: 0, fontSize: 22 }}>Delivery</h2>
       </div>
-
-      <section style={{ padding: 16 }}>
+      <section className="y-flow-hero y-cliente-flow-hero" aria-labelledby="delivery-title">
+        <div className="y-flow-hero__content">
+          <span className="y-flow-hero__eyebrow">Pedido a domicilio</span>
+          <h1 id="delivery-title" className="y-flow-hero__title">Completa tu pedido.</h1>
+          <p className="y-flow-hero__description">Sigue los pasos y revisa los datos antes de confirmar.</p>
+        </div>
+      </section>
+      <section className="y-panel y-delivery-form-panel">
         <DeliveryWizard onCreated={(idPedidoDelivery) => setDeliveryId(idPedidoDelivery)} />
       </section>
+      </main>
     </div>
   );
 }

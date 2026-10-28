@@ -42,6 +42,10 @@ export const cuentaSchema = z.object({
   mesaId: z.number().int().positive(),
 });
 
+export const modoPagoMesaSchema = z.object({
+  modo: z.enum(['CUENTA_UNICA', 'POR_CONSUMO']),
+});
+
 export type PedidoQuery = z.infer<typeof pedidoQuerySchema>;
 export type PedidoAbrir = z.infer<typeof pedidoAbrirSchema>;
 export type DetalleAdd = z.infer<typeof detalleAddSchema>;
@@ -49,3 +53,4 @@ export type PedidoAnular = z.infer<typeof pedidoAnularSchema>;
 export type PreparacionUpdate = z.infer<typeof preparacionUpdateSchema>;
 export type ComandaQuery = z.infer<typeof comandaQuerySchema>;
 export type Cuenta = z.infer<typeof cuentaSchema>;
+export type ModoPagoMesaInput = z.infer<typeof modoPagoMesaSchema>;

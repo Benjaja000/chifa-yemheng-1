@@ -82,7 +82,9 @@ export function DeliveryTracking({ deliveryId }: { deliveryId: number }) {
           <h3 className="font-medium text-gray-900 mb-2">Pedido #{ubicacion.id_pedido}</h3>
           <p className="text-gray-500 mb-2">Dirección: {ubicacion.direccion_entrega || '—'}</p>
           <p className="text-gray-500 mb-2">Distrito: {ubicacion.distrito || '—'}</p>
-          <p className="text-gray-500 mb-2">Costo de envío: {fmtPEN(ubicacion.costo_envio)}</p>
+          <p className="text-gray-500 mb-2">
+            Costo de envío: {ubicacion.costo_envio_confirmado ? fmtPEN(ubicacion.costo_envio) : 'pendiente de confirmación'}
+          </p>
           <p className="text-gray-500 mb-2">Salida: {hora(ubicacion.f_salida)} · Entrega: {hora(ubicacion.f_entrega)}</p>
           {ubicacion.situacion === 'R' && (
             <p className="text-green-600 text-sm">

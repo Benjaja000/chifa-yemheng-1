@@ -130,6 +130,8 @@ export function DireccionStep(props: DireccionStepProps) {
   const [provinciaSel, setProvinciaSel] = useState<number | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [costoSugerido, setCostoSugerido] = useState<number | null>(null);
+  const [cargandoCosto, setCargandoCosto] = useState(false);
+  const [errorCosto, setErrorCosto] = useState<string | null>(null);
   const [fueraRadio, setFueraRadio] = useState(false);
   const [dentroCobertura, setDentroCobertura] = useState(true);
   const [mapPins, setMapPins] = useState<Array<{ lat: number; lng: number; label?: string; color?: 'blue' | 'red' | 'green' }>>([]);
@@ -236,12 +238,17 @@ export function DireccionStep(props: DireccionStepProps) {
   useEffect(() => {
     if (!distritoId) {
       setCostoSugerido(null);
+      setCargandoCosto(false);
+      setErrorCosto(null);
       setFueraRadio(false);
       setDentroCobertura(true);
       return;
     }
 
     let cancelled = false;
+    setCostoSugerido(null);
+    setCargandoCosto(true);
+    setErrorCosto(null);
 
     const cargarCosto = async () => {
       try {
@@ -259,6 +266,9 @@ export function DireccionStep(props: DireccionStepProps) {
         }
       } catch (error) {
         console.error('Error sugiriendo costo por distrito:', error);
+        if (!cancelled) setErrorCosto('No se pudo calcular el costo. Revisa tu conexión e inténtalo nuevamente.');
+      } finally {
+        if (!cancelled) setCargandoCosto(false);
       }
     };
 
@@ -290,7 +300,7 @@ export function DireccionStep(props: DireccionStepProps) {
   const aplicarSugerencia = async (s: { etiqueta: string; lat: number; lng: number }) => {
     setVerSugerencias(false);
     setSugerencias([]);
-    onDireccionChange(s.etiqueta);
+    onDireccionChange(s.etiqueta.slice(0, 150));
     onGpsChange(s.lat, s.lng);
     setMapPins([{ lat: s.lat, lng: s.lng, label: 'Tu ubicación', color: 'blue' }]);
     setMapCenter([s.lat, s.lng]);
@@ -307,7 +317,7 @@ export function DireccionStep(props: DireccionStepProps) {
         if (area) partesDireccion.push(area);
         if (address.postcode) partesDireccion.push(address.postcode);
         if (partesDireccion.length > 0) {
-          onDireccionChange(partesDireccion.join(', '));
+          onDireccionChange(partesDireccion.join(', ').slice(0, 150));
         }
 
         const referenciaParts: string[] = [];
@@ -315,7 +325,7 @@ export function DireccionStep(props: DireccionStepProps) {
         if (address.suburb) referenciaParts.push(`Cerca de ${address.suburb}`);
         if (address.neighbourhood) referenciaParts.push(`En ${address.neighbourhood}`);
         if (referenciaParts.length > 0) {
-          onReferenciaChange(referenciaParts.join(' - '));
+          onReferenciaChange(referenciaParts.join(' - ').slice(0, 150));
         }
       }
     } catch (error) {
@@ -353,14 +363,14 @@ export function DireccionStep(props: DireccionStepProps) {
       partesDireccion.push(address.neighbourhood || address.suburb || '');
     }
     if (partesDireccion.length > 0) {
-      onDireccionChange(partesDireccion.join(', '));
+      onDireccionChange(partesDireccion.join(', ').slice(0, 150));
     } else if (geo.display_name) {
-      onDireccionChange(geo.display_name);
+      onDireccionChange(geo.display_name.slice(0, 150));
     }
 
     const referenciaParts = [address.landmark, address.suburb, address.neighbourhood].filter(Boolean);
     if (referenciaParts.length > 0) {
-      onReferenciaChange(referenciaParts.join(' - '));
+      onReferenciaChange(referenciaParts.join(' - ').slice(0, 150));
     }
 
     const nombresDepartamento = [address.state, address.department, address.region, address.state_district];
@@ -451,7 +461,14 @@ export function DireccionStep(props: DireccionStepProps) {
     }
   };
 
-  const canNext = direccion.trim() !== '' && distritoId !== null;
+  const canNext = direccion.trim() !== ''
+    && direccion.trim().length <= 150
+    && distritoId !== null
+    && /^\d{9}$/.test(telefono)
+    && costoSugerido !== null
+    && !cargandoCosto
+    && !errorCosto
+    && dentroCobertura;
 
   return (
     <div className="space-y-6">
@@ -483,12 +500,13 @@ export function DireccionStep(props: DireccionStepProps) {
           type="text"
           value={direccion}
           onChange={(e) => {
-            onDireccionChange(e.target.value);
+            onDireccionChange(e.target.value.slice(0, 150));
             setVerSugerencias(true);
           }}
           onFocus={() => setVerSugerencias(true)}
           onBlur={() => window.setTimeout(() => setVerSugerencias(false), 200)}
           placeholder="Av. Los Incas 123, Urb. El Bosque"
+          maxLength={150}
           className="w-full rounded-lg border px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           required
         />
@@ -643,11 +661,16 @@ export function DireccionStep(props: DireccionStepProps) {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Costo de envío (automático) *</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Costo de envío sugerido</label>
           <div className="w-full rounded-lg border bg-gray-100 px-3 py-2 text-gray-700">
-            S/ {costoEnvio.toFixed(2)}
+            {cargandoCosto
+              ? 'Calculando…'
+              : errorCosto
+                ? 'No disponible'
+                : `S/ ${costoEnvio.toFixed(2)}`}
           </div>
           <p className="mt-1 text-xs text-gray-500">Calculado automáticamente según tu distrito y ubicación.</p>
+          {errorCosto && <p className="mt-1 text-xs text-red-700" role="alert">{errorCosto}</p>}
         </div>
 
         <div>
@@ -655,8 +678,9 @@ export function DireccionStep(props: DireccionStepProps) {
           <input
             type="text"
             value={referencia}
-            onChange={(e) => onReferenciaChange(e.target.value)}
+            onChange={(e) => onReferenciaChange(e.target.value.slice(0, 150))}
             placeholder="Frente al parque, casa azul, 2do piso"
+            maxLength={150}
             className="w-full rounded-lg border px-3 py-2"
           />
         </div>
@@ -667,9 +691,11 @@ export function DireccionStep(props: DireccionStepProps) {
         <input
           type="tel"
           value={telefono}
-          onChange={(e) => onTelefonoChange(e.target.value)}
+          onChange={(e) => onTelefonoChange(e.target.value.replace(/\D/g, '').slice(0, 9))}
           placeholder="987654321"
           maxLength={9}
+          inputMode="numeric"
+          pattern="[0-9]{9}"
           className="w-full rounded-lg border px-3 py-2"
           required
         />

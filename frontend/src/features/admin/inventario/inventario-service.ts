@@ -40,6 +40,7 @@ export interface Receta {
   insumo: string;
   cantidad: number;
   unidad: string;
+  estado: 'A' | 'I' | 'E';
 }
 
 export interface RecetaLista {
@@ -68,4 +69,12 @@ export function listarRecetas(f: { page: number; limit: number; productoId?: num
 
 export function crearReceta(input: { productoId: number; insumoId: number; cantidad: number }): Promise<Receta> {
   return fetch(`${BASE}/recetas`, { method: 'POST', headers: headers(), body: JSON.stringify(input) }).then(lanzar<Receta>);
+}
+
+export function actualizarReceta(id: number, input: { cantidad?: number; estado?: 'A' | 'I' }): Promise<Receta> {
+  return fetch(`${BASE}/recetas/${id}`, {
+    method: 'PATCH',
+    headers: headers(),
+    body: JSON.stringify(input),
+  }).then(lanzar<Receta>);
 }

@@ -4,24 +4,50 @@ import {
   asignarPermisosSchema,
   rolCreateSchema,
   rolQuerySchema,
+  rolUpdateSchema,
   usuarioCreateSchema,
   usuarioQuerySchema,
   usuarioUpdateSchema,
 } from '../schemas/seguridad.js';
 import {
   asignarPermisosService,
-  crearRolService,
+  guardarRolService,
   crearUsuarioService,
   listarPermisosService,
   listarRolesService,
   listarUsuariosService,
   actualizarUsuarioService,
+  listarTiposUsuarioService,
+  listarPermisosDeRolService,
 } from '../services/seguridad-service.js';
 import { getPc } from '../utils/auditoria.js';
+import { SeguridadError, type SeguridadActor } from '../models/seguridad.js';
 
-function sesion(req: Request): { id: number; logeo: string; pc: string } {
+function sesion(req: Request): { actor: SeguridadActor; pc: string } {
   const user = (req as AuthenticatedRequest).user;
-  return { id: user.sub, logeo: user.logeo, pc: getPc(req) };
+  return {
+    actor: { id: user.sub, logeo: user.logeo, tipo: user.tipo, permisos: user.permisos },
+    pc: getPc(req),
+  };
+}
+
+function responderErrorSeguridad(res: Response, err: unknown): boolean {
+  if (!(err instanceof SeguridadError)) return false;
+  const status = {
+    NOT_FOUND: 404,
+    YA_EXISTE: 409,
+    TIPO_INVALIDO: 422,
+    VALIDATION_ERROR: 400,
+    FORBIDDEN: 403,
+    AUTO_MODIFICACION_PROHIBIDA: 403,
+    EMPLEADO_INACTIVO: 422,
+    ULTIMO_ADMINISTRADOR: 409,
+    PERMISO_INVALIDO: 422,
+    PRIVILEGE_ESCALATION: 403,
+    MOTIVO_REQUERIDO: 400,
+  }[err.code];
+  res.status(status).json({ error: err.code });
+  return true;
 }
 
 export async function getUsuarios(req: Request, res: Response): Promise<void> {
@@ -32,26 +58,20 @@ export async function getUsuarios(req: Request, res: Response): Promise<void> {
   }
   res.json(await listarUsuariosService(parsed.data));
 }
+export async function getTiposUsuario(_req: Request, res: Response): Promise<void> {
+  res.json(await listarTiposUsuarioService());
+}
 export async function postUsuario(req: Request, res: Response): Promise<void> {
   const parsed = usuarioCreateSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() });
     return;
   }
-  const s = sesion(req);
+  const { actor, pc } = sesion(req);
   try {
-    res.status(201).json(await crearUsuarioService(parsed.data, s.logeo, s.pc));
+    res.status(201).json(await crearUsuarioService(parsed.data, actor, pc));
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('YA_EXISTE')) {
-      res.status(409).json({ error: 'YA_EXISTE' });
-      return;
-    }
-    if (msg.includes('TIPO_INVALIDO')) {
-      res.status(422).json({ error: 'TIPO_INVALIDO' });
-      return;
-    }
-    res.status(500).json({ error: 'INTERNAL_ERROR', detalle: msg });
+    if (!responderErrorSeguridad(res, err)) throw err;
   }
 }
 export async function putUsuario(req: Request, res: Response): Promise<void> {
@@ -60,16 +80,11 @@ export async function putUsuario(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() });
     return;
   }
-  const s = sesion(req);
+  const { actor, pc } = sesion(req);
   try {
-    res.json(await actualizarUsuarioService(Number(req.params['id']), parsed.data, s.logeo, s.pc));
+    res.json(await actualizarUsuarioService(Number(req.params['id']), parsed.data, actor, pc));
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('NOT_FOUND')) {
-      res.status(404).json({ error: 'NOT_FOUND' });
-      return;
-    }
-    res.status(500).json({ error: 'INTERNAL_ERROR', detalle: msg });
+    if (!responderErrorSeguridad(res, err)) throw err;
   }
 }
 export async function getRoles(req: Request, res: Response): Promise<void> {
@@ -86,11 +101,31 @@ export async function postRol(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() });
     return;
   }
-  const s = sesion(req);
-  res.status(201).json(await crearRolService(parsed.data, s.logeo, s.pc));
+  const { actor, pc } = sesion(req);
+  try {
+    res.status(201).json(await guardarRolService(null, parsed.data, actor, pc));
+  } catch (err) {
+    if (!responderErrorSeguridad(res, err)) throw err;
+  }
+}
+export async function putRol(req: Request, res: Response): Promise<void> {
+  const parsed = rolUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() });
+    return;
+  }
+  const { actor, pc } = sesion(req);
+  try {
+    res.json(await guardarRolService(Number(req.params['id']), parsed.data, actor, pc));
+  } catch (err) {
+    if (!responderErrorSeguridad(res, err)) throw err;
+  }
 }
 export async function getPermisos(_req: Request, res: Response): Promise<void> {
   res.json(await listarPermisosService());
+}
+export async function getPermisosDeRol(req: Request, res: Response): Promise<void> {
+  res.json({ permisoIds: await listarPermisosDeRolService(Number(req.params['id'])) });
 }
 export async function putRolPermisos(req: Request, res: Response): Promise<void> {
   const parsed = asignarPermisosSchema.safeParse(req.body);
@@ -98,7 +133,11 @@ export async function putRolPermisos(req: Request, res: Response): Promise<void>
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() });
     return;
   }
-  const s = sesion(req);
-  await asignarPermisosService(Number(req.params['id']), parsed.data, s.logeo, s.pc);
-  res.json({ ok: true });
+  const { actor, pc } = sesion(req);
+  try {
+    await asignarPermisosService(Number(req.params['id']), parsed.data, actor, pc);
+    res.json({ ok: true });
+  } catch (err) {
+    if (!responderErrorSeguridad(res, err)) throw err;
+  }
 }

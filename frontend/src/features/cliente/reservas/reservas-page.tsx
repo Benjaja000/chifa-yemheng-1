@@ -1,128 +1,186 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, CalendarDays, UsersRound, ClipboardCheck, Clock3 } from 'lucide-react';
 import { Loading, Empty } from '../../../components/ui';
 import { ReservaForm, ReservaCard } from '../../../components/ReservaParts';
 import type { Reserva } from '../../../types/db';
 import { useClienteAuth } from '../auth/cliente-auth-context';
 
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1';
+
 export function ClienteReservasPage() {
-  const { cliente } = useClienteAuth();
+  const { cliente, token } = useClienteAuth();
   const [tab, setTab] = useState<'mis' | 'nueva'>('mis');
-  const [reservas] = useState<Reserva[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [reservasActuales, setReservasActuales] = useState<Reserva[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    setLoading(false);
-  }, []);
+    let cancelado = false;
+    const controller = new AbortController();
+    if (!cliente) {
+      setLoading(false);
+      return () => {
+        cancelado = true;
+        controller.abort();
+      };
+    }
+    if (!token) {
+      setError('Inicia sesión nuevamente para consultar tus reservas.');
+      setLoading(false);
+      return () => {
+        cancelado = true;
+        controller.abort();
+      };
+    }
+
+    setLoading(true);
+    setError(null);
+    fetch(`${API_URL}/cliente/reservas`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('No se pudieron cargar tus reservas.');
+        return res.json() as Promise<{ data?: Reserva[] } | Reserva[]>;
+      })
+      .then((body) => {
+        if (cancelado) return;
+        setReservasActuales(Array.isArray(body) ? body : (body.data ?? []));
+      })
+      .catch((e: unknown) => {
+        if (!cancelado && !controller.signal.aborted) {
+          setError(e instanceof Error ? e.message : 'No se pudieron cargar tus reservas.');
+        }
+      })
+      .finally(() => {
+        if (!cancelado) setLoading(false);
+      });
+
+    return () => {
+      cancelado = true;
+      controller.abort();
+    };
+  }, [cliente, token, refreshKey]);
 
   function onDone() {
     setTab('mis');
+    setRefreshKey((key) => key + 1);
   }
 
-  // Guest view: informational presentation
   if (!cliente) {
     return (
-      <div className="y-shell y-responsive-page">
-        <div className="y-head">
-          <Link to="/cliente/inicio" className="y-icon-btn" aria-label="Volver"><ArrowLeft size={18} /></Link>
-          <h2 className="font-d" style={{ margin: 0, fontSize: 22 }}>Reservas</h2>
-        </div>
-
-        <div className="y-panel" style={{ padding: 24, textAlign: 'center', marginBottom: 16 }}>
-          <CalendarDays size={40} style={{ color: 'var(--gold2)', marginBottom: 8 }} />
-          <h3 className="font-d" style={{ margin: '0 0 8px', fontSize: 20 }}>Reserva tu mesa</h3>
-          <p style={{ color: 'var(--muted)', fontSize: 13, margin: '0 0 16px', lineHeight: 1.6 }}>
-            Asegura tu mesa en Chifa Yemheng. Reserva en línea y te avisamos cuando esté confirmada.
-          </p>
-          <Link className="y-btn red" to="/cliente/login" style={{ display: 'inline-flex' }}>
-            Iniciar sesión para reservar
-          </Link>
-        </div>
-
-        <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
-          <div className="y-panel" style={{ padding: 16 }}>
-            <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700 }}>¿Cómo funciona?</h4>
-            <div style={{ display: 'grid', gap: 8, fontSize: 13, color: 'var(--muted)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--red)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>1</span>
-                <span>Elige la fecha, hora y número de personas.</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--red)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>2</span>
-                <span>Confirma tu reserva con un adelanto opcional.</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--red)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>3</span>
-                <span>Te avisamos cuando el personal confirme tu mesa.</span>
-              </div>
-            </div>
+      <div className="y-shell">
+        <main className="y-cliente-page">
+          <div className="y-head">
+            <Link to="/cliente/inicio" className="y-icon-btn" aria-label="Volver"><ArrowLeft size={18} /></Link>
+            <h2 className="font-d" style={{ margin: 0, fontSize: 22 }}>Reservas</h2>
           </div>
-
-          <div className="y-panel" style={{ padding: 16 }}>
-            <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700 }}>Beneficios</h4>
-            <div style={{ display: 'grid', gap: 6, fontSize: 13, color: 'var(--muted)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><CheckCircle2 size={14} style={{ color: 'var(--gold2)' }} /> Sin esperas al llegar</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><CheckCircle2 size={14} style={{ color: 'var(--gold2)' }} /> Mesa garantizada para tu grupo</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><CheckCircle2 size={14} style={{ color: 'var(--gold2)' }} /> Ocasiones especiales (cumpleaños, aniversarios)</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><CheckCircle2 size={14} style={{ color: 'var(--gold2)' }} /> Adelanto opcional para confirmar</div>
+          <section className="y-flow-hero y-cliente-flow-hero" aria-labelledby="reservas-guest-title">
+            <div className="y-flow-hero__content">
+              <span className="y-flow-hero__eyebrow"><CalendarDays size={14} /> Reservas</span>
+              <h1 id="reservas-guest-title" className="y-flow-hero__title">Solicita una mesa.</h1>
+              <p className="y-flow-hero__description">
+                Cuéntanos cuándo vienes y para cuántas personas. Podrás revisar el estado de tu solicitud desde tu cuenta.
+              </p>
             </div>
-          </div>
-
-          <div className="y-panel" style={{ padding: 16 }}>
-            <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700 }}>Horarios de atención</h4>
-            <div style={{ display: 'grid', gap: 4, fontSize: 13, color: 'var(--muted)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Lunes a Jueves</span><b style={{ color: 'var(--cream)' }}>11:00 – 22:00</b></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Viernes y Sábado</span><b style={{ color: 'var(--cream)' }}>11:00 – 23:00</b></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Domingo</span><b style={{ color: 'var(--cream)' }}>11:00 – 21:00</b></div>
+          </section>
+          <section className="y-guest-content" aria-label="Cómo solicitar una reserva">
+            <div className="y-guest-section-heading">
+              <span className="y-cliente-kicker">Una visita para disfrutar</span>
+              <h2>Planea tu momento en Yemheng</h2>
+              <p>Organiza los detalles de tu visita y el equipo revisará tu solicitud.</p>
             </div>
-          </div>
-        </div>
+            <div className="y-guest-steps">
+              <article className="y-panel y-guest-step">
+                <span className="y-guest-step__icon"><CalendarDays size={23} /></span>
+                <span className="y-guest-step__number">01</span>
+                <h2>Elige cuándo venir</h2>
+                <p>Indica la fecha y hora que prefieres para tu visita.</p>
+              </article>
+              <article className="y-panel y-guest-step">
+                <span className="y-guest-step__icon"><UsersRound size={23} /></span>
+                <span className="y-guest-step__number">02</span>
+                <h2>Cuéntanos cuántos son</h2>
+                <p>Agrega la cantidad de personas y cualquier observación importante.</p>
+              </article>
+              <article className="y-panel y-guest-step">
+                <span className="y-guest-step__icon"><ClipboardCheck size={23} /></span>
+                <span className="y-guest-step__number">03</span>
+                <h2>Envía tu solicitud</h2>
+                <p>El equipo revisará la solicitud y podrás consultar su estado desde tu cuenta.</p>
+              </article>
+            </div>
+            <div className="y-guest-note">
+              <Clock3 size={18} />
+              <p>Enviar una solicitud no confirma automáticamente una mesa; espera la confirmación del local.</p>
+            </div>
+            <div className="y-guest-explore-links">
+              <Link to="/cliente/menu">Descubre la carta antes de venir <span aria-hidden="true">→</span></Link>
+              <Link to="/cliente/delivery">¿Te quedas en casa? Conoce el delivery <span aria-hidden="true">→</span></Link>
+            </div>
+          </section>
+        </main>
       </div>
     );
   }
 
-  // Logged-in view: full functionality
   return (
-    <div className="y-shell y-responsive-page">
-      <div className="y-head">
-        <Link to="/cliente/inicio" className="y-icon-btn" aria-label="Volver"><ArrowLeft size={18} /></Link>
-        <h2 className="font-d" style={{ margin: 0, fontSize: 22 }}>Reservas</h2>
-      </div>
-      <div className="y-tabs">
-        <button className={tab === 'mis' ? 'on' : ''} onClick={() => setTab('mis')}>Mis reservas</button>
-        <button className={tab === 'nueva' ? 'on' : ''} onClick={() => setTab('nueva')}>Nueva reserva</button>
-      </div>
+    <div className="y-shell">
+      <main className="y-cliente-page">
+        <div className="y-head">
+          <Link to="/cliente/inicio" className="y-icon-btn" aria-label="Volver"><ArrowLeft size={18} /></Link>
+          <h2 className="font-d" style={{ margin: 0, fontSize: 22 }}>Reservas</h2>
+        </div>
+        <section className="y-flow-hero y-cliente-flow-hero" aria-labelledby="reservas-title">
+          <div className="y-flow-hero__content">
+            <span className="y-flow-hero__eyebrow">Tu cuenta</span>
+            <h1 id="reservas-title" className="y-flow-hero__title">Tus reservas, en un solo lugar.</h1>
+            <p className="y-flow-hero__description">Consulta el estado de las solicitudes vinculadas a tu cuenta o envía una nueva.</p>
+          </div>
+        </section>
+        <div className="y-tabs">
+          <button className={tab === 'mis' ? 'on' : ''} onClick={() => setTab('mis')}>Mis reservas</button>
+          <button className={tab === 'nueva' ? 'on' : ''} onClick={() => setTab('nueva')}>Nueva reserva</button>
+        </div>
 
       {tab === 'nueva' ? (
-<div className="y-reservas-layout">
+        <div className={`y-reservas-layout${reservasActuales.length === 0 ? ' y-reservas-layout--single' : ''}`}>
             <div>
-              <ReservaForm onDone={onDone} baseUrl="/api/v1/cliente/reservas" />
+              <ReservaForm onDone={onDone} baseUrl="/api/v1/cliente/reservas" token={token} />
             </div>
-          <div>
-            {reservas.length > 0 && (
+          {reservasActuales.length > 0 && (
+            <div>
               <>
                 <h3 className="font-d" style={{ fontSize: 16, margin: '0 0 10px' }}>Mis reservas</h3>
                 <div style={{ display: 'grid', gap: 10 }}>
-                  {reservas.map((r) => (
+                  {reservasActuales.map((r) => (
                     <ReservaCard key={r.id_reserva} r={r} nombre={cliente?.nombre} />
                   ))}
                 </div>
               </>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       ) : loading ? (
         <Loading text="Cargando reservas…" />
-      ) : reservas.length === 0 ? (
-        <Empty title="Sin reservas aún" sub="Solicita una nueva reserva." />
+      ) : error ? (
+        <div className="y-panel y-cliente-empty" role="alert">
+          <b>No pudimos consultar tus reservas</b>
+          <p>{error}</p>
+          <button className="y-btn line sm" onClick={() => setTab('nueva')}>Solicitar una reserva</button>
+        </div>
+      ) : reservasActuales.length === 0 ? (
+        <Empty title="No hay reservas registradas" sub="Cuando envíes una solicitud, aparecerá aquí." />
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
-          {reservas.map((r) => (
+          {reservasActuales.map((r) => (
             <ReservaCard key={r.id_reserva} r={r} nombre={cliente?.nombre} />
           ))}
         </div>
       )}
+      </main>
     </div>
   );
 }

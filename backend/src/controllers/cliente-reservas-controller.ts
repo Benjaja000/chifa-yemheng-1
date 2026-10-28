@@ -3,25 +3,15 @@ import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import type { Reserva } from '../models/reservas.js';
+import { getPc } from '../utils/auditoria.js';
 
-// ---- Helper: lookup persona → cliente ----
-async function lookupClienteByEmail(email: string): Promise<{ id_cliente: number; id_persona: number } | null> {
-  const { data: persona, error } = await supabase
-    .from('persona')
-    .select('id_persona, id_cliente')
-    .eq('email', email)
-    .maybeSingle();
-  if (error || !persona) return null;
-  return { id_cliente: persona.id_cliente, id_persona: persona.id_persona };
-}
-
-const AUTOSERVICIO_USUARIO_ID = 999; // ID fijo para usuario interno AUTOSERVICIO
+const AUTOSERVICIO_USUARIO_ID = 1;
 
 export async function postClienteReserva(req: Request, res: Response): Promise<void> {
   const header = req.headers.authorization ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
   if (!token) {
-    res.status(412).json({ error: 'CREDENCIALES_INVALIDAS' });
+    res.status(401).json({ error: 'CREDENCIALES_INVALIDAS' });
     return;
   }
   let decoded: unknown;
@@ -36,15 +26,23 @@ export async function postClienteReserva(req: Request, res: Response): Promise<v
     res.status(401).json({ error: 'ROL_INVALIDO' });
     return;
   }
-  const email = (v['email'] as string) ?? '';
-
-  // Buscar cliente por email
-  const cliente = await lookupClienteByEmail(email);
+  const clienteId = v['sub'];
+  const email = typeof v['email'] === 'string' ? v['email'] : '';
+  const { data: cliente, error: clienteError } = await supabase
+    .from('cliente')
+    .select('id_cliente')
+    .eq('id_cliente', clienteId)
+    .eq('estado', 'A')
+    .maybeSingle();
+  if (clienteError) {
+    res.status(500).json({ error: 'DB_CLIENT_LOOKUP_FAIL', details: clienteError.message });
+    return;
+  }
   if (!cliente) {
     res.status(404).json({ error: 'CLIENTE_NOT_FOUND' });
     return;
   }
-  const clienteId = cliente.id_cliente;
+  const pc = getPc(req);
 
   // Validar campos del body
   const { fecha, hora, comensales, observacion, adelanto } = req.body as {
@@ -54,8 +52,21 @@ export async function postClienteReserva(req: Request, res: Response): Promise<v
     observacion?: string;
     adelanto?: number;
   };
-  if (!fecha || !hora) {
+  if (
+    typeof fecha !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(fecha) ||
+    typeof hora !== 'string' ||
+    !/^\d{2}:\d{2}$/.test(hora)
+  ) {
     res.status(400).json({ error: 'FECHA_HORA_OBLIGATORIAS' });
+    return;
+  }
+  if (
+    (comensales !== undefined && (!Number.isInteger(comensales) || comensales < 1 || comensales > 20)) ||
+    (adelanto !== undefined && (typeof adelanto !== 'number' || !Number.isFinite(adelanto) || adelanto < 0)) ||
+    (observacion !== undefined && (typeof observacion !== 'string' || observacion.length > 200))
+  ) {
+    res.status(400).json({ error: 'DATOS_RESERVA_INVALIDOS' });
     return;
   }
 
@@ -71,10 +82,10 @@ export async function postClienteReserva(req: Request, res: Response): Promise<v
       observacion: observacion ?? null,
       situacion: 'P',
       usucre: email,
-      pccre: '',
+      pccre: pc,
       feccre: new Date().toISOString(),
       usumod: '',
-      pcmod: '',
+      pcmod: null,
       fecmod: null,
     })
     .select()
@@ -102,23 +113,17 @@ export async function getMisReservasCli(req: Request, res: Response): Promise<vo
     res.status(401).json({ error: 'ROL_INVALIDO' });
     return;
   }
-  const personId = v['sub'] as number;
-
-  // Listar reservas de este cliente (por id_cliente)
-  // Primero obtener id_cliente desde persona
-  const { data: persona, error: perr } = await supabase
-    .from('persona')
-    .select('id_cliente')
-    .eq('id_persona', personId)
-    .maybeSingle();
-  if (perr) { res.status(500).json({ error: 'DB_LIST_FAIL', details: perr.message }); return; }
-  const clientId = persona?.id_cliente;
+  const clienteId = v['sub'] as number;
 
   const { data, error } = await supabase
     .from('reserva')
-    .select('id_reserva, f_reserva, n_personas, situacion, observacion, mesa(numero), adelanto')
-    .eq('id_cliente', clientId)
+    .select('id_reserva, id_mesa, f_reserva, n_personas, situacion, observacion, mesa(numero), adelanto')
+    .eq('id_cliente', clienteId)
+    .eq('estado', 'A')
     .order('f_reserva', { ascending: false });
   if (error) { res.status(500).json({ error: 'DB_LIST_FAIL', details: error.message }); return; }
-  res.json(data ?? []);
+  res.json((data ?? []).map((reserva) => {
+    const mesa = reserva.mesa as { numero?: string | null } | null;
+    return { ...reserva, mesa_numero: mesa?.numero ?? undefined };
+  }));
 }

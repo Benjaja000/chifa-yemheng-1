@@ -1,18 +1,21 @@
-import type { Pedido } from '../models/pedido.js';
+import type { ModoPagoMesa, Pedido, ParticipantePedido } from '../models/pedido.js';
 import { PedidoError } from '../models/pedido.js';
 import type { DetalleAdd, PedidoAbrir } from '../schemas/pedido.js';
 import {
-  agregarDetalle as repoAgregar,
+  agregarDetalleDeCliente as repoAgregarDeCliente,
   auditar,
   obtenerPedido as repoObtener,
-  abrirPedido as repoAbrir,
+  abrirOUnirseComandaQR,
   pedidosAbiertosPorMesa,
   recalcularPedido as repoRecalcular,
   obtenerEstadoMesa as repoEstadoMesa,
-  idEstadoMesaPorNombre,
   clienteParticipa,
-  pedirCuentaMesa,
+  pedirCuentaComanda,
+  registrarParticipanteMesa,
+  listarParticipantesPedido,
+  configurarModoPagoMesa,
 } from '../repositories/pedidos-repository.js';
+import { distribuirConsumoPedido } from '../utils/pedido-consumo.js';
 
 const AUTOSERVICIO_USER_ID = 1;
 
@@ -29,6 +32,9 @@ export interface ComandaActivaCliente {
   total: number;
   cantidadDetalles: number;
   mesaEstado: string | null;
+  modoPagoMesa: ModoPagoMesa;
+  esOrganizador: boolean;
+  participantes: (ParticipantePedido & { consumoEstimado: number })[];
 }
 
 /** BR-INF-047/048: estado de la comanda derivado de sus ítems. */
@@ -70,17 +76,23 @@ export async function abrirClienteService(
   clienteId: number,
   _pc = '',
 ): Promise<Pedido> {
-  const result = await repoAbrir(
-    input.tipo,
+  if (input.mesa == null) {
+    throw new PedidoError('TIPO_INVALIDO');
+  }
+  const result = await abrirOUnirseComandaQR({
+    tipo: input.tipo,
+    usuario: AUTOSERVICIO_USER_ID,
+    mesa: input.mesa,
+    cliente: clienteId,
+    comensales: input.comensales ?? 1,
+    obs: input.obs ?? '',
+  });
+  await auditar(
     AUTOSERVICIO_USER_ID,
-    input.mesa ?? null,
-    clienteId,
-    null,
-    input.comensales ?? 1,
-    input.obs ?? '',
-    'QR',
+    result.esNuevo ? 'ABRIR_PEDIDO_CLIENTE' : 'UNIRSE_COMANDA_CLIENTE',
+    result.id,
+    `Pedido ${result.numero} (cliente ${clienteId})`,
   );
-  await auditar(AUTOSERVICIO_USER_ID, 'ABRIR_PEDIDO_CLIENTE', result.id, `Pedido ${result.numero} (cliente ${clienteId})`);
   const pedido = await repoObtener(result.id);
   if (!pedido) {
     throw new PedidoError('NOT_FOUND');
@@ -108,9 +120,17 @@ export async function agregarDetalleClienteService(
       throw new PedidoError('MESA_POR_COBRAR');
     }
   }
-  await repoAgregar(pedidoId, input.producto, input.cantidad, input.nota ?? '', input.descuento ?? 0);
-  // Asignar id_cliente al detalle recién creado (el SP no lo recibe)
-  await asignarClienteDetalle(pedidoId, input.producto, clienteId);
+  if (pedido.mesaId != null) {
+    await registrarParticipanteMesa(pedidoId, clienteId);
+  }
+  await repoAgregarDeCliente(
+    pedidoId,
+    input.producto,
+    input.cantidad,
+    input.nota ?? '',
+    input.descuento ?? 0,
+    clienteId,
+  );
   await repoRecalcular(pedidoId);
   await auditar(AUTOSERVICIO_USER_ID, 'AGREGAR_DETALLE_CLIENTE', pedidoId, `Producto ${input.producto} x${input.cantidad} (cliente ${clienteId})`);
   const updated = await repoObtener(pedidoId);
@@ -120,31 +140,12 @@ export async function agregarDetalleClienteService(
   return updated;
 }
 
-async function asignarClienteDetalle(pedidoId: number, productoId: number, clienteId: number): Promise<void> {
-  // Actualizar el último detalle insertado para este producto en este pedido
-  const { supabase } = await import('../config/supabase.js');
-  const { data } = await supabase
-    .from('detalle_pedido')
-    .select('id_detallepedido')
-    .eq('id_pedido', pedidoId)
-    .eq('id_producto', productoId)
-    .is('id_cliente', null)
-    .order('f_solicitud', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (data) {
-    await supabase
-      .from('detalle_pedido')
-      .update({ id_cliente: clienteId })
-      .eq('id_detallepedido', (data as { id_detallepedido: number }).id_detallepedido);
-  }
-}
-
-export async function recalcularClienteService(pedidoId: number): Promise<Pedido> {
+export async function recalcularClienteService(pedidoId: number, clienteId: number): Promise<Pedido> {
   const pedido = await repoObtener(pedidoId);
   if (!pedido) {
     throw new PedidoError('NOT_FOUND');
   }
+  await validarParticipacion(pedido, clienteId);
   await repoRecalcular(pedidoId);
   const updated = await repoObtener(pedidoId);
   if (!updated) {
@@ -171,6 +172,7 @@ export async function detalleClienteService(
 
 export async function comandaActivaClienteService(
   mesaId: number,
+  clienteId: number,
 ): Promise<ComandaActivaCliente | null> {
   const abiertos = await pedidosAbiertosPorMesa(mesaId);
   const activo = abiertos[0];
@@ -182,6 +184,13 @@ export async function comandaActivaClienteService(
     throw new PedidoError('NOT_FOUND');
   }
   const mesa = await repoEstadoMesa(mesaId);
+  const membresiaExistente = await clienteParticipa(pedido.id, clienteId);
+  if (!membresiaExistente && mesa.descripcion === 'POR COBRAR') {
+    throw new PedidoError('MESA_POR_COBRAR');
+  }
+  const membresia = await registrarParticipanteMesa(pedido.id, clienteId);
+  const participantes = await listarParticipantesPedido(pedido.id);
+  const participantesConImportes = distribuirConsumoPedido(pedido, participantes);
   return {
     id: pedido.id,
     numero: pedido.numero,
@@ -191,7 +200,23 @@ export async function comandaActivaClienteService(
     total: pedido.total,
     cantidadDetalles: (pedido.detalles ?? []).filter((d) => d.estadoRegistro === 'A').length,
     mesaEstado: mesa.descripcion,
+    modoPagoMesa: membresia.modoPagoMesa,
+    esOrganizador: membresia.esOrganizador,
+    participantes: participantesConImportes,
   };
+}
+
+export async function configurarModoPagoClienteService(
+  pedidoId: number,
+  clienteId: number,
+  modo: ModoPagoMesa,
+): Promise<{ pedidoId: number; modoPagoMesa: ModoPagoMesa }> {
+  const pedido = await repoObtener(pedidoId);
+  if (!pedido) {
+    throw new PedidoError('NOT_FOUND');
+  }
+  const nuevoModo = await configurarModoPagoMesa(pedidoId, clienteId, modo);
+  return { pedidoId, modoPagoMesa: nuevoModo };
 }
 
 export async function pedirCuentaClienteService(mesaId: number, clienteId: number): Promise<{
@@ -213,12 +238,8 @@ export async function pedirCuentaClienteService(mesaId: number, clienteId: numbe
   if (mesa.descripcion === 'POR COBRAR') {
     throw new PedidoError('YA_POR_COBRAR');
   }
-  const idPorCobrar = await idEstadoMesaPorNombre('POR COBRAR');
-  if (idPorCobrar == null) {
-    throw new Error('DB_CAT_FAIL: POR COBRAR sin id');
-  }
-  // BR-ACC-051/BR-RES-026: la cuenta es de toda la mesa; el pedido queda ABIERTO y el cobro es del cajero (BR-ACC-043).
-  await pedirCuentaMesa(mesaId, idPorCobrar);
+  // BR-ACC-051/BR-RES-026: la cuenta es de toda la mesa; solo Caja cobra.
+  await pedirCuentaComanda(pedido.id, clienteId);
   await auditar(
     AUTOSERVICIO_USER_ID,
     'PEDIR_CUENTA',

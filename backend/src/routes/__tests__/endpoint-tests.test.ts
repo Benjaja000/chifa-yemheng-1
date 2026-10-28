@@ -196,6 +196,14 @@ describe('Reportes endpoints', () => {
     expect(res.status).toBe(401)
   })
 
+  it.each(['ventas-por-categoria', 'reservas', 'delivery', 'analisis-comercial'])(
+    'should require auth for GET /reportes/%s',
+    async (reporte) => {
+      const res = await request(app).get(`/api/v1/reportes/${reporte}`)
+      expect(res.status).toBe(401)
+    },
+  )
+
   it('should GET /reportes/* with auth', async () => {
     setAuth('Bearer test-admin-token')
     const res = await request(app).get('/api/v1/reportes/ventas-diarias')
@@ -294,9 +302,27 @@ describe('Cliente auth endpoints', () => {
     expect([200, 400, 503]).toContain(res.status)
   })
 
+  it('should reject a malformed email session exchange', async () => {
+    const res = await request(app).post('/api/v1/cliente/email/session').send({})
+    expect(res.status).toBe(400)
+  })
+
   it('should GET /api/v1/cliente/sesion', async () => {
     const res = await request(app).get('/api/v1/cliente/sesion')
     expect([200, 401]).toContain(res.status)
+  })
+
+  it('should reject a customer reservation without a cliente token', async () => {
+    const res = await request(app)
+      .post('/api/v1/cliente/reservas')
+      .send({ fecha: '2026-11-01', hora: '20:00', comensales: 2 })
+    expect(res.status).toBe(401)
+    expect(res.body).toHaveProperty('error', 'CREDENCIALES_INVALIDAS')
+  })
+
+  it('should require a cliente token to list active delivery orders', async () => {
+    const res = await request(app).get('/api/v1/cliente/delivery')
+    expect(res.status).toBe(401)
   })
 
   it('should POST /api/v1/cliente/logout', async () => {

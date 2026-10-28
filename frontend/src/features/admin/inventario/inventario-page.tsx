@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { crearMovimiento, crearReceta, listarMovimientos, listarRecetas } from './inventario-service';
+import { actualizarReceta, crearMovimiento, crearReceta, listarMovimientos, listarRecetas } from './inventario-service';
 import type { Movimiento, Receta } from './inventario-service';
 
 const LIMITE = 20;
@@ -15,6 +15,7 @@ export function AdminInventarioPage() {
   const [error, setError] = useState<string | null>(null);
   const [modalMov, setModalMov] = useState(false);
   const [modalRec, setModalRec] = useState(false);
+  const [recetaEditando, setRecetaEditando] = useState<number | null>(null);
   const [formMov, setFormMov] = useState({ productoId: 0, tipo: 'E', cantidad: 0, costo: 0, motivo: '' });
   const [formRec, setFormRec] = useState({ productoId: 0, insumoId: 0, cantidad: 0 });
   const [guardando, setGuardando] = useState(false);
@@ -57,12 +58,30 @@ export function AdminInventarioPage() {
     if (!formRec.productoId || !formRec.insumoId || !formRec.cantidad) { setError('Todos los campos son obligatorios.'); return; }
     setGuardando(true);
     try {
-      await crearReceta({ productoId: formRec.productoId, insumoId: formRec.insumoId, cantidad: formRec.cantidad });
+      if (recetaEditando) {
+        await actualizarReceta(recetaEditando, { cantidad: formRec.cantidad });
+      } else {
+        await crearReceta({ productoId: formRec.productoId, insumoId: formRec.insumoId, cantidad: formRec.cantidad });
+      }
       setModalRec(false);
+      setRecetaEditando(null);
       setFormRec({ productoId: 0, insumoId: 0, cantidad: 0 });
       await cargar();
     } catch (e) { setError((e as Error).message); }
     finally { setGuardando(false); }
+  };
+
+  const cambiarEstadoReceta = async (receta: Receta) => {
+    setGuardando(true);
+    setError(null);
+    try {
+      await actualizarReceta(receta.id, { estado: receta.estado === 'A' ? 'I' : 'A' });
+      await cargar();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setGuardando(false);
+    }
   };
 
   const colorTipo = (t: string) => t === 'E' ? 'bg-green-100 text-green-700' : t === 'S' ? 'bg-red-100 text-red-700' : t === 'A' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700';
@@ -136,6 +155,8 @@ export function AdminInventarioPage() {
                   <th className="px-3 py-2">Insumo</th>
                   <th className="px-3 py-2 text-right">Cantidad</th>
                   <th className="px-3 py-2">Unidad</th>
+                  <th className="px-3 py-2">Estado</th>
+                  <th className="px-3 py-2">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F5F5F5]">
@@ -146,6 +167,24 @@ export function AdminInventarioPage() {
                     <td className="px-3 py-2">{r.insumo}</td>
                     <td className="px-3 py-2 text-right">{r.cantidad}</td>
                     <td className="px-3 py-2">{r.unidad}</td>
+                    <td className="px-3 py-2">{r.estado === 'A' ? 'Activa' : 'Inactiva'}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-2">
+                        <button
+                          className="text-[#A61E22] underline"
+                          onClick={() => {
+                            setRecetaEditando(r.id);
+                            setFormRec({ productoId: r.productoId, insumoId: r.insumoId, cantidad: r.cantidad });
+                            setModalRec(true);
+                          }}
+                        >
+                          Editar
+                        </button>
+                        <button className="text-[#A61E22] underline" disabled={guardando} onClick={() => void cambiarEstadoReceta(r)}>
+                          {r.estado === 'A' ? 'Desactivar' : 'Activar'}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -204,15 +243,15 @@ export function AdminInventarioPage() {
       {modalRec && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <h2 className="text-xl font-bold text-[#7F1518] mb-4">Nueva Receta</h2>
+            <h2 className="text-xl font-bold text-[#7F1518] mb-4">{recetaEditando ? 'Editar Receta' : 'Nueva Receta'}</h2>
             <div className="flex flex-col gap-3">
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-bold uppercase opacity-60">Producto ID *</span>
-                <input type="number" value={formRec.productoId} onChange={(e) => setFormRec({ ...formRec, productoId: Number(e.target.value) })} className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm" />
+                <input type="number" disabled={recetaEditando !== null} value={formRec.productoId} onChange={(e) => setFormRec({ ...formRec, productoId: Number(e.target.value) })} className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm disabled:opacity-60" />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-bold uppercase opacity-60">Insumo ID *</span>
-                <input type="number" value={formRec.insumoId} onChange={(e) => setFormRec({ ...formRec, insumoId: Number(e.target.value) })} className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm" />
+                <input type="number" disabled={recetaEditando !== null} value={formRec.insumoId} onChange={(e) => setFormRec({ ...formRec, insumoId: Number(e.target.value) })} className="rounded-lg bg-[#F5F5F5] px-3 py-2 text-sm disabled:opacity-60" />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-bold uppercase opacity-60">Cantidad *</span>
@@ -220,7 +259,7 @@ export function AdminInventarioPage() {
               </label>
             </div>
             <div className="flex justify-end gap-3 mt-4">
-              <button onClick={() => setModalRec(false)} className="rounded-xl bg-[#F5F5F5] px-5 py-2.5 text-sm font-semibold hover:bg-[#D9D9D9]">Cancelar</button>
+              <button onClick={() => { setModalRec(false); setRecetaEditando(null); }} className="rounded-xl bg-[#F5F5F5] px-5 py-2.5 text-sm font-semibold hover:bg-[#D9D9D9]">Cancelar</button>
               <button onClick={() => void handleCrearRec()} disabled={guardando} className="rounded-xl bg-[#A61E22] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#7F1518] disabled:opacity-60">
                 {guardando ? 'Guardando…' : 'Crear'}
               </button>

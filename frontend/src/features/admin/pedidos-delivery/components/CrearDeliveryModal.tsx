@@ -222,11 +222,15 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
 
     try {
       const res = await api.sugerirCosto(distritoId);
+      if (!Number.isFinite(res.costoSugerido) || res.costoSugerido < 0) {
+        throw new Error('El costo sugerido recibido no es válido.');
+      }
       setCostoSugerido(res.costoSugerido);
       setFueraRadio(res.fueraRadio);
       setCostoEnvio(res.costoSugerido);
     } catch (error) {
       console.error('Error sugiriendo costo:', error);
+      alert(error instanceof Error ? error.message : 'No se pudo calcular el costo de envío.');
     }
   };
 
@@ -448,7 +452,10 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
                   <input
                     type="number"
                     value={costoEnvio}
-                    onChange={(e) => setCostoEnvio(Number(e.target.value) || 0)}
+                    onChange={(e) => {
+                      const costo = Number(e.target.value);
+                      setCostoEnvio(Number.isFinite(costo) && costo >= 0 ? costo : 0);
+                    }}
                     min="0"
                     step="0.1"
                     className="w-full px-3 py-2 border rounded-lg"
@@ -607,7 +614,7 @@ export function CrearDeliveryModal({ abierto, onCerrar, onExito }: CrearDelivery
         <div className="px-4 py-3 bg-gray-50 border-b">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             {['Cliente', 'Dirección', 'Productos', 'Confirmar'].map((label, index) => (
-              <div key={index} className="flex items-center min-w-0">
+              <div key={label} className="flex items-center min-w-0">
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                     index + 1 < paso

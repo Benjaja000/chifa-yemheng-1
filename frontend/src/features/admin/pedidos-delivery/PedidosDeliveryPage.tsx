@@ -15,6 +15,7 @@ interface Delivery {
   repartidor: string | null;
   repartidorId: number | null;
   costo: number;
+  costoConfirmado: boolean;
   estado: 'P' | 'R' | 'E' | 'C';
   fechaCreacion: string;
 }
@@ -133,7 +134,7 @@ export function PedidosDeliveryPage() {
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Cliente</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Dirección</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Teléfono</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Total + Envío</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Costo de envío</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Repartidor</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Estado</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Acciones</th>
@@ -152,6 +153,9 @@ export function PedidosDeliveryPage() {
                       <td className="px-4 py-3 text-sm">{d.telefono || '-'}</td>
                       <td className="px-4 py-3 text-sm font-medium">
                         S/ {d.costo.toFixed(2)}
+                        {!d.costoConfirmado && (
+                          <span className="mt-1 block text-xs font-normal text-amber-700">Por confirmar</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         {d.repartidor || <span className="text-gray-400">Sin asignar</span>}
@@ -163,7 +167,7 @@ export function PedidosDeliveryPage() {
                         <div className="flex gap-2">
                           {!d.repartidorId && d.estado === 'P' && (
                             <Button variant="outline" size="sm" onClick={() => handleAsignar(d)}>
-                              Asignar
+                              Asignar y confirmar
                             </Button>
                           )}
                           {d.repartidorId && d.estado === 'P' && (

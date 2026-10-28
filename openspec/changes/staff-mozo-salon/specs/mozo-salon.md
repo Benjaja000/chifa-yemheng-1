@@ -25,6 +25,13 @@ Permitir al mozo ver el salón, comanda activa y pedir cuenta de la mesa.
 - **When** `PATCH /api/v1/pedidos/:id/pedir-cuenta`
 - **Then** `Facturado='N'` se mantiene, mesa pasa a POR COBRAR y se audita.
 
+### REQ-5: Distinguir pedidos gestionables
+- **Given** mesas con pedidos activos de distintos canales
+- **When** el mozo consulta `/admin/mozo`
+- **Then** los pedidos `PRESENCIAL` aparecen resaltados y disponibles en el filtro "Presenciales".
+- **And** los pedidos `QR` y `WEB` se identifican como digitales y se limitan a seguimiento.
+- **And** una mesa presencial en estado `POR COBRAR` no aparece como gestionable.
+
 ## Payload
 ```json
 { "ok": true, "pedidoId": 214, "estado": "POR COBRAR" }

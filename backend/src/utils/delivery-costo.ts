@@ -15,6 +15,15 @@ export function calcularSugerenciaCosto({
   distanciaCoberturaKm,
   radioCoberturaKm,
 }: CalcularSugerenciaCostoInput) {
+  const parametrosNoNegativos = [costoBase, radioKm, recargoKm];
+  const distancias = [distanciaTarifaKm, distanciaCoberturaKm, radioCoberturaKm];
+  if (
+    parametrosNoNegativos.some((valor) => !Number.isFinite(valor) || valor < 0)
+    || distancias.some((valor) => valor !== null && (!Number.isFinite(valor) || valor < 0))
+  ) {
+    throw new RangeError('INVALID_DELIVERY_COST_INPUT');
+  }
+
   const fueraRadio = distanciaTarifaKm !== null && distanciaTarifaKm > radioKm;
   const recargo = distanciaTarifaKm === null || !fueraRadio
     ? 0

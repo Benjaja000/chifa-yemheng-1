@@ -1,19 +1,40 @@
 import request from 'supertest'
 import jwt from 'jsonwebtoken'
+import { vi } from 'vitest'
 import { createApp } from '../../app.js'
 import { env } from '../../config/env.js'
 import { supabase } from '../../config/supabase.js'
+
+vi.mock('../../repositories/auth-repository.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../repositories/auth-repository.js')>()
+  return {
+    ...actual,
+    leerEstadoSesion: vi.fn(async () => ({
+      authVersion: 0,
+      estado: 'A',
+      bloqueado: 'N',
+      empleado: { estado: 'A', f_cese: null },
+    })),
+  }
+})
 
 const app = createApp()
 
 /**
  * Firma un JWT válido con los claims que exige authGuard
- * (sub, logeo, tipo, roles[], permisos[]).
+ * (sub, logeo, tipo, roles[], permisos[], authVersion).
  */
-function token(permisos: string[], sub = 1, roles: string[] = ['ADMINISTRADOR']): string {
-  return jwt.sign({ sub, logeo: 'test', tipo: 'STAFF', roles, permisos }, env.JWT_SECRET, {
-    expiresIn: '5m',
-  })
+function token(
+  permisos: string[],
+  sub = 1,
+  roles: string[] = ['ADMINISTRADOR'],
+  authVersion = 0,
+): string {
+  return jwt.sign(
+    { sub, logeo: 'test', tipo: 'STAFF', roles, permisos, authVersion },
+    env.JWT_SECRET,
+    { expiresIn: '5m' },
+  )
 }
 
 const T_DELIVERY_VER = token(['DELIVERY_VER'])
@@ -39,6 +60,14 @@ describe('Delivery · autenticación y permisos', () => {
     const res = await request(app).get('/api/v1/delivery/')
     expect(res.status).toBe(401)
     expect(res.body).toHaveProperty('error', 'CREDENCIALES_INVALIDAS')
+  })
+
+  it('rechaza un JWT con una versión de sesión revocada → 401', async () => {
+    const res = await request(app)
+      .get('/api/v1/delivery/')
+      .set('Authorization', `Bearer ${token(['DELIVERY_VER'], 1, ['REPARTIDOR'], 1)}`)
+    expect(res.status).toBe(401)
+    expect(res.body).toHaveProperty('error', 'SESION_REVOCADA')
   })
 
   it('GET /delivery con token sin DELIVERY_VER → 403', async () => {

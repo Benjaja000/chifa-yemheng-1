@@ -29,9 +29,10 @@ export interface Receta {
   insumo: string;
   cantidad: number;
   unidad: string;
+  estado: 'A' | 'I' | 'E';
 }
 
-export type InventarioErrorCode = 'NOT_FOUND' | 'PRODUCTO_INVALIDO' | 'INSUMO_INVALIDO' | 'VALIDATION_ERROR';
+export type InventarioErrorCode = 'NOT_FOUND' | 'PRODUCTO_INVALIDO' | 'INSUMO_INVALIDO' | 'STOCK_INSUFICIENTE' | 'RECETA_DUPLICADA' | 'VALIDATION_ERROR';
 
 export class InventarioError extends Error {
   readonly code: InventarioErrorCode;

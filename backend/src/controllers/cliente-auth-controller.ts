@@ -1,8 +1,9 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { ClienteAuthError, clienteLoginService, clienteLogoutService, clienteSesionService } from '../services/cliente-auth-service.js';
+import { ClienteAuthError, clienteEmailLoginService, clienteLoginService, clienteLogoutService, clienteSesionService } from '../services/cliente-auth-service.js';
 
 const oauthSchema = z.object({ idToken: z.string().min(10) });
+const emailSessionSchema = z.object({ accessToken: z.string().min(20).max(5000) });
 
 export async function postClienteOAuth(req: Request, res: Response): Promise<void> {
   const parsed = oauthSchema.safeParse(req.body);
@@ -17,6 +18,24 @@ export async function postClienteOAuth(req: Request, res: Response): Promise<voi
     if (err instanceof ClienteAuthError) {
       const status = err.code === 'GOOGLE_NOT_CONFIGURED' ? 503 : 401;
       res.status(status).json({ error: err.code });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function postClienteEmailSession(req: Request, res: Response): Promise<void> {
+  const parsed = emailSessionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() });
+    return;
+  }
+  try {
+    const result = await clienteEmailLoginService(parsed.data.accessToken, req.ip);
+    res.json(result);
+  } catch (err) {
+    if (err instanceof ClienteAuthError) {
+      res.status(err.code === 'EMAIL_NO_VERIFICADO' ? 403 : 401).json({ error: err.code });
       return;
     }
     throw err;

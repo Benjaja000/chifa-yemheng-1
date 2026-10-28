@@ -3,6 +3,7 @@ export type EstadoRegistro = 'A' | 'I';
 export interface OcupacionMesa {
   mesaId: number;
   pedido: string;
+  canalOrigen: 'QR' | 'WEB' | 'PRESENCIAL' | null;
   total: number;
   comensales: number;
   mozo: string;

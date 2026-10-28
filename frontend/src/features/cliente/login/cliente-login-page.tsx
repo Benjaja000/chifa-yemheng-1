@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { clienteGoogleLogin, guardarSesionCliente } from './cliente-auth-service';
+import {
+  clienteGoogleLogin,
+  clientePasswordLogin,
+  clienteRegistrarCorreo,
+  clienteSolicitarRestablecimiento,
+  guardarSesionCliente,
+} from './cliente-auth-service';
 import { codigoQrCanonico } from '../../../lib/utils';
 
 const FONDO_LOCAL = '/img/fachada-yemheng.png';
@@ -49,9 +55,81 @@ export function ClienteLoginPage() {
   const [ambienteQr, setAmbienteQr] = useState<string>('');
   const [errorGoogle, setErrorGoogle] = useState<string | null>(null);
   const [cargandoGoogle, setCargandoGoogle] = useState(false);
+  const [modoCorreo, setModoCorreo] = useState<'login' | 'registro'>('login');
+  const [nombreCorreo, setNombreCorreo] = useState('');
+  const [correo, setCorreo] = useState('');
+  const [clave, setClave] = useState('');
+  const [errorCorreo, setErrorCorreo] = useState<string | null>(null);
+  const [mensajeCorreo, setMensajeCorreo] = useState<string | null>(null);
+  const [cargandoCorreo, setCargandoCorreo] = useState(false);
   const googleBtnRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    if (params.get('email_confirmed') === '1') {
+      setMensajeCorreo('Correo verificado. Ya puedes iniciar sesión.');
+    }
+    if (window.location.hash.includes('access_token=')) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    }
+  }, [params]);
+
+  function redirigirCliente() {
+    const mesaParam = params.get('mesa');
+    const redirectTo = params.get('redirect');
+    if (redirectTo === 'comanda') {
+      window.location.href = '/cliente/comanda';
+    } else if (mesaParam) {
+      window.location.href = `/cliente/mesa/${encodeURIComponent(mesaParam)}`;
+    } else {
+      window.location.href = '/cliente/inicio';
+    }
+  }
+
+  async function enviarFormularioCorreo(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorCorreo(null);
+    setMensajeCorreo(null);
+    setCargandoCorreo(true);
+    const email = correo.trim().toLowerCase();
+    try {
+      if (modoCorreo === 'registro') {
+        const nombre = nombreCorreo.trim();
+        if (nombre.length < 2) throw new Error('Ingresa tu nombre para crear la cuenta.');
+        if (clave.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres.');
+        await clienteRegistrarCorreo(email, clave, nombre);
+        setMensajeCorreo('Te enviamos un correo para verificar tu cuenta. Revisa también la carpeta de spam.');
+        return;
+      }
+
+      const session = await clientePasswordLogin(email, clave);
+      guardarSesionCliente(session);
+      redirigirCliente();
+    } catch (error) {
+      setErrorCorreo(error instanceof Error ? error.message : 'No se pudo completar la solicitud. Inténtalo nuevamente.');
+    } finally {
+      setCargandoCorreo(false);
+    }
+  }
+
+  async function solicitarCambioClave() {
+    setErrorCorreo(null);
+    setMensajeCorreo(null);
+    if (!correo.trim()) {
+      setErrorCorreo('Escribe tu correo para enviarte el enlace de recuperación.');
+      return;
+    }
+    setCargandoCorreo(true);
+    try {
+      await clienteSolicitarRestablecimiento(correo.trim().toLowerCase());
+      setMensajeCorreo('Si el correo está registrado, recibirás un enlace para cambiar tu contraseña.');
+    } catch (error) {
+      setErrorCorreo(error instanceof Error ? error.message : 'No se pudo solicitar el cambio de contraseña.');
+    } finally {
+      setCargandoCorreo(false);
+    }
+  }
 
   // Valida el código QR contra el backend (`GET /mesas/by-qr`, público).
   // Sin conexión no bloquea (fallback a mostrar Mesa NN, útil en LAN/dev).
@@ -351,15 +429,6 @@ export function ClienteLoginPage() {
             <div className="relative w-full max-w-md space-y-5 overflow-hidden rounded-2xl border border-amber-500/30 bg-[#180907]/85 p-6 shadow-[0_12px_45px_rgba(0,0,0,0.65)] backdrop-blur-xl sm:p-8">
               <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-[#b91c1c] via-[#d97707] to-[#b91c1c]" />
               <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-xs font-semibold tracking-widest text-[#ffb77d] uppercase">
-                    <span className="material-symbols-outlined text-sm text-[#d97707]">lock</span>
-                    Área de clientes
-                  </span>
-                  <span className="rounded-full border border-[#d97707]/50 bg-[#d97707]/15 px-2 py-0.5 font-mono text-[10px] text-[#ffb77d]">
-                    SSL 256-BIT
-                  </span>
-                </div>
                 <h2 className="font-[Epilogue] text-2xl font-bold tracking-tight text-[#fff4e8]">Iniciar Sesión</h2>
                 <p className="text-xs text-[#e4beb9]/75">
                   Acceso seguro al sistema de servicio y cocina
@@ -416,7 +485,7 @@ export function ClienteLoginPage() {
                 </p>
               )}
 
-              <form onSubmit={(e) => e.preventDefault()} className="relative space-y-4">
+              <form onSubmit={(event) => void enviarFormularioCorreo(event)} className="relative space-y-4">
                 <div className="space-y-3">
                   {import.meta.env.VITE_GOOGLE_CLIENT_ID ? (
                     <div className="space-y-2">
@@ -446,6 +515,26 @@ export function ClienteLoginPage() {
                   </div>
                 </div>
 
+                {modoCorreo === 'registro' && (
+                  <div className="space-y-1.5">
+                    <label htmlFor="cli-name" className="block text-xs font-medium text-[#ffdcc3]">
+                      Nombre completo <span className="text-[#ffb4ab]">*</span>
+                    </label>
+                    <input
+                      id="cli-name"
+                      type="text"
+                      autoComplete="name"
+                      value={nombreCorreo}
+                      onChange={(event) => setNombreCorreo(event.target.value)}
+                      placeholder="Tu nombre"
+                      required
+                      minLength={2}
+                      maxLength={100}
+                      className="h-11 w-full rounded-lg border border-[#5b403d] bg-[#250d09]/90 px-3.5 text-sm text-[#fff4e8] shadow-inner transition-all outline-none placeholder:text-[#ab8985]/60 focus:border-[#d97707] focus:ring-1 focus:ring-[#d97707]"
+                    />
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
                   <label htmlFor="cli-user" className="block text-xs font-medium text-[#ffdcc3]">
                     Correo electrónico <span className="text-[#ffb4ab]">*</span>
@@ -457,7 +546,11 @@ export function ClienteLoginPage() {
                     <input
                       id="cli-user"
                       type="email"
+                      autoComplete="email"
+                      value={correo}
+                      onChange={(event) => setCorreo(event.target.value)}
                       placeholder="tu.nombre@ejemplo.com"
+                      required
                       className="h-11 w-full rounded-lg border border-[#5b403d] bg-[#250d09]/90 pr-3.5 pl-10 text-sm text-[#fff4e8] shadow-inner transition-all outline-none placeholder:text-[#ab8985]/60 focus:border-[#d97707] focus:ring-1 focus:ring-[#d97707]"
                     />
                   </div>
@@ -474,7 +567,12 @@ export function ClienteLoginPage() {
                     <input
                       id="cli-pass"
                       type={verClave ? 'text' : 'password'}
+                      autoComplete={modoCorreo === 'registro' ? 'new-password' : 'current-password'}
+                      value={clave}
+                      onChange={(event) => setClave(event.target.value)}
                       placeholder="••••••••••••"
+                      minLength={modoCorreo === 'registro' ? 8 : undefined}
+                      required
                       className="h-11 w-full rounded-lg border border-[#5b403d] bg-[#250d09]/90 pr-11 pl-10 text-sm text-[#fff4e8] shadow-inner transition-all outline-none placeholder:text-[#ab8985]/60 focus:border-[#d97707] focus:ring-1 focus:ring-[#d97707]"
                     />
                     <button
@@ -491,24 +589,64 @@ export function ClienteLoginPage() {
                 </div>
 
                 <div className="flex items-center justify-between pt-1">
-                  <label className="flex cursor-pointer items-center gap-2 select-none">
-                    <input
-                      type="checkbox"
-                      defaultChecked
-                      className="h-4 w-4 cursor-pointer rounded border-[#5b403d] bg-[#250d09] accent-[#b91c1c]"
-                    />
-                    <span className="text-xs text-[#ffdcc3]/90">Recordarme</span>
-                  </label>
-                  <span className="text-xs text-[#e4beb9]/70">¿Olvidaste tu contraseña? La gestiona tu administrador.</span>
+                  {modoCorreo === 'login' ? (
+                    <>
+                      <label className="flex cursor-pointer items-center gap-2 select-none">
+                        <input
+                          type="checkbox"
+                          defaultChecked
+                          className="h-4 w-4 cursor-pointer rounded border-[#5b403d] bg-[#250d09] accent-[#b91c1c]"
+                        />
+                        <span className="text-xs text-[#ffdcc3]/90">Recordarme</span>
+                      </label>
+                      <button
+                        type="button"
+                        disabled={cargandoCorreo}
+                        onClick={() => void solicitarCambioClave()}
+                        className="text-xs text-[#ffb77d] underline decoration-[#ffb77d]/50 underline-offset-2 hover:text-[#ffdcc3] disabled:opacity-60"
+                      >
+                        ¿Olvidaste tu contraseña?
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-xs text-[#e4beb9]/70">Usa al menos 8 caracteres.</span>
+                  )}
                 </div>
+
+                {errorCorreo && (
+                  <p role="alert" className="rounded-lg border border-[#ff8f8f]/30 bg-[#551010]/85 px-3 py-2 text-center text-xs font-semibold text-[#ffb4ab]">
+                    {errorCorreo}
+                  </p>
+                )}
+                {mensajeCorreo && (
+                  <p role="status" aria-live="polite" className="rounded-lg border border-emerald-300/25 bg-emerald-950/50 px-3 py-2 text-center text-xs font-semibold text-emerald-100">
+                    {mensajeCorreo}
+                  </p>
+                )}
 
                 <button
                   type="submit"
+                  disabled={cargandoCorreo}
                   className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#ff8f8f]/30 bg-[#b91c1c] text-xs font-semibold tracking-wider text-white shadow-[0_4px_16px_rgba(185,28,28,0.5)] transition-all duration-200 hover:bg-[#a01818] active:scale-[0.99]"
                 >
-                  <span>INICIAR SESIÓN</span>
+                  <span>{cargandoCorreo ? 'PROCESANDO…' : modoCorreo === 'registro' ? 'CREAR CUENTA' : 'INICIAR SESIÓN'}</span>
                   <span className="text-sm font-bold">→</span>
                 </button>
+                <p className="text-center text-xs text-[#e4beb9]/75">
+                  {modoCorreo === 'registro' ? '¿Ya tienes una cuenta?' : '¿Aún no tienes cuenta?'}{' '}
+                  <button
+                    type="button"
+                    disabled={cargandoCorreo}
+                    onClick={() => {
+                      setModoCorreo((mode) => mode === 'login' ? 'registro' : 'login');
+                      setErrorCorreo(null);
+                      setMensajeCorreo(null);
+                    }}
+                    className="font-semibold text-[#ffb77d] underline decoration-[#ffb77d]/50 underline-offset-2 hover:text-[#ffdcc3] disabled:opacity-60"
+                  >
+                    {modoCorreo === 'registro' ? 'Inicia sesión' : 'Regístrate'}
+                  </button>
+                </p>
               </form>
             </div>
           </div>

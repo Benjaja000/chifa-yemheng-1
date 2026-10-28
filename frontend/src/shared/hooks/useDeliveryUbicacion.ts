@@ -11,6 +11,7 @@ export interface DeliveryUbicacion {
   distrito: string | null;
   direccion_entrega: string;
   costo_envio: number;
+  costo_envio_confirmado: boolean;
   situacion: DeliverySituacion;
   f_salida: string | null;
   f_entrega: string | null;

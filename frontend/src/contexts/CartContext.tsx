@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import type { Producto } from '../types/db';
 
 const IGV_RATE = 0.18;
+const MESA_SESSION_KEY = 'chifa.cliente.mesa';
 
 export interface CartItem { producto: Producto; cantidad: number; nota: string; }
 interface CartState {
@@ -23,7 +24,16 @@ export const useCart = () => useContext(Ctx);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
-  const [mesaId, setMesaId] = useState('');
+  const [mesaId, setMesaIdState] = useState(() => sessionStorage.getItem(MESA_SESSION_KEY) ?? '');
+  const setMesaId = useCallback((value: string) => {
+    const mesa = value.trim();
+    setMesaIdState(mesa);
+    if (mesa) {
+      sessionStorage.setItem(MESA_SESSION_KEY, mesa);
+    } else {
+      sessionStorage.removeItem(MESA_SESSION_KEY);
+    }
+  }, []);
   const add: CartState['add'] = useCallback((p, cantidad = 1, nota = '') => {
     setItems((prev) => {
       const i = prev.findIndex((x) => x.producto.id_producto === p.id_producto);

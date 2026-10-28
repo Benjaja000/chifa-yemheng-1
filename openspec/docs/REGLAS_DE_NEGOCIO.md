@@ -19,12 +19,14 @@
 | **Recargo por servicio** | Porcentaje adicional según el tipo de mesa. En este chifa se usa solo mesa estándar (0%), por lo que el recargo es 0. |
 | **Autoconsumo QR** | Modalidad en que el cliente escanea un código QR de la mesa y pide desde su propio celular. |
 | **Consumidor final** | En el autoconsumo QR el cliente se identifica con Gmail (login obligatorio) y se asocia al CLIENTE correspondiente. Si el cliente no desea usar QR o no tiene celular, lo atiende un mesero (flujo tradicional). El cliente genérico "CLIENTES VARIOS" aplica a la venta rápida/presencial sin identificación. |
-| **Pago único** | Una venta se paga con un solo método (efectivo, o Yape/PLIN, o tarjeta); no se combinan métodos en la misma venta. |
+| **Pago mixto** | Una venta admite uno o varios medios de pago; la suma aplicada debe coincidir exactamente con el total de la venta. |
 | **Afecta_Efectivo** | Indica si un movimiento/pago corresponde a dinero físico que entra o sale de la caja (afecta el `Monto_Sistema`). |
 | **Costo de envío** | Tarifa del delivery pagada por el cliente; se asigna manualmente según la zona/distrito. |
 | **Reserva de mesa** | Reserva de una mesa para una fecha/hora futura. Se registra por tres canales: **presencial** (en el local), **telefónica** u **online** (app con login Gmail obligatorio). La online **nace Pendiente (P) sin mesa asignada** y el personal la confirma asignando una mesa libre (la mesa pasa a RESERVADA). |
 | **Comanda Compartida** | Modalidad de autoconsumo QR donde múltiples clientes autenticados mediante el QR de una misma mesa participan de una única comanda activa. |
 | **Participante de Mesa** | Cliente autenticado mediante Gmail que se incorpora a la comanda activa de una mesa utilizando el QR de dicha mesa. |
+| **Organizador de comanda** | Primer cliente que se incorpora a la comanda QR; es el único que puede elegir cómo liquidar el consumo compartido. |
+| **Liquidación por consumo** | Forma de cobro que conserva una venta y comprobante, pero registra el aporte de cada participante por el importe de su consumo asignado. |
 
 ---
 
@@ -75,6 +77,10 @@ Cada regla tiene un identificador `BR-{dominio}-{number}`. La columna "Implement
 | BR-RES-027 | No se permite dividir automáticamente una comanda en múltiples ventas. | Caja |
 | BR-RES-028 | No se permite emitir múltiples comprobantes para una misma comanda. | Caja |
 | BR-RES-029 | Una mesa en estado POR COBRAR no admite nuevos productos. | USP_AGREGAR_DETALLE_PEDIDO |
+| BR-RES-030 | La relación cliente-participante se conserva aunque cierre sesión; un cliente autenticado puede reingresar a la comanda activa y uno nuevo puede incorporarse mientras la mesa no esté POR COBRAR. | PEDIDO_PARTICIPANTE / App QR |
+| BR-RES-031 | El primer participante es el organizador. Solo él puede elegir entre cuenta única y liquidación por consumo; la decisión queda bloqueada al solicitar la cuenta. | PEDIDO_PARTICIPANTE / PEDIDO |
+| BR-RES-032 | En liquidación por consumo, cada detalle se asigna al cliente que lo pidió; los detalles sin propietario se distribuyen equitativamente y el redondeo conserva exactamente el total de la cuenta. | DETALLE_PEDIDO / Caja |
+| BR-RES-033 | La liquidación por consumo registra el aporte de cada participante y sus medios de pago, exige que cada aporte coincida con su consumo asignado y conserva una venta y un comprobante. | PAGO_VENTA / Caja |
 | BR-MOZ-001 | Cada comanda de mesa registra su canal de origen (`QR`, `WEB` o `PRESENCIAL`). Las comandas creadas por clientes desde canales digitales conservan su origen durante todo el flujo. | PEDIDO.CANAL_ORIGEN / app |
 | BR-MOZ-002 | El mozo no registra, agrega, anula ni modifica comandas originadas por `QR` o `WEB`; puede consultarlas y registrar la entrega de platos. La toma y edición de pedidos por el mozo corresponde a la atención presencial tradicional. | Autorización backend / app |
 | BR-MOZ-003 | Solo Cocina cambia el estado de preparación. El mozo confirma por separado la entrega a mesa de un ítem que Cocina ya marcó como SERVIDO, registrando usuario y fecha sin modificar el estado de preparación. | PED_COCINA / DETALLE_PEDIDO |
@@ -93,7 +99,7 @@ Cada regla tiene un identificador `BR-{dominio}-{number}`. La columna "Implement
 | BR-DER-027 | SubTotal = Total / 1.18 (base gravada). | USP_RECALCULAR_PEDIDO |
 | BR-DER-028 | Total = Bruto − Descuento + Servicio. | USP_RECALCULAR_PEDIDO |
 | BR-DER-029 | Vuelto = Monto_Recibido − Total (solo si > 0 y el pago es en efectivo). | USP_FACTURAR_PEDIDO |
-| BR-DER-030 | La venta se paga con **un solo método de pago**; se cierra cuando el pago cubre el Total (Total_Pagado ≥ Total). | PAGO_VENTA |
+| BR-DER-030 | La venta se cierra cuando la suma de sus pagos por medio coincide exactamente con el total (Total_Pagado = Total). El exceso entregado en efectivo se registra como vuelto, no como pago adicional. | PAGO_VENTA / Caja |
 | BR-DER-031 | Correlativo del comprobante = siguiente número con bloqueo (UPDLOCK/HOLDLOCK) para evitar duplicados; formato de 8 dígitos. | USP_FACTURAR_PEDIDO + SERIE_DOCUMENTO |
 | BR-DER-032 | Diferencia de caja = Monto_Declarado − Monto_Sistema → CUADRADO (0), SOBRANTE (>0), FALTANTE (<0). | USP_CERRAR_CAJA |
 | BR-DER-033 | Costo de envío = asignado manualmente según el distrito/zona al registrar el delivery (sugerido por la app). | PEDIDO_DELIVERY.Costo_Envio |
@@ -112,18 +118,26 @@ Cada regla tiene un identificador `BR-{dominio}-{number}`. La columna "Implement
 | BR-ACC-039 | Transiciones del pedido: ABIERTO → EN PREPARACION → SERVIDO → FACTURADO (o ANULADO). | ESTADO_PEDIDO / USP |
 | BR-ACC-040 | Transiciones del delivery: P (Pendiente) → R (En ruta) → E (Entregado), y P → C (Cancelado), con F_Salida/F_Entrega. | PEDIDO_DELIVERY |
 | BR-ACC-041 | El delivery se asigna al primer repartidor disponible. | App (asignación) |
-| BR-ACC-042 | Al facturar se registra: VENTA + detalle + BOLETA/FACTURA + **un solo** PAGO_VENTA + **un solo** MOVIMIENTO_CAJA (con concepto según el único método: efectivo→VENTA AL CONTADO, YAPE/PLIN→BILLETERA DIGITAL, tarjeta→COBRO CON TARJETA). | USP_FACTURAR_PEDIDO |
-| BR-ACC-043 | El cobro de la venta se hace con **un solo método** (efectivo o digital). El cajero lo ejecuta/autoriza en terminal; el cliente desde la app solo solicita la cuenta (POR COBRAR). | USP_FACTURAR_PEDIDO + app |
+| BR-ACC-042 | Al facturar se registra una VENTA, detalle y un solo comprobante, además de un registro PAGO_VENTA y MOVIMIENTO_CAJA por cada medio aplicado. | Caja / PAGO_VENTA |
+| BR-ACC-043 | El cobro puede combinar efectivo, tarjeta y transferencia. El cajero lo ejecuta en terminal; el cliente desde la app solo solicita la cuenta (POR COBRAR). Efectivo registra recibido y vuelto; tarjeta registra referencia; transferencia registra banco y operación. | Caja |
 | BR-ACC-044 | En el autoconsumo QR el cliente inicia sesión con Gmail (OAuth externo) de forma **obligatoria**; el login/cierre se audita en AUDITORIA. En el flujo presencial el mesero toma el pedido sin login del cliente. | App + AUDITORIA |
 | BR-ACC-045 | Si el delivery se cobra en EFECTIVO contra entrega, el repartidor entrega el dinero al cajero al regresar, quien registra el ingreso en el arqueo. | MOVIMIENTO_CAJA / app |
-| BR-ACC-046 | El cierre de caja lo inicia el cajero (declara el monto); un supervisor/administrador valida y confirma el cierre. | USP_CERRAR_CAJA + roles |
+| BR-ACC-046 | El cierre de caja lo inicia un usuario autorizado para cerrar caja (declara el monto); un supervisor/administrador distinto valida y confirma el cierre. No se requiere que quien solicita el cierre sea quien abrió el turno. | CAJ_CERRAR + CAJ_VALIDAR_CIERRE |
 | BR-ACC-047 | Al escanear el QR se valida si la mesa posee una comanda activa. | App QR |
 | BR-ACC-048 | Si la mesa no posee una comanda activa, el sistema crea una nueva comanda y cambia la mesa a estado OCUPADA. | App QR |
 | BR-ACC-049 | Si la mesa ya posee una comanda activa, el sistema incorpora al cliente a la comanda existente. | App QR |
 | BR-ACC-050 | Todos los participantes asociados a una mesa visualizan el mismo consumo acumulado. | App QR |
 | BR-ACC-051 | La acción "Pedir Cuenta" realizada por cualquier participante afecta a toda la comanda de la mesa. | App QR |
 | BR-ACC-052 | Al facturarse la comanda, se finalizan todas las sesiones QR asociadas a la mesa. | App QR |
+| BR-ACC-053 | El organizador es el primer participante registrado; su identidad no depende de la sesión del navegador y solo él cambia el modo de liquidación antes de pedir la cuenta. | PEDIDO_PARTICIPANTE / App QR |
+| BR-ACC-054 | En modo POR_CONSUMO, Caja registra uno o varios pagos por participante, comprueba que cada uno cubra el consumo asignado y solo entonces factura una vez, con un único comprobante. | Caja / PAGO_VENTA |
 | BR-ACC-055 | Solo el **supervisor/administrador** (permiso `VEN_NOTACREDITO`) autoriza y emite la NC; el USP rechaza a cualquier otro rol aunque invoque el procedimiento directo. Cada NC se audita. | USP_ANULAR_VENTA_CON_NC + AUDITORIA |
+| BR-SEG-001 | Toda cuenta interna se vincula a un empleado activo y vigente. Al inactivar o cesar al empleado, sus cuentas se desactivan; no se crean ni reactivan cuentas con vínculo laboral vencido. | USUARIO / EMPLEADO / trigger |
+| BR-SEG-002 | Los cambios administrativos de tipo, vínculo, estado, bloqueo o clave requieren `SEG_USUARIO`, un motivo de al menos 8 caracteres y no pueden modificar la propia cuenta. El cambio de clave desde el perfil conserva su flujo autenticado independiente. | Seguridad / USUARIO |
+| BR-SEG-003 | Un actor solo concede permisos que ya posee. Crear, modificar o asignar el rol `ADMINISTRADOR` requiere una cuenta administradora activa; no se admiten permisos inexistentes o inactivos. | `fn_guardar_rol_seguridad` / `fn_asignar_permisos_rol_seguridad` |
+| BR-SEG-004 | Debe permanecer al menos un administrador activo: cuenta activa y desbloqueada, empleado vigente, rol `ADMINISTRADOR` activo y permisos `SEG_USUARIO` y `SEG_ROL`. Ninguna operación puede desactivar, bloquear, desvincular, degradar o quitar los permisos esenciales al último administrador. | Triggers de seguridad / transacción |
+| BR-SEG-005 | La edición del rol y su conjunto de permisos es atómica. Los cambios relevantes conservan actor, terminal, motivo y valores auditables; no se almacenan contraseñas ni tokens en la bitácora. | RPC transaccional / AUDITORIA |
+| BR-SEG-006 | Los cambios de cuenta, empleado, rol o permisos revocan las sesiones anteriores. Cada solicitud protegida verifica que cuenta y empleado sigan activos y que coincida `auth_version` del JWT. | `authGuard` / `USUARIO.auth_version` |
 
 ### 2.5 Reglas de inferencia (deducciones)
 
@@ -166,10 +180,14 @@ Cada regla tiene un identificador `BR-{dominio}-{number}`. La columna "Implement
 - Si la mesa ya posee una comanda activa (BR-ACC-049, BR-RES-023/024):
     - no se crea una nueva comanda;
     - el cliente se incorpora a la comanda existente.
+    - si ya estaba registrado, recupera el acceso aunque haya cerrado sesión;
+    - no se admiten participantes nuevos una vez solicitada la cuenta.
 - El pedido QR se registra mediante el usuario interno AUTOSERVICIO.
 - Todos los clientes autenticados mediante el mismo QR comparten una única comanda activa (BR-EST-011/012/013).
 - Todos los productos agregados por cualquier participante se consolidan en la misma comanda (BR-RES-025).
 - Todos los participantes visualizan el mismo consumo acumulado (BR-ACC-050, BR-INF-054).
+- El organizador puede elegir CUENTA_UNICA o POR_CONSUMO antes de solicitar la cuenta.
+- En POR_CONSUMO, cada participante ve su consumo asignado; los platos sin propietario se reparten entre los participantes.
 - La comanda pertenece a la mesa y no a un cliente individual.
 - La cuenta pertenece a la mesa y no a un cliente individual (BR-RES-026).
 
@@ -201,13 +219,13 @@ Cada regla tiene un identificador `BR-{dominio}-{number}`. La columna "Implement
 ### Tramo 7 — Cobro y pago
 - El cliente desde la app pulsa **"Pedir la cuenta/Cobrar"** → la comanda pasa a **POR COBRAR** (ya no se agregan platos, BR-RES-029). El cliente QR **nunca paga directamente** desde el celular: solo solicita la cuenta (BR-ACC-043). En atención presencial el mozo puede solicitarla; no puede cobrar (BR-MOZ-004).
 - La solicitud de cuenta afecta a todos los participantes de la mesa (BR-ACC-051, BR-RES-026).
-- No existe división automática de cuentas (BR-RES-027).
+- No se divide la comanda ni se generan varias ventas; POR_CONSUMO atribuye a cada participante su aporte dentro del mismo cobro (BR-RES-027/033).
 - Todos los consumos de la mesa generan una única venta (BR-EST-005).
 - La venta genera un único comprobante (BR-EST-006, BR-RES-028).
 - La cuenta corresponde al consumo total acumulado de la mesa.
-- El cajero cobra una única cuenta correspondiente a la comanda compartida.
-- **Pago único**: el cajero cobra la cuenta con **un solo método** (efectivo o digital: Yape/Plín, tarjeta, transferencia) y ejecuta la venta (BR-ACC-042/043, BR-DER-030, BR-DER-029). El mozo del flujo tradicional tampoco cobra: solo pide la cuenta por el POS.
-- La venta se cierra cuando el pago **cubre el Total (Total_Pagado ≥ Total)** (BR-DER-030).
+- El cajero cobra una única cuenta correspondiente a la comanda compartida. En POR_CONSUMO asigna los pagos a cada participante y comprueba su consumo antes de facturar.
+- **Pago mixto**: se pueden combinar efectivo, tarjeta y transferencia en una misma venta. Cada medio genera su detalle de pago y movimiento; una sola transacción emite la venta y el comprobante (BR-ACC-042/043, BR-DER-030, BR-DER-029). El mozo del flujo tradicional tampoco cobra: solo pide la cuenta por el POS.
+- La suma de los medios aplicados debe **coincidir exactamente con el total**. El efectivo recibido puede superar el importe asignado a efectivo; la diferencia es el vuelto, no ingreso ni efectivo esperado (BR-DER-030).
 - **Comprobante**: al cobrar se emite **BOLETA (03)**, **FACTURA (01)** o **TICKET (TK)**. El **tipo lo decide el cajero en el terminal** según la tabla 4.1 (empresa con RUC + lo pide → FACTURA; si no → BOLETA); **no se solicita desde la app del cliente**.
 - **Logística en mesa**: el mozo lleva la cuenta al cliente; tras el cobro en Caja, el mozo lleva a la mesa el comprobante (boleta/factura/ticket) y el vuelto (si fue efectivo). Variante aceptada: el cliente paga en el mostrador de Caja y retira su comprobante allí.
 - Al liberar la mesa (→ LIBRE), la app muestra el mensaje de cierre/agradecimiento (BR-ACC-037).
@@ -216,16 +234,20 @@ Cada regla tiene un identificador `BR-{dominio}-{number}`. La columna "Implement
 ### Tramo 8 — Delivery y repartidor
 - Delivery por la **app** (Gmail obligatorio + dirección) o por **teléfono** (BR-RES-021).
 - **Costo de envío** asignado manualmente según el distrito (sugerido por la app) (BR-DER-033).
+- En solicitudes desde la app, el costo sugerido queda pendiente hasta que el personal lo confirme al asignar al repartidor; no se cobra ni se confirma un pago en el alta del pedido.
 - El sistema asigna al **primer repartidor disponible** (BR-ACC-041).
 - Estados del delivery P→R→E (y C cancelado) con F_Salida/F_Entrega (BR-ACC-040).
-- El delivery se cobra con **un solo método** (efectivo o digital): si fue **en efectivo contra entrega**, el repartidor rinde el efectivo al cajero al regresar (BR-ACC-045); los pagos digitales no llegan a la caja física (BR-INF-051).
+- El delivery admite pagos mixtos; si incluye efectivo contra entrega, el repartidor rinde ese importe al cajero al regresar (BR-ACC-045); los pagos digitales no llegan a la caja física (BR-INF-051).
 
 ### Tramo 9 — Cierre de caja / arqueo
 - Cada caja maneja uno o varios turnos; un turno se cierra antes de abrir otro en la misma caja (BR-EST-008, BR-RES-017).
 - El arqueo se calcula en los USP: `Diferencia = Monto_Declarado − Monto_Sistema` → CUADRADO/SOBRANTE/FALTANTE (BR-DER-032, BR-INF-049).
-- El cajero solicita el cierre declarando el efectivo; el turno queda pendiente y deja de aceptar cobros. Un **supervisor/administrador distinto del cajero** valida y confirma el cierre (BR-ACC-046).
+- Un usuario con permiso de cierre solicita el arqueo declarando el efectivo; no necesita ser quien abrió el turno. El turno queda pendiente y deja de aceptar cobros. Un **supervisor/administrador distinto del solicitante** valida y confirma el cierre (BR-ACC-046).
 - Mientras un cierre está pendiente no se puede abrir otro turno para esa caja; al confirmarlo se registra la diferencia, se cierra el turno y se habilita la caja.
-- Los pagos digitales se registran como ingreso pero **no** modifican el efectivo físico (BR-INF-051).
+- Cada medio de pago se informa por separado. Los cobros digitales y los movimientos que no afectan efectivo se registran como ingreso/egreso contable pero **no** modifican el efectivo físico (BR-INF-051).
+- El saldo neto del turno por medio suma sus ingresos y resta sus egresos, incluyendo cobros de ventas, ingresos adicionales, devoluciones y ajustes asociados a cada método. Este saldo no debe confundirse con ventas brutas.
+- Ingresos adicionales, egresos autorizados, devoluciones y ajustes se asocian al turno activo. El tipo y la afectación al efectivo derivan del concepto y del medio; no se permiten movimientos en turnos cerrados.
+- Los reportes consultan ventas, comprobantes, medios de pago, movimientos y cierres por fecha y responsable sin duplicar la venta al tener varios pagos.
 
 ---
 
@@ -241,16 +263,16 @@ Cada regla tiene un identificador `BR-{dominio}-{number}`. La columna "Implement
 | Emitir BOLETA (03) | X | |
 | Emitir FACTURA (01) | | X |
 
-### 4.2 Cierre de la venta (pago único)
+### 4.2 Cierre de la venta (pago mixto)
 
 | Condiciones | R1 | R2 |
 |---|---|---|
-| Único pago (Sus métodos) ≥ Total | No | Sí |
-| Pago en EFECTIVO supera el Total | — | No / Sí |
+| Suma de medios aplicados = Total | No | Sí |
+| Efectivo recibido supera el importe asignado a efectivo | — | Sí |
 | **Acciones** | | |
 | Permitir cerrar venta | | X |
-| Calcular Vuelto (solo efectivo) | | (si efectivo) |
-| **Resultado** | No se cierra | Venta cerrada |
+| Calcular vuelto (solo efectivo) | | (si efectivo) |
+| **Resultado** | No se cierra | Venta cerrada con el único comprobante |
 
 ### 4.3 Estados de la comanda según ítems
 
@@ -304,7 +326,7 @@ Cada regla tiene un identificador `BR-{dominio}-{number}`. La columna "Implement
 | Seguridad | Crear usuario interno "AUTOSERVICIO" para registrar comandas QR. | Datos/config |
 | Cocina | Nuevo USP para cambiar el `Estado_Preparacion` de un ítem (P/E/S/A). | USP nuevo |
 | Pedido | Nuevo USP para derivar el estado del pedido (EN PREPARACION/SERVIDO) según sus ítems. | USP nuevo |
-| Delivery | Nuevo USP para actualizar `PEDIDO_DELIVERY.Situacion`, asignación y rendición (con pago único). | USP nuevo |
+| Delivery | Nuevo USP para actualizar `PEDIDO_DELIVERY.Situacion`, asignación y rendición del efectivo recibido en pagos mixtos. | USP nuevo |
 | Inventario | Nuevo USP para descontar insumos por RECETA al servir (MOVIMIENTO_INVENTARIO tipo 'S'). | USP nuevo |
 | App (no BD) | Validar unicidad de correo Gmail; validar longitud de documento; sugerir costo de envío por zona; validar comensales ≤ capacidad; control del efectivo "por rendir" del repartidor. | App |
 
@@ -320,7 +342,7 @@ Cada regla tiene un identificador `BR-{dominio}-{number}`. La columna "Implement
   - Acción/Autorización: 18
   - Inferencia: 8
   - GPS: 2 (BR-GPS-001/002)
-- **Decisiones clave confirmadas:** cliente NO es usuario (solo CLIENTE con Gmail); origen por usuario interno + ID_Cliente; **pago único por venta** (no mixto); estados de cocina por ítem; delivery con repartidor propio, pago único y efectivo contra entrega rendido a caja; cierre de caja con validación de supervisor; **nota de crédito con devolución para ventas facturadas (BR-RES-054/055/056, solo supervisor)**; **reserva de mesa por 3 canales (presencial/telefónica/online)**, con la online naciendo **Pendiente sin mesa** hasta que el personal la confirme asignando una mesa; **autoconsumo QR con comanda compartida por mesa (1 Mesa = 1 Comanda Activa = N Participantes = 1 Cuenta = 1 Venta = 1 Comprobante), sin división automática ni múltiples comprobantes**.
+- **Decisiones clave confirmadas:** cliente NO es usuario (solo CLIENTE con Gmail); origen por usuario interno + ID_Cliente; pago mixto por venta con una sola venta y comprobante; estados de cocina por ítem; delivery con repartidor propio y rendición del efectivo recibido; cierre de caja con validación de supervisor; **nota de crédito con devolución para ventas facturadas (BR-RES-054/055/056, solo supervisor)**; **reserva de mesa por 3 canales (presencial/telefónica/online)**, con la online naciendo **Pendiente sin mesa** hasta que el personal la confirme asignando una mesa; **autoconsumo QR con comanda compartida por mesa (1 Mesa = 1 Comanda Activa = N Participantes = 1 Cuenta = 1 Venta = 1 Comprobante), sin división automática ni múltiples comprobantes**.
 
 ---
 

@@ -1,5 +1,4 @@
 import { leerToken } from '../../auth/login/auth-service';
-import { headerEquipo } from '../../../utils/equipo';
 import type { Personal, PersonalForm, PersonalLista } from './personal-types';
 import type { Maestro } from '../../../services/maestros';
 
@@ -11,7 +10,6 @@ function headers(): HeadersInit {
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${leerToken() ?? ''}`,
-    ...headerEquipo(),
   };
 }
 

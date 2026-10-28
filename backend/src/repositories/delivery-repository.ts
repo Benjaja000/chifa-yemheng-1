@@ -1,5 +1,5 @@
 import { supabase } from '../config/supabase.js';
-import type { Delivery, DeliveryLista } from '../models/delivery.js';
+import { DeliveryError, type Delivery, type DeliveryLista } from '../models/delivery.js';
 import type { DeliveryCreate, DeliveryQuery, ParametrosNegocioUpdate, TarifaUpsert } from '../schemas/delivery.js';
 import { createAudit, updateAudit } from '../utils/auditoria.js';
 import { calcularSugerenciaCosto } from '../utils/delivery-costo.js';
@@ -15,6 +15,7 @@ interface DeliveryRow {
   id_empleado: number | null;
   repartidor: { persona: { nombre: string; ap_paterno: string | null } } | null;
   costo_envio: number;
+  costo_envio_confirmado: boolean;
   situacion: string;
   feccre: string;
   lat_cliente: number | null;
@@ -41,7 +42,7 @@ interface ConfiguracionNegocioRow {
   radio_cobertura_km: number | null;
 }
 
-const SELECT = 'id_pedidodelivery, id_pedido, id_distrito, distrito(d_distrito), direccion_entrega, referencia, telefono_contacto, id_empleado, repartidor:empleado(persona(nombre, ap_paterno)), costo_envio, situacion, feccre';
+const SELECT = 'id_pedidodelivery, id_pedido, id_distrito, distrito(d_distrito), direccion_entrega, referencia, telefono_contacto, id_empleado, repartidor:empleado(persona(nombre, ap_paterno)), costo_envio, costo_envio_confirmado, situacion, feccre';
 
 function mapRow(row: DeliveryRow): Delivery {
   return {
@@ -57,6 +58,7 @@ function mapRow(row: DeliveryRow): Delivery {
       ? `${row.repartidor.persona.nombre} ${row.repartidor.persona.ap_paterno ?? ''}`.trim()
       : null,
     costo: Number(row.costo_envio ?? 0),
+    costoConfirmado: row.costo_envio_confirmado ?? true,
     estado: (row.situacion ?? 'P') as Delivery['estado'],
     fechaCreacion: row.feccre,
   };
@@ -74,6 +76,7 @@ export async function listarDelivery(q: DeliveryQuery): Promise<DeliveryLista> {
     .range(desde, hasta);
 
   if (q.estado) query = query.eq('situacion', q.estado);
+  if (q.repartidorId) query = query.eq('id_empleado', q.repartidorId);
 
   const { data, error, count } = await query;
   if (error) throw new Error(`DB_LIST_FAIL: ${error.message}`);
@@ -104,11 +107,25 @@ export async function crearDelivery(input: DeliveryCreate, usucre: string, pc = 
   return mapRow(data as unknown as DeliveryRow);
 }
 
-export async function asignarRepartidor(id: number, repartidorId: number, usumod: string, pc = ''): Promise<Delivery | null> {
+export async function asignarRepartidor(
+  id: number,
+  repartidorId: number,
+  usumod: string,
+  pc = '',
+  costoEnvio?: number,
+): Promise<Delivery | null> {
+  const changes = {
+    id_empleado: repartidorId,
+    costo_envio_confirmado: true,
+    ...updateAudit(usumod, pc),
+    ...(costoEnvio === undefined ? {} : { costo_envio: costoEnvio }),
+  };
   const { data, error } = await supabase
     .from('pedido_delivery')
-    .update({ id_empleado: repartidorId, situacion: 'R', ...updateAudit(usumod, pc) })
+    .update(changes)
     .eq('id_pedidodelivery', id)
+    .eq('situacion', 'P')
+    .eq('estado', 'A')
     .select(SELECT)
     .maybeSingle();
   if (error) throw new Error(`DB_UPDATE_FAIL: ${error.message}`);
@@ -119,8 +136,10 @@ export async function asignarRepartidor(id: number, repartidorId: number, usumod
 export async function despacharDelivery(id: number, usumod: string, pc = ''): Promise<Delivery | null> {
   const { data, error } = await supabase
     .from('pedido_delivery')
-    .update({ situacion: 'E', f_salida: new Date().toISOString(), ...updateAudit(usumod, pc) })
+    .update({ situacion: 'R', f_salida: new Date().toISOString(), ...updateAudit(usumod, pc) })
     .eq('id_pedidodelivery', id)
+    .eq('situacion', 'P')
+    .eq('estado', 'A')
     .select(SELECT)
     .maybeSingle();
   if (error) throw new Error(`DB_UPDATE_FAIL: ${error.message}`);
@@ -131,8 +150,10 @@ export async function despacharDelivery(id: number, usumod: string, pc = ''): Pr
 export async function entregarDelivery(id: number, usumod: string, pc = ''): Promise<Delivery | null> {
   const { data, error } = await supabase
     .from('pedido_delivery')
-    .update({ situacion: 'C', f_entrega: new Date().toISOString(), ...updateAudit(usumod, pc) })
+    .update({ situacion: 'E', f_entrega: new Date().toISOString(), ...updateAudit(usumod, pc) })
     .eq('id_pedidodelivery', id)
+    .eq('situacion', 'R')
+    .eq('estado', 'A')
     .select(SELECT)
     .maybeSingle();
   if (error) throw new Error(`DB_UPDATE_FAIL: ${error.message}`);
@@ -152,10 +173,11 @@ export async function sugerirCosto(lat: number | null, lng: number | null, distr
     .from('distrito')
     .select('id_distrito, costo_base, radio_km, recargo_km, lat_ref, lng_ref')
     .eq('id_distrito', distritoId)
-    .single();
+    .eq('estado', 'A')
+    .maybeSingle();
 
   if (error) throw new Error(`DB_DISTRITO_FAIL: ${error.message}`);
-  if (!distrito) throw new Error('DISTRITO_NOT_FOUND');
+  if (!distrito) throw new DeliveryError('DISTRITO_NOT_FOUND');
 
   const d = distrito as unknown as DistritoGPSRow;
   const costoBase = Number(d.costo_base ?? 0);

@@ -32,7 +32,7 @@ export async function crearDeliveryService(input: DeliveryCreate, usucre: string
   catch (err) { throw err; }
 }
 export async function asignarRepartidorService(id: number, input: DeliveryAsignar, usumod: string, pc?: string) {
-  const r = await asignarRepartidor(id, input.repartidorId, usumod, pc);
+  const r = await asignarRepartidor(id, input.repartidorId, usumod, pc, input.costoEnvio);
   if (!r) throw new DeliveryError('NOT_FOUND');
   try {
     const info = await getDeliveryInfoForPush(id);

@@ -51,7 +51,25 @@ export interface PermisoLista {
   total: number;
 }
 
-export type SeguridadErrorCode = 'NOT_FOUND' | 'YA_EXISTE' | 'TIPO_INVALIDO' | 'VALIDATION_ERROR';
+export interface SeguridadActor {
+  id: number;
+  logeo: string;
+  tipo: string;
+  permisos: string[];
+}
+
+export type SeguridadErrorCode =
+  | 'NOT_FOUND'
+  | 'YA_EXISTE'
+  | 'TIPO_INVALIDO'
+  | 'VALIDATION_ERROR'
+  | 'FORBIDDEN'
+  | 'AUTO_MODIFICACION_PROHIBIDA'
+  | 'EMPLEADO_INACTIVO'
+  | 'ULTIMO_ADMINISTRADOR'
+  | 'PERMISO_INVALIDO'
+  | 'PRIVILEGE_ESCALATION'
+  | 'MOTIVO_REQUERIDO';
 
 export class SeguridadError extends Error {
   readonly code: SeguridadErrorCode;

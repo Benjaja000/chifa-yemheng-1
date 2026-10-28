@@ -204,26 +204,39 @@ export function ClienteComandaPage() {
             <div className="y-flow-hero__content">
               <span className="y-flow-hero__eyebrow">Pedido en mesa {mesaId}</span>
               <h1 id="comanda-hero-title" className="y-flow-hero__title">Arma tu comanda a tu ritmo.</h1>
-              <p className="y-flow-hero__description">
-                {items.length} {items.length === 1 ? 'plato' : 'platos'} · {totalQty} unidades. Revisa tu selección antes de enviarla a cocina.
-              </p>
+              {(msg || items.length > 0) && (
+                <p className="y-flow-hero__description">
+                  {msg ?? `${items.length} ${items.length === 1 ? 'plato' : 'platos'} · ${totalQty} unidades en tu carrito. Revisa la selección antes de enviarla a cocina.`}
+                </p>
+              )}
+              <div className="y-flow-hero__actions y-client-actions">
+                {msg && pedidoId != null ? (
+                  <>
+                    <Link className="y-btn y-btn-hero y-client-action-primary" to={`/cliente/pedido/${pedidoId}`}>
+                      Ver mi comanda
+                    </Link>
+                    <Link className="y-btn y-btn-hero-secondary y-client-action-secondary" to="/cliente/menu">
+                      Agregar otra tanda
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link className="y-btn y-btn-hero-secondary y-client-action-secondary" to="/cliente/menu">
+                      {items.length > 0 ? 'Agregar más platos' : 'Elegir platos'}
+                    </Link>
+                    <Link className="y-btn y-btn-hero-secondary y-client-action-secondary" to="/cliente/mi-consumo">
+                      Ver mi comanda
+                    </Link>
+                  </>
+                )}
+              </div>
             </div>
           </section>
 
           <div className="y-comanda-body">
             <section className="y-comanda-items" aria-label="Platos en la comanda">
-              {msg && (
-                <div className="y-banner" style={{ marginBottom: 12 }}>
-                  <Ico n="ok" /> {msg}
-                  {pedidoId != null && (
-                    <Link to={`/cliente/pedido/${pedidoId}`} style={{ marginLeft: 10, color: 'var(--gold2)', fontWeight: 'bold', fontSize: 13 }}>
-                      Ver mi comanda →
-                    </Link>
-                  )}
-                </div>
-              )}
               {err && (
-                <div className="y-banner" style={{ marginBottom: 12, borderColor: 'rgba(239,68,68,.4)', background: 'rgba(239,68,68,.08)', color: '#fca5a5' }}>
+                <div className="y-banner" style={{ marginBottom: 12, borderColor: '#ba1a1a', background: '#ffdad6', color: '#93000a' }}>
                   <Ico n="err" /> {err}
                 </div>
               )}
@@ -245,15 +258,14 @@ export function ClienteComandaPage() {
                 </div>
               )}
 
-              {items.length === 0 ? (
+              {items.length === 0 && !msg ? (
                 <div className="y-panel" style={{ padding: 32, textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
                   <div style={{ color: 'var(--muted)', marginBottom: 12, display: 'block' }}>
                     <Ico n="store" size={48} />
                   </div>
-                  <p style={{ color: 'var(--muted)', margin: '0 0 16px' }}>Tu comanda está vacía.</p>
-                  <Link className="y-btn red" to="/cliente/menu" style={{ display: 'inline-flex' }}>Ver carta</Link>
+                  <p style={{ color: 'var(--muted)', margin: 0 }}>No hay productos seleccionados en el carrito.</p>
                 </div>
-              ) : (
+              ) : items.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {items.map((it, index) => (
                     <div
@@ -304,10 +316,10 @@ export function ClienteComandaPage() {
                     </div>
                   ))}
                 </div>
-              )}
+              ) : null}
             </section>
 
-            <aside className="y-comanda-totals" aria-label="Resumen de pago">
+            {items.length > 0 && <aside className="y-comanda-totals" aria-label="Resumen de pago">
               <div className="y-totals">
                 <div className="y-totals-row">
                   <span>Subtotal (sin IGV)</span>
@@ -325,7 +337,7 @@ export function ClienteComandaPage() {
               <button
                 className="y-btn y-btn-hero"
                 style={{ width: '100%', marginTop: 12 }}
-                disabled={enviando || necesitaLogin}
+                disabled={enviando || necesitaLogin || items.length === 0}
                 onClick={() => void enviarTanda()}
               >
                 {enviando
@@ -334,11 +346,7 @@ export function ClienteComandaPage() {
                   ? 'Inicia sesión primero'
                   : <> <Ico n="chef" size={18} /> Enviar a cocina </>}
               </button>
-              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <Link className="y-btn line" to="/cliente/menu" style={{ textAlign: 'center' }}>Agregar más</Link>
-                <Link className="y-btn line" to="/cliente/inicio" style={{ textAlign: 'center' }}>Volver</Link>
-              </div>
-            </aside>
+            </aside>}
           </div>
         </div>
       )}
