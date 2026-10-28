@@ -1,85 +1,117 @@
-import { useEffect, useState } from 'react';
-import { Ico } from '@/components/Icon';
+import { useCallback, useEffect, useState } from 'react';
+import { RefreshCw, WalletCards } from 'lucide-react';
+import { fmtPEN } from '@/lib/format';
+import { api } from '@/shared/services/api-client';
+import type { PorRendirShared } from '@/shared/types/delivery';
+
+function fecha(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString();
+}
 
 export function PorRendirPage() {
-  // En producción: fetch /api/v1/repartidor/por-rendir
-  const [pendientes] = useState<any[]>([
-    { id: 1, pedidoId: 101, cliente: 'Mesa 08', total: 45.50, metodo: 'Efectivo', horas: 2, entregado: false },
-    { id: 2, pedidoId: 102, cliente: 'Mesa 12', total: 62.00, metodo: 'Efectivo', horas: 1, entregado: false },
-  ]);
+  const [pendientes, setPendientes] = useState<PorRendirShared[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const KPIS = () => {
-    const total = pendientes.reduce((sum, d) => sum + d.total, 0);
-    const esperado = pendientes.reduce((sum, d) => sum + d.total, 0);
-    const entregado = pendientes.filter(d => d.entregado).reduce((sum, d) => sum + d.total, 0) || 0;
-    const diferencia = esperado - entregado;
-    return { total, esperado, entregado, diferencia };
-  };
-
-  useEffect(() => {
-    // Actualizar periódicamente
-    const interval = setInterval(() => {
-      // En producción: refetch API
-    }, 30000);
-    return () => clearInterval(interval);
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setPendientes(await api.getPorRendir());
+    } catch (e) {
+      console.error('Error cargando rendiciones pendientes del repartidor:', e);
+      setError(e instanceof Error ? e.message : 'No se pudo consultar el monto por rendir.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    void cargar();
+  }, [cargar, reloadKey]);
+
+  const total = pendientes.reduce((sum, item) => sum + item.total, 0);
+
   return (
-    <div className="y-shell y-responsive-page">
-      <div className="max-w-2xl mx-auto p-4">
-        <div className="y-panel y-panel-card" style={{ padding: 24, borderRadius: 16 }}>
-          <h2 className="text-2xl font-bold text-[#7F1518] mb-6">Por Rendir</h2>
-
-          <div className="grid grid-cols-1 gap-3 mb-4">
-            <div className="p-3 rounded-lg bg-red-100 text-red-700 text-center">
-              <div className="text-2xl font-bold">{KPIS().total}</div>
-              <div className="text-xs">S/ total esperado</div>
-            </div>
-            <div className="p-3 rounded-lg bg-green-100 text-green-700 text-center">
-              <div className="text-2xl font-bold">{KPIS().entregado}</div>
-              <div className="text-xs">S/ entregado</div>
-            </div>
-            <div className="p-3 rounded-lg bg-yellow-100 text-yellow-700 text-center">
-              <div className="text-2xl font-bold">{KPIS().diferencia}</div>
-              <div className="text-xs">S/ diferencia</div>
-            </div>
+    <div className="y-shell y-responsive-page y-padding-repartidor">
+      <div className="mx-auto max-w-3xl space-y-5">
+        <header className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm text-gray-500">Efectivo recibido en entregas</p>
+            <h1 className="text-2xl font-bold text-[#7F1518]">Por rendir</h1>
           </div>
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm"
+            onClick={() => setReloadKey((key) => key + 1)}
+            disabled={loading}
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            Actualizar
+          </button>
+        </header>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm divide-y divide-gray-200">
+        <section className="y-panel flex items-center justify-between gap-4 p-5">
+          <div>
+            <p className="m-0 text-sm text-gray-500">Total pendiente de entregar en caja</p>
+            <p className="m-0 text-3xl font-bold text-[#7F1518]">{fmtPEN(total)}</p>
+          </div>
+          <WalletCards size={32} className="text-[#7F1518]" />
+        </section>
+
+        {error && (
+          <div className="y-panel flex flex-wrap items-center justify-between gap-3 p-4" role="alert">
+            <p className="m-0 text-sm text-red-700">No se pudo cargar la información. ({error})</p>
+            <button type="button" className="y-btn line" onClick={() => setReloadKey((key) => key + 1)}>
+              Reintentar
+            </button>
+          </div>
+        )}
+
+        {loading && <div className="y-panel p-6 text-center text-gray-500">Consultando rendiciones…</div>}
+
+        {!loading && !error && pendientes.length === 0 && (
+          <div className="y-panel p-8 text-center">
+            <WalletCards className="mx-auto mb-3 text-gray-400" size={32} />
+            <h2 className="text-lg font-semibold">No tienes efectivo pendiente por rendir</h2>
+            <p className="mb-0 text-sm text-gray-500">Aquí aparecerán las entregas en efectivo completadas que aún no se registraron en caja.</p>
+          </div>
+        )}
+
+        {!loading && pendientes.length > 0 && (
+          <section className="y-panel overflow-x-auto p-4" aria-label="Pedidos pendientes de rendición">
+            <table className="w-full min-w-[600px] text-left text-sm">
               <thead>
-                <tr className="bg-gray-50 text-xs text-gray-700 uppercase">
-                  <th className="p-3">N° Pedido</th>
-                  <th className="p-3">Cliente</th>
-                  <th className="p-3">Total S/</th>
-                  <th className="p-3">Método</th>
-                  <th className="p-3">Hrs desde</th>
-                  <th className="p-3"></th>
+                <tr className="border-b text-xs uppercase text-gray-500">
+                  <th className="p-3">Pedido</th>
+                  <th className="p-3">Cliente y dirección</th>
+                  <th className="p-3">Pago</th>
+                  <th className="p-3">Entregado</th>
+                  <th className="p-3 text-right">Monto</th>
                 </tr>
               </thead>
               <tbody>
-                {pendientes.map((d) => (
-                  <tr key={d.id} className="hover:bg-gray-50">
-                    <td className="p-3 font-medium">{d.pedidoId}</td>
-                    <td className="p-3">{d.cliente}</td>
-                    <td className="p-3 font-bold text-red-600">{d.total.toFixed(2)}</td>
-                    <td className="p-3">{d.metodo}</td>
-                    <td className="p-3 text-sm text-gray-500">{d.horas}h</td>
+                {pendientes.map((item) => (
+                  <tr key={item.idPedidoDelivery} className="border-b last:border-0">
+                    <td className="p-3 font-semibold">#{item.pedidoId}</td>
                     <td className="p-3">
-                      <button className="text-xs text-blue-600 hover:text-blue-800">Llevar a Caja</button>
+                      <p className="m-0 font-medium">{item.cliente}</p>
+                      <p className="m-0 text-xs text-gray-500">{item.direccion}</p>
                     </td>
+                    <td className="p-3">{item.metodoPago || 'Efectivo'}</td>
+                    <td className="p-3 text-gray-600">{fecha(item.fechaEntrega)}</td>
+                    <td className="p-3 text-right font-bold text-[#7F1518]">{fmtPEN(item.total)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-
-          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600">
-              <Ico n="chevronRight" size={16} /> Los pagos en efectivo contra entrega quedan 'por rendir' al regresar. Llevar el monto al cajero para registrar MOVIMIENTO_CAJA concepto VENTA AL CONTADO.
+            <p className="mb-0 mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+              Entrega este efectivo al cajero para que registre la rendición. Esta pantalla es informativa y no registra movimientos de caja.
             </p>
-          </div>
-        </div>
+          </section>
+        )}
       </div>
     </div>
   );

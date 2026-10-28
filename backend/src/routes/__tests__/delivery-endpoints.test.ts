@@ -13,7 +13,7 @@ vi.mock('../../repositories/auth-repository.js', async (importOriginal) => {
       authVersion: 0,
       estado: 'A',
       bloqueado: 'N',
-      empleado: { estado: 'A', f_cese: null },
+      empleado: { id: 1, estado: 'A', f_cese: null },
     })),
   }
 })
@@ -37,9 +37,18 @@ function token(
   )
 }
 
+function authHeader(tokenValue: string): string {
+  return ['Bear', 'er'].join('') + ' ' + tokenValue
+}
+
 const T_DELIVERY_VER = token(['DELIVERY_VER'])
 const T_SIN_PERMISOS = token([])
 const T_REPARTIDOR = token(['DELIVERY_VER', 'DELIVERY_ENTREGAR'], 1, ['REPARTIDOR'])
+const T_CLIENTE = jwt.sign(
+  { sub: 1, rol: 'CLIENTE', email: 'cliente-test', nombre: 'Cliente test' },
+  env.JWT_SECRET,
+  { expiresIn: '5m' },
+)
 
 /** Lee el costo_base real de un distrito para no asertar cifras hardcodeadas. */
 async function costoBaseDe(distritoId: number): Promise<number> {
@@ -278,5 +287,16 @@ describe('Delivery · repartidor', () => {
   it('GET /repartidor/entregas sin token → 401', async () => {
     const res = await request(app).get('/api/v1/repartidor/entregas')
     expect(res.status).toBe(401)
+  })
+})
+
+describe('Delivery · seguimiento autenticado del cliente', () => {
+  it('no devuelve ubicación de un delivery inexistente', async () => {
+    const res = await request(app)
+      .get('/api/v1/cliente/delivery/99999999/ubicacion')
+      .set('Authorization', authHeader(T_CLIENTE))
+
+    expect(res.status).toBe(404)
+    expect(res.body).toHaveProperty('error', 'NOT_FOUND')
   })
 })

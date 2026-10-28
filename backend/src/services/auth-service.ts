@@ -17,7 +17,8 @@ const RUTA_POR_TIPO: Record<string, string> = {
   CAJERO: '/admin/caja',
   MOZO: '/admin/mozo',
   COCINA: '/admin/cocina',
-  DELIVERY: '/admin/delivery',
+  DELIVERY: '/repartidor/mis-entregas',
+  REPARTIDOR: '/repartidor/mis-entregas',
   ALMACEN: '/admin',
 };
 
@@ -28,6 +29,7 @@ const ORDEN_TIPO = [
   'CAJERO',
   'MOZO',
   'COCINA',
+  'REPARTIDOR',
   'DELIVERY',
   'ALMACEN',
 ];

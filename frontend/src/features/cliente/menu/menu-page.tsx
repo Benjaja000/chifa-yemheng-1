@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, ScanLine, ClipboardCheck } from 'lucide-react';
+import { BookOpen, ScanLine, ClipboardCheck, Truck } from 'lucide-react';
 import { useCart } from '../../../contexts/CartContext';
 import { QrScannerModal } from '../../../components/QrScannerModal';
 import { useClienteAuth } from '../auth/cliente-auth-context';
@@ -84,6 +84,11 @@ export function ClienteMenuPage() {
                   {disponibles.length} {disponibles.length === 1 ? 'producto disponible' : 'productos disponibles'}
                 </span>
                 {mesaId && <span className="y-cliente-hero__detail">Mesa {mesaId}</span>}
+                {cliente && !mesaId && count > 0 && (
+                  <span className="y-cliente-hero__detail">
+                    {count} {count === 1 ? 'plato en tu pedido' : 'platos en tu pedido'}
+                  </span>
+                )}
               </div>
             )}
             <div className="y-flow-hero__actions y-client-actions">
@@ -105,9 +110,23 @@ export function ClienteMenuPage() {
                   )}
                 </>
               ) : cliente ? (
-                <button className="y-btn y-btn-hero y-client-action-primary" onClick={() => setScannerOpen(true)}>
-                  Escanear mesa para pedir
-                </button>
+                <>
+                  {count > 0 ? (
+                    <Link className="y-btn y-btn-hero y-client-action-primary" to="/cliente/delivery">
+                      <Truck size={17} aria-hidden="true" />
+                      Continuar con delivery
+                    </Link>
+                  ) : (
+                    <a className="y-btn y-btn-hero y-client-action-primary" href="#carta-productos">
+                      <Truck size={17} aria-hidden="true" />
+                      Elegir platos para delivery
+                    </a>
+                  )}
+                  <button className="y-btn y-btn-hero-secondary y-client-action-secondary" onClick={() => setScannerOpen(true)}>
+                    <ScanLine size={17} aria-hidden="true" />
+                    Pedir en el local
+                  </button>
+                </>
               ) : null}
             </div>
           </div>
@@ -128,7 +147,7 @@ export function ClienteMenuPage() {
         </select>
       </div>
       <p className="y-menu-feedback" role="status" aria-live="polite">
-        {ultimoAgregado ? `${ultimoAgregado} agregado a tu comanda.` : ''}
+        {ultimoAgregado ? `${ultimoAgregado} agregado a tu pedido.` : ''}
       </p>
       {loginPromptVisible && (
         <div key={loginPromptKey} className="y-login-toast" role="status" aria-live="polite">
@@ -180,7 +199,7 @@ export function ClienteMenuPage() {
                       add({ id_producto: p.id, n_producto: p.nombre, precio: p.precio, disponible: p.disponible ? 'S' : 'N', categoria: p.categoria, imagen: p.imagen, estado: p.estado } as any, 1);
                       setUltimoAgregado(p.nombre);
                     }}
-                    aria-label={cliente ? `Agregar ${p.nombre} a la comanda` : `Inicia sesión para agregar ${p.nombre}`}
+                    aria-label={cliente ? `Agregar ${p.nombre} a tu pedido` : `Inicia sesión para agregar ${p.nombre}`}
                     title={cliente ? `Agregar ${p.nombre}` : 'Inicia sesión para pedir'}
                   >
                     +

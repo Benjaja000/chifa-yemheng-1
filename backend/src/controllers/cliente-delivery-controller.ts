@@ -52,6 +52,11 @@ export async function postClienteDelivery(req: Request, res: Response): Promise<
     });
   } catch (e) {
     if (e instanceof DeliveryError) {
+      if (e.code === 'AUTOSERVICIO_USER_NOT_READY') {
+        console.error('[CLIENTE_DELIVERY_AUTOSERVICIO_NOT_READY]', { clienteId: s.id });
+        res.status(503).json({ error: 'DELIVERY_TEMPORARILY_UNAVAILABLE' });
+        return;
+      }
       if (e.code === 'FUERA_DE_COBERTURA' || e.code === 'PRODUCTO_NO_DISPONIBLE') {
         res.status(409).json({ error: e.code });
         return;

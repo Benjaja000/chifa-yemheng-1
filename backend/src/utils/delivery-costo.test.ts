@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { calcularSugerenciaCosto } from './delivery-costo.js';
+import { calcularDistanciaHaversineKm, calcularSugerenciaCosto } from './delivery-costo.js';
+
+describe('calcularDistanciaHaversineKm', () => {
+  it('returns zero for the same coordinates', () => {
+    expect(calcularDistanciaHaversineKm(-14.058616, -75.717849, -14.058616, -75.717849)).toBe(0);
+  });
+
+  it('calculates the distance between Ica and a nearby location', () => {
+    expect(calcularDistanciaHaversineKm(-14.058616, -75.717849, -14.074954, -75.775628))
+      .toBeCloseTo(6.51, 1);
+  });
+});
 
 describe('calcularSugerenciaCosto', () => {
   const parametrosBase = {

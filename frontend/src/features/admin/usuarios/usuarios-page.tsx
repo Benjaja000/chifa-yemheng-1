@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { leerToken } from '../../auth/login/auth-service';
+import { leerPermisos, leerToken } from '../../auth/login/auth-service';
 
 const API_ROOT = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1';
 const BASE = `${API_ROOT}/seguridad`;
@@ -70,7 +70,12 @@ async function api<T>(path: string, opts?: RequestInit): Promise<T> {
 }
 
 export function AdminUsuariosPage() {
-  const [tab, setTab] = useState<'usuarios' | 'roles' | 'permisos'>('usuarios');
+  const permisosSesion = leerPermisos();
+  const puedeGestionarUsuarios = permisosSesion.includes('SEG_USUARIO');
+  const puedeGestionarRoles = permisosSesion.includes('SEG_ROL');
+  const [tab, setTab] = useState<'usuarios' | 'roles' | 'permisos'>(() =>
+    puedeGestionarUsuarios ? 'usuarios' : puedeGestionarRoles ? 'roles' : 'usuarios',
+  );
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [roles, setRoles] = useState<Rol[]>([]);
   const [permisos, setPermisos] = useState<Permiso[]>([]);
@@ -121,6 +126,13 @@ export function AdminUsuariosPage() {
   };
 
   useEffect(() => {
+    if (
+      (tab === 'usuarios' && !puedeGestionarUsuarios)
+      || (tab !== 'usuarios' && !puedeGestionarRoles)
+    ) {
+      setCargando(false);
+      return;
+    }
     void cargar();
   }, [tab]);
 
@@ -211,14 +223,21 @@ export function AdminUsuariosPage() {
     <div className="y-shell" style={{ padding: '24px 16px 140px', maxWidth: 1240, margin: '0 auto' }}>
       <h1 className="text-2xl font-bold mb-4" style={{ color: 'var(--fg)' }}>Seguridad</h1>
       <div className="flex gap-2 mb-4">
-        {(['usuarios', 'roles', 'permisos'] as const).map((value) => (
+        {([
+          ...(puedeGestionarUsuarios ? ['usuarios' as const] : []),
+          ...(puedeGestionarRoles ? ['roles' as const, 'permisos' as const] : []),
+        ]).map((value) => (
           <button key={value} onClick={() => { cancelarEdicion(); setTab(value); }} className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${tab === value ? 'bg-[#A61E22] text-white' : 'bg-[#F5F5F5] hover:bg-[#D9D9D9]'}`}>
             {value === 'usuarios' ? 'Usuarios' : value === 'roles' ? 'Roles' : 'Permisos'}
           </button>
         ))}
       </div>
       {error && <div role="alert" className="mb-4 rounded-lg bg-red-100 p-3 text-sm text-red-700">{error}</div>}
-      {cargando ? (
+      {!puedeGestionarUsuarios && !puedeGestionarRoles ? (
+        <div className="y-panel p-4 text-sm" role="status">
+          Tu cuenta no tiene permisos para administrar usuarios, roles o permisos.
+        </div>
+      ) : cargando ? (
         <div className="y-panel" style={{ padding: 24, textAlign: 'center' }}>Cargando...</div>
       ) : tab === 'usuarios' ? (
         <>

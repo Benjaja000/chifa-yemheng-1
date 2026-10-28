@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AuthGuard, PublicGuard, RoleGuard, AreaGuard, ClienteAuthGuard, ClientePublicGuard } from './guards';
+import { ADMIN_ROLES } from './admin-access';
 import { RouteError } from '../shared/ui/route-error';
 import { AdminShell } from '../layouts/admin-shell';
 import ClientLayout from '../layouts/client-layout';
@@ -157,86 +158,86 @@ export const router = createBrowserRouter([
     element: <AuthGuard><AdminShell /></AuthGuard>,
     errorElement: <RouteError />,
     children: [
-      { index: true, element: <DashboardPage /> },
+      { index: true, element: <RoleGuard roles={ADMIN_ROLES.adminSupervisor}><DashboardPage /></RoleGuard> },
       {
         path: 'categorias',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><CategoriasPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.adminSupervisor}><CategoriasPage /></RoleGuard>,
       },
       {
         path: 'productos',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><ProductosPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.adminSupervisor}><ProductosPage /></RoleGuard>,
       },
       {
         path: 'unidades',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><UnidadesPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.adminSupervisor}><UnidadesPage /></RoleGuard>,
       },
       {
         path: 'clientes',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','CAJERO']}><ClientesPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.customers}><ClientesPage /></RoleGuard>,
       },
       {
         path: 'personal',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','GERENTE']}><PersonalPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.admin}><PersonalPage /></RoleGuard>,
       },
       {
         path: 'mesas',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><MesasPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.adminSupervisor}><MesasPage /></RoleGuard>,
       },
       {
         path: 'cocina',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','COCINA']}><AreaGuard area="COCINA"><StaffCocinaPage /></AreaGuard></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.kitchen}><AreaGuard area="COCINA"><StaffCocinaPage /></AreaGuard></RoleGuard>,
       },
       {
         path: 'mozo',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','MOZO']}><AreaGuard area="MOZO"><StaffMozoPage /></AreaGuard></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.waiter}><AreaGuard area="MOZO"><StaffMozoPage /></AreaGuard></RoleGuard>,
       },
       {
         path: 'caja',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','CAJERO']}><AreaGuard area="CAJA"><StaffCajaPage /></AreaGuard></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.cashier}><AreaGuard area="CAJA"><StaffCajaPage /></AreaGuard></RoleGuard>,
       },
       {
         path: 'delivery',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','DELIVERY','CAJERO','MOZO']}><StaffDeliveryPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.delivery}><StaffDeliveryPage /></RoleGuard>,
       },
       {
         path: 'pedidos',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','MOZO','CAJERO','COCINA']}><AdminPedidosPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.orders}><AdminPedidosPage /></RoleGuard>,
       },
       {
         path: 'pedidos-delivery',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','DELIVERY','CAJERO','MOZO']}><PedidosDeliveryPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.delivery}><PedidosDeliveryPage /></RoleGuard>,
       },
       {
         path: 'reportes',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','CAJERO']}><AdminReportesPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.adminSupervisor}><AdminReportesPage /></RoleGuard>,
       },
       {
         path: 'auditoria',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><AdminAuditoriaPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.admin}><AdminAuditoriaPage /></RoleGuard>,
       },
       {
         path: 'usuarios',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><AdminUsuariosPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.adminSupervisor}><AdminUsuariosPage /></RoleGuard>,
       },
       {
         path: 'inventario',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','ALMACEN']}><AdminInventarioPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.inventory}><AdminInventarioPage /></RoleGuard>,
       },
       {
         path: 'empleados',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><AdminEmpleadosPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.admin}><AdminEmpleadosPage /></RoleGuard>,
       },
       {
         path: 'crud',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><AdminCrudPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.admin}><AdminCrudPage /></RoleGuard>,
       },
       {
         path: 'reservas-admin',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR','MOZO','CAJERO']}><AdminReservasPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.reservations}><AdminReservasPage /></RoleGuard>,
       },
       {
         path: 'parametros-delivery',
-        element: <RoleGuard roles={['ADMINISTRADOR','SUPERVISOR']}><ParametrosDeliveryPage /></RoleGuard>,
+        element: <RoleGuard roles={ADMIN_ROLES.admin}><ParametrosDeliveryPage /></RoleGuard>,
       },
     ],
   },
@@ -249,12 +250,13 @@ export const router = createBrowserRouter([
   },
   {
     path: '/repartidor',
-    element: <AuthGuard><RoleGuard roles={['REPARTIDOR']}><RepartidorLayout /></RoleGuard></AuthGuard>,
+    element: <AuthGuard><RoleGuard roles={['REPARTIDOR', 'DELIVERY']}><RepartidorLayout /></RoleGuard></AuthGuard>,
     errorElement: <RouteError />,
     children: [
-      { path: 'mis-entregas', element: <RoleGuard roles={['REPARTIDOR']}><MisEntregasPage /></RoleGuard> },
-      { path: 'entrega/:id', element: <RoleGuard roles={['REPARTIDOR']}><EntregaDetallePage /></RoleGuard> },
-      { path: 'por-rendir', element: <RoleGuard roles={['REPARTIDOR']}><PorRendirPage /></RoleGuard> },
+      { index: true, element: <Navigate to="/repartidor/mis-entregas" replace /> },
+      { path: 'mis-entregas', element: <RoleGuard roles={['REPARTIDOR', 'DELIVERY']}><MisEntregasPage /></RoleGuard> },
+      { path: 'entrega/:id', element: <RoleGuard roles={['REPARTIDOR', 'DELIVERY']}><EntregaDetallePage /></RoleGuard> },
+      { path: 'por-rendir', element: <RoleGuard roles={['REPARTIDOR', 'DELIVERY']}><PorRendirPage /></RoleGuard> },
     ],
   },
 

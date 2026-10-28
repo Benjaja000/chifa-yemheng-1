@@ -4,10 +4,29 @@ import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 
 interface Repartidor {
-  id_empleado: number;
+  id: number;
   nombre: string;
   tieneRutaActiva: boolean;
   disponibilidadNoVerificada?: boolean;
+}
+
+interface Cargo {
+  id: number;
+  nombre: string;
+}
+
+interface Personal {
+  id: number;
+  nombres: string;
+  apPaterno: string;
+}
+
+interface PersonalLista {
+  data: Personal[];
+}
+
+interface DeliveryLista {
+  data: unknown[];
 }
 
 interface AsignarRepartidorModalProps {
@@ -27,20 +46,35 @@ export function AsignarRepartidorModal({ abierto, delivery, onCerrar, onExito }:
 
   const cargarRepartidores = async () => {
     try {
-      const res = await api.request<any[]>('/personal?cargo=REPARTIDOR&estado=A');
+      const cargos = await api.request<Cargo[]>('/maestros/cargos');
+      const cargoRepartidor = cargos.find((cargo) => cargo.nombre.trim().toLocaleUpperCase() === 'REPARTIDOR');
+      if (!cargoRepartidor) {
+        throw new Error('No se encontró el cargo REPARTIDOR en los cargos activos.');
+      }
+
+      const personal = await api.request<PersonalLista>(`/personal?cargo=${cargoRepartidor.id}&estado=A&limit=100`);
       const conRuta = await Promise.all(
-        res.map(async (r: any) => {
+        personal.data.map(async (r) => {
           try {
-            const entregas = await api.request<any>(`/delivery?estado=R&repartidorId=${r.id_empleado}`);
-            return { ...r, tieneRutaActiva: entregas.data?.length > 0 };
+            const entregas = await api.request<DeliveryLista>(`/delivery?estado=R&repartidorId=${r.id}`);
+            return {
+              id: r.id,
+              nombre: `${r.nombres} ${r.apPaterno}`.trim(),
+              tieneRutaActiva: entregas.data.length > 0,
+            };
           } catch {
-            console.error(`No se pudo verificar la ruta activa del repartidor ${r.id_empleado}.`);
-            return { ...r, tieneRutaActiva: true, disponibilidadNoVerificada: true };
+            console.error(`No se pudo verificar la ruta activa del repartidor ${r.id}.`);
+            return {
+              id: r.id,
+              nombre: `${r.nombres} ${r.apPaterno}`.trim(),
+              tieneRutaActiva: true,
+              disponibilidadNoVerificada: true,
+            };
           }
         })
       );
       setRepartidores(conRuta);
-      setRepartidorId(conRuta.find((r) => !r.tieneRutaActiva && !r.disponibilidadNoVerificada)?.id_empleado ?? null);
+      setRepartidorId(conRuta.find((r) => !r.tieneRutaActiva && !r.disponibilidadNoVerificada)?.id ?? null);
       if (conRuta.some((r) => r.disponibilidadNoVerificada)) {
         setErrorCarga('No se pudo verificar la disponibilidad de todos los repartidores; los no verificados no se pueden asignar.');
       }
@@ -95,13 +129,13 @@ export function AsignarRepartidorModal({ abierto, delivery, onCerrar, onExito }:
     listaContent = (
       <div className="space-y-2 max-h-64 overflow-y-auto">
         {repartidores.map(r => (
-          <label key={r.id_empleado} className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+          <label key={r.id} className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
             <input
               type="radio"
               name="repartidor"
-              value={String(r.id_empleado)}
-              checked={repartidorId === r.id_empleado}
-              onChange={() => setRepartidorId(r.id_empleado)}
+              value={String(r.id)}
+              checked={repartidorId === r.id}
+              onChange={() => setRepartidorId(r.id)}
               className="w-4 h-4 text-blue-600"
               disabled={r.tieneRutaActiva}
             />
@@ -111,7 +145,7 @@ export function AsignarRepartidorModal({ abierto, delivery, onCerrar, onExito }:
                 {r.disponibilidadNoVerificada ? 'No se pudo verificar' : r.tieneRutaActiva ? 'Tiene ruta activa' : 'Disponible'}
               </p>
             </div>
-            {r.id_empleado === sugerido?.id_empleado && !r.tieneRutaActiva && (
+            {r.id === sugerido?.id && !r.tieneRutaActiva && (
               <Badge variant="success" size="sm">Sugerido</Badge>
             )}
           </label>

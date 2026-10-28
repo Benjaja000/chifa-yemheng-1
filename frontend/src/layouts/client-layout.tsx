@@ -68,13 +68,13 @@ export default function ClientLayout() {
           </nav>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <Link
-              to="/cliente/comanda"
+              to={mesaId ? '/cliente/comanda' : '/cliente/delivery'}
               onClick={handleGuestCartClick}
               className="y-icon-btn y-client-cart-link"
-              aria-label={`Carrito${count > 0 ? `, ${count} productos` : ''}`}
+              aria-label={`${mesaId ? 'Comanda' : 'Pedido'}${count > 0 ? `, ${count} productos` : ''}`}
             >
               <ShoppingCart size={17} />
-              <span>Carrito</span>
+              <span>{mesaId ? 'Comanda' : 'Pedido'}</span>
               {count > 0 && <motion.span key={count} className="y-badge" initial={{ scale: 1.9 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 14 }}>{count}</motion.span>}
             </Link>
             {cliente ? (

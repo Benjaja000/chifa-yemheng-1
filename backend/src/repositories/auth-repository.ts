@@ -30,13 +30,13 @@ export interface EstadoSesion {
   authVersion: number;
   estado: string;
   bloqueado: string;
-  empleado: { estado: string; f_cese: string | null } | null;
+  empleado: { id: number; estado: string; f_cese: string | null } | null;
 }
 
 export async function leerEstadoSesion(idUsuario: number): Promise<EstadoSesion | null> {
   const { data, error } = await supabase
     .from('usuario')
-    .select('auth_version, estado, bloqueado, empleado(estado, f_cese)')
+    .select('auth_version, estado, bloqueado, empleado(id_empleado, estado, f_cese)')
     .eq('id_usuario', idUsuario)
     .maybeSingle();
   if (error) {
@@ -49,13 +49,15 @@ export async function leerEstadoSesion(idUsuario: number): Promise<EstadoSesion 
     auth_version: number;
     estado: string;
     bloqueado: string;
-    empleado: { estado: string; f_cese: string | null } | null;
+    empleado: { id_empleado: number; estado: string; f_cese: string | null } | null;
   };
   return {
     authVersion: Number(row.auth_version),
     estado: row.estado,
     bloqueado: row.bloqueado,
-    empleado: row.empleado,
+    empleado: row.empleado
+      ? { id: Number(row.empleado.id_empleado), estado: row.empleado.estado, f_cese: row.empleado.f_cese }
+      : null,
   };
 }
 

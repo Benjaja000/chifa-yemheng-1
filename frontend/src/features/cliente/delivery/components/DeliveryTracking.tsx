@@ -41,12 +41,17 @@ export function DeliveryTracking({ deliveryId }: { deliveryId: number }) {
   const idx = PASOS.findIndex((p) => p.id === ubicacion.situacion);
   const pins = [
     ubicacion.lat_cliente !== null && ubicacion.lng_cliente !== null
-      ? { lat: ubicacion.lat_cliente, lng: ubicacion.lng_cliente, label: 'Tu ubicación', color: 'blue' as const }
+      ? { lat: ubicacion.lat_cliente, lng: ubicacion.lng_cliente, label: 'Dirección de entrega', color: 'blue' as const }
       : null,
     ubicacion.lat_repartidor !== null && ubicacion.lng_repartidor !== null
       ? { lat: ubicacion.lat_repartidor, lng: ubicacion.lng_repartidor, label: 'Repartidor', color: 'red' as const }
       : null,
   ].filter((p): p is NonNullable<typeof p> => p !== null);
+  const center: [number, number] | undefined = pins.length === 0
+    ? undefined
+    : pins.length === 1
+      ? [pins[0].lat, pins[0].lng]
+      : [(pins[0].lat + pins[1].lat) / 2, (pins[0].lng + pins[1].lng) / 2];
 
   return (
     <div className="y-shell y-responsive-page">
@@ -85,17 +90,19 @@ export function DeliveryTracking({ deliveryId }: { deliveryId: number }) {
           <p className="text-gray-500 mb-2">
             Costo de envío: {ubicacion.costo_envio_confirmado ? fmtPEN(ubicacion.costo_envio) : 'pendiente de confirmación'}
           </p>
+          {ubicacion.repartidor && <p className="text-gray-500 mb-2">Repartidor: {ubicacion.repartidor}</p>}
           <p className="text-gray-500 mb-2">Salida: {hora(ubicacion.f_salida)} · Entrega: {hora(ubicacion.f_entrega)}</p>
           {ubicacion.situacion === 'R' && (
             <p className="text-green-600 text-sm">
-              <b>En ruta desde:</b> {hora(ubicacion.f_ubicacion)}
+              <b>En ruta desde:</b> {hora(ubicacion.f_salida)}
+              {ubicacion.lat_repartidor !== null && <span> · Última ubicación: {hora(ubicacion.f_ubicacion)}</span>}
             </p>
           )}
         </div>
 
         {pins.length > 0 ? (
           <div className="mt-4">
-            <MapLeaflet pins={pins} readonly height="280px" />
+            <MapLeaflet pins={pins} readonly center={center} zoom={14} height="280px" />
           </div>
         ) : (
           <div className="mt-4 p-3 rounded-lg bg-gray-50 border border-gray-300">

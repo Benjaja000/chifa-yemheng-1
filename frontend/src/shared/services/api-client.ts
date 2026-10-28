@@ -1,5 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1';
+import type { DeliveryListaShared, DeliveryShared, PorRendirShared } from '../types/delivery';
 
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1';
 const CLIENTE_TOKEN_KEY = 'chifa.cliente.token';
 const STAFF_TOKEN_KEY = 'chifa.token';
 
@@ -110,19 +111,19 @@ class ApiClient {
   // Repartidor
   getMisEntregas(params?: { estado?: string; page?: number; limit?: number }) {
     const query = buildQuery(params);
-    return this.request<any>(`/repartidor/entregas${query ? `?${query}` : ''}`);
+    return this.request<DeliveryListaShared>(`/repartidor/entregas${query ? `?${query}` : ''}`);
   }
 
   getMiEntrega(id: number) {
-    return this.request<any>(`/repartidor/entregas/${id}`);
+    return this.request<DeliveryShared>(`/repartidor/entregas/${id}`);
   }
 
   iniciarRuta(id: number) {
-    return this.request<any>(`/repartidor/entregas/${id}/ruta`, { method: 'PATCH' });
+    return this.request<DeliveryShared>(`/repartidor/entregas/${id}/ruta`, { method: 'PATCH' });
   }
 
   confirmarEntrega(id: number) {
-    return this.request<any>(`/repartidor/entregas/${id}/entregar`, { method: 'PATCH' });
+    return this.request<DeliveryShared>(`/repartidor/entregas/${id}/entregar`, { method: 'PATCH' });
   }
 
   actualizarUbicacion(id: number, lat: number, lng: number) {
@@ -133,7 +134,7 @@ class ApiClient {
   }
 
   getPorRendir() {
-    return this.request<any>('/repartidor/por-rendir');
+    return this.request<PorRendirShared[]>('/repartidor/por-rendir');
   }
 
   registrarPushToken(token: string, platform: string) {

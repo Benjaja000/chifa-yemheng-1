@@ -1,21 +1,29 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/features/auth/login/auth-context';
 
 export function RepartidorLoginPage() {
+  const { login, logout } = useAuth();
   const [usuario, setUsuario] = useState('');
-  const [pin, setPin] = useState('');
+  const [clave, setClave] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const login = async () => {
+  const ingresar = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setLoading(true);
+    setError(null);
     try {
-      // Simular login - en producción haría fetch al backend
-      localStorage.setItem('token', 'repartidor-mock-token');
-      localStorage.setItem('role', 'REPARTIDOR');
-      navigate('/repartidor/mis-entregas');
+      const destino = await login({ logeo: usuario.trim(), clave });
+      if (!destino.startsWith('/repartidor')) {
+        logout();
+        setError('Esta cuenta no tiene un rol de repartidor asignado. Verifica con el administrador.');
+        return;
+      }
+      navigate(destino, { replace: true });
     } catch (e) {
-      alert('Error en el login');
+      setError(e instanceof Error ? e.message : 'No se pudo iniciar sesión. Revisa tus credenciales.');
     } finally {
       setLoading(false);
     }
@@ -23,48 +31,48 @@ export function RepartidorLoginPage() {
 
   return (
     <div className="y-shell y-responsive-page y-bkg-auth">
-      <div className="max-w-md mx-auto p-4 pt-20">
-        <div className="y-panel y-panel-auth" style={{ padding: 32, borderRadius: 16 }}>
-          <h2 className="text-center text-2xl font-bold text-[#7F1518] mb-6">Login Repartidor</h2>
-
-          <div className="grid grid-cols-1 gap-4 mb-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Usuario / Email</label>
-              <input
-                value={usuario}
-                onChange={(e) => setUsuario(e.target.value)}
-                placeholder="juan.perez@example.com"
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">PIN o Clave</label>
-              <input
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                type="password"
-                placeholder="1234"
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-          </div>
-
+      <div className="mx-auto max-w-md p-4 pt-20">
+        <form onSubmit={(event) => void ingresar(event)} className="y-panel y-panel-auth space-y-4 p-8">
           <div className="text-center">
-            <button
-              onClick={() => login()}
-              disabled={loading}
-              className="w-full rounded-xl bg-[#A61E22] py-3 text-lg font-semibold text-white hover:bg-[#7F1518] disabled:opacity-60 transition-colors"
-            >
-              {loading ? 'Ingresando…' : 'Entrar'}
-            </button>
+            <p className="text-sm text-gray-500">Chifa Yemheng · División Delivery</p>
+            <h1 className="text-2xl font-bold text-[#7F1518]">Acceso repartidor</h1>
           </div>
 
-          <div className="mt-6 text-center text-sm text-gray-500">
-            <p>Chifa Yemheng - División Delivery</p>
+          {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
+
+          <div>
+            <label htmlFor="repartidor-usuario" className="mb-1 block text-sm font-medium">Usuario</label>
+            <input
+              id="repartidor-usuario"
+              value={usuario}
+              onChange={(event) => setUsuario(event.target.value)}
+              autoComplete="username"
+              required
+              minLength={3}
+              className="w-full rounded-lg border px-3 py-2"
+            />
           </div>
-        </div>
+
+          <div>
+            <label htmlFor="repartidor-clave" className="mb-1 block text-sm font-medium">Contraseña</label>
+            <input
+              id="repartidor-clave"
+              value={clave}
+              onChange={(event) => setClave(event.target.value)}
+              type="password"
+              autoComplete="current-password"
+              required
+              className="w-full rounded-lg border px-3 py-2"
+            />
+          </div>
+
+          <button type="submit" disabled={loading} className="y-btn red w-full">
+            {loading ? 'Ingresando…' : 'Ingresar'}
+          </button>
+          <div className="text-center text-sm">
+            <Link to="/auth/login" className="text-blue-700">Volver al acceso del personal</Link>
+          </div>
+        </form>
       </div>
     </div>
   );

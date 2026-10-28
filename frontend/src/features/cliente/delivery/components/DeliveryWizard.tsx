@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, ShoppingBag } from 'lucide-react';
+import { useCart } from '@/contexts/CartContext';
 import { Stepper } from '@/shared/ui/Stepper';
-import { CartaStep } from './CartaStep';
 import { DireccionStep } from './DireccionStep';
 import { ConfirmarStep } from './ConfirmarStep';
 import { api } from '@/shared/services/api-client';
 import { toast } from '@/shared/ui/use-toast';
 
-type Step = 'carta' | 'direccion' | 'confirmar';
+type Step = 'direccion' | 'confirmar';
 
 interface WizardState {
   step: Step;
-  items: Array<{ productoId: number; cantidad: number; precioUnit: number; nombre?: string; nota?: string }>;
   direccion: string;
   distritoId: number | null;
   referencia: string;
@@ -21,14 +21,14 @@ interface WizardState {
   lngCliente?: number;
 }
 
-const STEPS: Step[] = ['carta', 'direccion', 'confirmar'];
-const STEP_LABELS = { carta: 'Carta', direccion: 'Dirección', confirmar: 'Confirmar' };
+const STEPS: Step[] = ['direccion', 'confirmar'];
+const STEP_LABELS = { direccion: 'Dirección', confirmar: 'Confirmar' };
 
 export function DeliveryWizard({ onCreated }: { onCreated?: (idPedidoDelivery: number) => void }) {
   const navigate = useNavigate();
+  const { items: cartItems, clear } = useCart();
   const [state, setState] = useState<WizardState>({
-    step: 'carta',
-    items: [],
+    step: 'direccion',
     direccion: '',
     distritoId: null,
     referencia: '',
@@ -37,6 +37,13 @@ export function DeliveryWizard({ onCreated }: { onCreated?: (idPedidoDelivery: n
   });
   const [loading, setLoading] = useState(false);
 
+  const items = cartItems.map(({ producto, cantidad, nota }) => ({
+    productoId: producto.id_producto,
+    cantidad,
+    precioUnit: Number(producto.precio),
+    nombre: producto.n_producto,
+    nota,
+  }));
   const currentIndex = STEPS.indexOf(state.step);
 
   const updateState = (updates: Partial<WizardState>) => {
@@ -56,7 +63,7 @@ export function DeliveryWizard({ onCreated }: { onCreated?: (idPedidoDelivery: n
   };
 
   const handleSubmit = async () => {
-    if (state.items.length === 0) {
+    if (items.length === 0) {
       toast({ title: 'Error', description: 'Agrega al menos un producto', variant: 'destructive' });
       return;
     }
@@ -68,7 +75,7 @@ export function DeliveryWizard({ onCreated }: { onCreated?: (idPedidoDelivery: n
     setLoading(true);
     try {
       const result = await api.crearDelivery({
-        items: state.items.map(({ productoId, cantidad, nota }) => ({ productoId, cantidad, nota })),
+        items: items.map(({ productoId, cantidad, nota }) => ({ productoId, cantidad, nota })),
         direccion: state.direccion,
         distritoId: state.distritoId,
         referencia: state.referencia,
@@ -80,6 +87,7 @@ export function DeliveryWizard({ onCreated }: { onCreated?: (idPedidoDelivery: n
         title: 'Solicitud recibida',
         description: `Pedido #${result.idPedidoDelivery} registrado. El equipo confirmará el costo de envío.`,
       });
+      clear();
       if (onCreated) onCreated(result.idPedidoDelivery);
       else navigate(`/cliente/pedido/${result.idPedidoDelivery}`);
     } catch (error: unknown) {
@@ -100,8 +108,6 @@ export function DeliveryWizard({ onCreated }: { onCreated?: (idPedidoDelivery: n
 
   const renderStep = () => {
     switch (state.step) {
-      case 'carta':
-        return <CartaStep items={state.items} onItemsChange={items => updateState({ items })} onNext={nextStep} />;
       case 'direccion':
         return <DireccionStep
           direccion={state.direccion}
@@ -120,7 +126,7 @@ export function DeliveryWizard({ onCreated }: { onCreated?: (idPedidoDelivery: n
         />;
       case 'confirmar':
         return <ConfirmarStep
-          items={state.items}
+          items={items}
           direccion={state.direccion}
           referencia={state.referencia}
           telefono={state.telefono}
@@ -132,13 +138,28 @@ export function DeliveryWizard({ onCreated }: { onCreated?: (idPedidoDelivery: n
     }
   };
 
+  if (items.length === 0) {
+    return (
+      <section className="y-delivery-empty-cart" aria-labelledby="delivery-empty-title">
+        <span className="y-delivery-empty-cart__icon"><ShoppingBag size={26} aria-hidden="true" /></span>
+        <span className="y-cliente-kicker">Tu pedido empieza en la carta</span>
+        <h2 id="delivery-empty-title">Aún no agregaste platos</h2>
+        <p>Explora la carta, agrega tus favoritos y vuelve aquí para indicar dónde los entregamos.</p>
+        <Link to="/cliente/menu" className="y-btn red y-delivery-empty-cart__link">
+          Ir a la carta <ArrowRight size={17} aria-hidden="true" />
+        </Link>
+      </section>
+    );
+  }
+
   return (
-    <div className="max-w-2xl mx-auto p-4">
+    <div className="y-delivery-wizard">
       <Stepper
         steps={STEPS.map(s => ({ key: s, label: STEP_LABELS[s] }))}
         currentStep={currentIndex}
+        className="y-delivery-stepper"
       />
-      <div className="mt-6">{renderStep()}</div>
+      <div className="y-delivery-wizard__content">{renderStep()}</div>
     </div>
   );
 }

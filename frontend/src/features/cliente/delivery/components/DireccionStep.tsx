@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { MapPin } from 'lucide-react';
 import { api } from '@/shared/services/api-client';
 import { Badge } from '@/shared/ui/Badge';
 import { Button } from '@/shared/ui/Button';
@@ -122,7 +123,6 @@ export function DireccionStep(props: DireccionStepProps) {
     onPrev,
   } = props;
 
-  const [mostrarHero, setMostrarHero] = useState(true);
   const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
   const [provincias, setProvincias] = useState<Provincia[]>([]);
   const [distritos, setDistritos] = useState<Distrito[]>([]);
@@ -143,6 +143,7 @@ export function DireccionStep(props: DireccionStepProps) {
   const [sugerencias, setSugerencias] = useState<Array<{ etiqueta: string; lat: number; lng: number }>>([]);
   const [verSugerencias, setVerSugerencias] = useState(false);
   const [buscandoDir, setBuscandoDir] = useState(false);
+  const [errorGps, setErrorGps] = useState<string | null>(null);
   const onDistritoChangeRef = useRef(onDistritoChange);
   const onCostoChangeRef = useRef(onCostoChange);
   const lookupIdRef = useRef(0);
@@ -162,11 +163,6 @@ export function DireccionStep(props: DireccionStepProps) {
     }
     return departamentosRequestRef.current;
   };
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setMostrarHero(false), 5000);
-    return () => window.clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     const cargarDepartamentos = async () => {
@@ -437,10 +433,11 @@ export function DireccionStep(props: DireccionStepProps) {
 
   const handleUsarUbicacion = async () => {
     if (!navigator.geolocation) {
-      alert('Geolocalización no soportada en este navegador');
+      setErrorGps('Este navegador no permite compartir la ubicación. Puedes marcarla directamente en el mapa.');
       return;
     }
 
+    setErrorGps(null);
     setGpsLoading(true);
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
@@ -455,7 +452,7 @@ export function DireccionStep(props: DireccionStepProps) {
       await seleccionarUbicacionMapa(latitude, longitude);
     } catch (error) {
       console.error('Error obteniendo ubicación:', error);
-      alert('No se pudo obtener la ubicación. Verifica los permisos.');
+      setErrorGps('No pudimos obtener tu ubicación. Revisa los permisos del navegador o selecciónala en el mapa.');
     } finally {
       setGpsLoading(false);
     }
@@ -471,32 +468,27 @@ export function DireccionStep(props: DireccionStepProps) {
     && dentroCobertura;
 
   return (
-    <div className="space-y-6">
-      {mostrarHero && (
-        <section className="y-flow-hero" aria-labelledby="delivery-address-hero-title">
-          <div className="y-flow-hero__content">
-            <span className="y-flow-hero__eyebrow">Delivery Yemheng</span>
-            <h1 id="delivery-address-hero-title" className="y-flow-hero__title">
-              ¿Dónde quieres que llegue tu pedido?
-            </h1>
-            <p className="y-flow-hero__description">
-              Ingresa tu dirección para calcular el costo de envío. La ubicación GPS es opcional; también puedes completar los datos manualmente.
-            </p>
-            <div className="y-flow-hero__actions">
-              <button type="button" className="y-btn gold" onClick={() => setVerSugerencias(true)}>
-              Comenzar a pedir
-              </button>
-              <button type="button" className="y-btn line" onClick={() => setMostrarHero(false)}>
-              Saltar
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
+    <div className="y-delivery-address-form">
+      <div className="y-delivery-step-heading">
+        <div>
+          <span className="y-cliente-kicker">Paso 1 de 2</span>
+          <h2>¿A dónde lo enviamos?</h2>
+          <p>Indica la dirección y elige el punto de entrega para comprobar la cobertura.</p>
+        </div>
+      </div>
 
-      <div className="relative">
-        <label className="mb-1 block text-sm font-medium text-gray-700">Dirección de entrega *</label>
+      <section className="y-delivery-section" aria-labelledby="delivery-address-title">
+        <div className="y-delivery-section__heading">
+          <div>
+            <span className="y-cliente-kicker">Ubicación</span>
+            <h3 id="delivery-address-title">Dirección de entrega</h3>
+          </div>
+          <MapPin size={20} aria-hidden="true" />
+        </div>
+        <div className="y-delivery-field relative">
+        <label htmlFor="delivery-address" className="y-delivery-label">Dirección o calle *</label>
         <input
+          id="delivery-address"
           type="text"
           value={direccion}
           onChange={(e) => {
@@ -507,8 +499,9 @@ export function DireccionStep(props: DireccionStepProps) {
           onBlur={() => window.setTimeout(() => setVerSugerencias(false), 200)}
           placeholder="Av. Los Incas 123, Urb. El Bosque"
           maxLength={150}
-          className="w-full rounded-lg border px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          className="y-delivery-input"
           required
+          autoComplete="street-address"
         />
 
         {verSugerencias && (buscandoDir || sugerencias.length > 0) && (
@@ -522,7 +515,7 @@ export function DireccionStep(props: DireccionStepProps) {
                     e.preventDefault();
                     void aplicarSugerencia(s);
                   }}
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                  className="y-delivery-suggestion"
                 >
                   {s.etiqueta}
                 </button>
@@ -530,19 +523,20 @@ export function DireccionStep(props: DireccionStepProps) {
             ))}
           </ul>
         )}
-      </div>
+        </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Departamento *</label>
+        <div className="y-delivery-region-grid">
+        <div className="y-delivery-field">
+          <label htmlFor="delivery-department" className="y-delivery-label">Departamento *</label>
           <select
+            id="delivery-department"
             value={departamentoSel ?? ''}
             onChange={(e) => {
               const value = e.target.value ? Number(e.target.value) : null;
               setDepartamentoSel(value);
               setProvinciaSel(null);
             }}
-            className="w-full rounded-lg border px-3 py-2"
+            className="y-delivery-input"
           >
             <option value="">Seleccionar</option>
             {departamentos.map((d) => (
@@ -553,16 +547,17 @@ export function DireccionStep(props: DireccionStepProps) {
           </select>
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Provincia *</label>
+        <div className="y-delivery-field">
+          <label htmlFor="delivery-province" className="y-delivery-label">Provincia *</label>
           <select
+            id="delivery-province"
             value={provinciaSel ?? ''}
             onChange={(e) => {
               const value = e.target.value ? Number(e.target.value) : null;
               setProvinciaSel(value);
             }}
             disabled={!departamentoSel}
-            className="w-full rounded-lg border px-3 py-2 disabled:bg-gray-50"
+            className="y-delivery-input"
           >
             <option value="">Seleccionar</option>
             {provincias.map((p) => (
@@ -573,13 +568,14 @@ export function DireccionStep(props: DireccionStepProps) {
           </select>
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Distrito *</label>
+        <div className="y-delivery-field">
+          <label htmlFor="delivery-district" className="y-delivery-label">Distrito *</label>
           <select
+            id="delivery-district"
             value={distritoId ?? ''}
             onChange={(e) => onDistritoChange(e.target.value ? Number(e.target.value) : null)}
             disabled={!provinciaSel}
-            className="w-full rounded-lg border px-3 py-2 disabled:bg-gray-50"
+            className="y-delivery-input"
           >
             <option value="">Seleccionar</option>
             {distritos.map((d) => (
@@ -589,9 +585,18 @@ export function DireccionStep(props: DireccionStepProps) {
             ))}
           </select>
         </div>
-      </div>
+        </div>
+      </section>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <section className="y-delivery-section" aria-labelledby="delivery-map-title">
+        <div className="y-delivery-section__heading">
+          <div>
+            <span className="y-cliente-kicker">Punto exacto</span>
+            <h3 id="delivery-map-title">Ubica tu dirección en el mapa</h3>
+            <p>Toca el mapa o arrastra el marcador. También puedes compartir tu ubicación GPS.</p>
+          </div>
+        </div>
+        <div className="y-delivery-map-grid">
         <div>
           <MapLeaflet
             pins={mapPins}
@@ -608,18 +613,18 @@ export function DireccionStep(props: DireccionStepProps) {
             onClick={(e) => void seleccionarUbicacionMapa(e.latlng.lat, e.latlng.lng)}
             draggablePins
             onPinDragEnd={(_, lat, lng) => void seleccionarUbicacionMapa(lat, lng)}
-            height="350px"
+            height="360px"
           />
         </div>
 
-        <div className="flex flex-col gap-4">
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-            <h4 className="mb-2 text-sm font-medium text-gray-700">Ubicación en el mapa</h4>
-            <p className="mb-3 text-xs text-gray-500">Haz clic en el mapa o arrastra el marcador para seleccionar tu punto de entrega exacto.</p>
+        <div className="y-delivery-map-details">
+          <div className="y-delivery-map-help">
+            <h4>Zona de entrega</h4>
+            <p>El círculo indica el límite configurado por el restaurante.</p>
             {estadoUbicacionMapa !== 'idle' && (
               <p
-                className={`mb-3 text-xs ${
-                  estadoUbicacionMapa === 'error' ? 'text-amber-700' : 'text-gray-600'
+                className={`y-delivery-inline-message ${
+                  estadoUbicacionMapa === 'error' ? 'is-warning' : estadoUbicacionMapa === 'success' ? 'is-success' : ''
                 }`}
                 role={estadoUbicacionMapa === 'error' ? 'alert' : 'status'}
               >
@@ -631,27 +636,26 @@ export function DireccionStep(props: DireccionStepProps) {
               </p>
             )}
             {mapPins.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-blue-500" />
-                  <span className="text-sm text-gray-700">Tu ubicación seleccionada</span>
-                </div>
-                <p className="text-xs text-gray-500" style={{ wordBreak: 'break-all' }}>
+              <div className="y-delivery-selected-location">
+                <span>Ubicación seleccionada</span>
+                <p>
                   {mapPins[0].lat.toFixed(5)}, {mapPins[0].lng.toFixed(5)}
                 </p>
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleUsarUbicacion} disabled={gpsLoading} className="flex-1">
-              {gpsLoading ? 'Obteniendo...' : 'Usar mi ubicación GPS'}
+          <div className="y-delivery-gps">
+            <Button type="button" variant="outline" onClick={handleUsarUbicacion} disabled={gpsLoading} className="y-delivery-outline-button">
+              {gpsLoading ? 'Obteniendo ubicación…' : 'Usar mi ubicación'}
             </Button>
+            {errorGps && <p className="y-delivery-inline-message is-warning" role="alert">{errorGps}</p>}
           </div>
         </div>
       </div>
+      </section>
 
-      <p className="text-xs text-gray-500" role={errorCobertura ? 'alert' : undefined}>
+      <p className="y-delivery-coverage-note" role={errorCobertura ? 'alert' : undefined}>
         {errorCobertura
           ? errorCobertura
           : cobertura?.radioCoberturaKm != null && cobertura.radioCoberturaKm > 0
@@ -659,36 +663,44 @@ export function DireccionStep(props: DireccionStepProps) {
             : 'El restaurante no ha definido un límite máximo de cobertura. El costo de envío puede variar por distrito.'}
       </p>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Costo de envío sugerido</label>
-          <div className="w-full rounded-lg border bg-gray-100 px-3 py-2 text-gray-700">
+      <section className="y-delivery-section" aria-labelledby="delivery-contact-title">
+        <div className="y-delivery-section__heading">
+          <div>
+            <span className="y-cliente-kicker">Contacto y costo</span>
+            <h3 id="delivery-contact-title">Últimos detalles</h3>
+          </div>
+        </div>
+        <div className="y-delivery-contact-grid">
+        <div className="y-delivery-field">
+          <span className="y-delivery-label">Costo de envío estimado</span>
+          <div className="y-delivery-input y-delivery-estimated-cost" aria-live="polite">
             {cargandoCosto
               ? 'Calculando…'
               : errorCosto
                 ? 'No disponible'
                 : `S/ ${costoEnvio.toFixed(2)}`}
           </div>
-          <p className="mt-1 text-xs text-gray-500">Calculado automáticamente según tu distrito y ubicación.</p>
-          {errorCosto && <p className="mt-1 text-xs text-red-700" role="alert">{errorCosto}</p>}
+          <p className="y-delivery-field-hint">Se calcula según tu distrito y ubicación. El restaurante confirmará el costo final.</p>
+          {errorCosto && <p className="y-delivery-inline-message is-warning" role="alert">{errorCosto}</p>}
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Referencia</label>
+        <div className="y-delivery-field">
+          <label htmlFor="delivery-reference" className="y-delivery-label">Referencia (opcional)</label>
           <input
+            id="delivery-reference"
             type="text"
             value={referencia}
             onChange={(e) => onReferenciaChange(e.target.value.slice(0, 150))}
             placeholder="Frente al parque, casa azul, 2do piso"
             maxLength={150}
-            className="w-full rounded-lg border px-3 py-2"
+            className="y-delivery-input"
           />
         </div>
-      </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Teléfono *</label>
+        <div className="y-delivery-field">
+        <label htmlFor="delivery-phone" className="y-delivery-label">Teléfono de contacto *</label>
         <input
+          id="delivery-phone"
           type="tel"
           value={telefono}
           onChange={(e) => onTelefonoChange(e.target.value.replace(/\D/g, '').slice(0, 9))}
@@ -696,36 +708,38 @@ export function DireccionStep(props: DireccionStepProps) {
           maxLength={9}
           inputMode="numeric"
           pattern="[0-9]{9}"
-          className="w-full rounded-lg border px-3 py-2"
+          className="y-delivery-input"
           required
+          autoComplete="tel"
         />
-      </div>
+        </div>
+        </div>
 
       {costoSugerido !== null && (
         <div
-          className={`rounded-lg border p-3 ${
+          className={`y-delivery-zone-status ${
             !dentroCobertura
-              ? 'border-red-200 bg-red-50'
+              ? 'is-outside'
               : fueraRadio
-                ? 'border-yellow-200 bg-yellow-50'
-                : 'border-green-200 bg-green-50'
+                ? 'is-warning'
+                : 'is-inside'
           }`}
         >
           <div className="flex items-center justify-between gap-2">
             <div>
-              <span className="font-medium">
+              <span className="y-delivery-zone-status__label">
                 {dentroCobertura ? 'Costo de envío sugerido: ' : 'Costo estimado (zona fuera de cobertura): '}
               </span>
               <Badge variant={!dentroCobertura || fueraRadio ? 'warning' : 'success'}>
                 S/ {costoSugerido.toFixed(2)}
               </Badge>
               {!dentroCobertura && (
-                <span className="ml-2 text-sm text-red-700">
+                <span className="y-delivery-zone-status__detail">
                   (Fuera del límite máximo de entrega del restaurante; no se puede continuar)
                 </span>
               )}
               {dentroCobertura && fueraRadio && (
-                <span className="ml-2 text-sm text-yellow-700">
+                <span className="y-delivery-zone-status__detail">
                   (Supera el radio tarifario del distrito; se aplica recargo)
                 </span>
               )}
@@ -733,13 +747,14 @@ export function DireccionStep(props: DireccionStepProps) {
           </div>
         </div>
       )}
+      </section>
 
-      <div className="flex justify-between pt-4">
-        <Button variant="secondary" onClick={onPrev}>
-          Anterior
+      <div className="y-delivery-step-actions">
+        <Button type="button" variant="secondary" onClick={onPrev}>
+          Volver a la carta
         </Button>
-        <Button onClick={onNext} disabled={!canNext || !dentroCobertura} size="lg">
-          Continuar a Confirmar
+        <Button type="button" onClick={onNext} disabled={!canNext || !dentroCobertura} size="lg" className="y-delivery-primary-button">
+          Revisar pedido
         </Button>
       </div>
     </div>

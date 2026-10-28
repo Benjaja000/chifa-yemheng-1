@@ -6,39 +6,39 @@ import { useAuth } from '../features/auth/login/auth-context';
 import { useTheme } from '../theme/theme-context';
 import DemoBadge from '../components/DemoBadge';
 import Logo from '../components/Logo';
-import { cambiarClaveRequest } from '../features/auth/login/auth-service';
+import { cambiarClaveRequest, leerPermisos } from '../features/auth/login/auth-service';
+import { ADMIN_ROLES } from '../routes/admin-access';
 
-type L = { to: string; label: string; roles?: string[]; icon: typeof Flame };
-const ALL = ['ADMINISTRADOR', 'SUPERVISOR'];
+type L = { to: string; label: string; roles: readonly string[]; permisos?: string[]; icon: typeof Flame };
 const SECTIONS: { title: string; links: L[] }[] = [
   { title: 'Operación', links: [
-    { to: '/admin', label: 'Dashboard', roles: ALL, icon: LayoutDashboard },
-    { to: '/admin/mesas', label: 'Mesas', roles: [...ALL, 'MOZO', 'CAJERO'], icon: LayoutGrid },
-    { to: '/admin/pedidos', label: 'Pedidos', roles: [...ALL, 'MOZO', 'CAJERO', 'COCINA'], icon: ShoppingBag },
-    { to: '/admin/cocina', label: 'Cocina KDS', roles: [...ALL, 'COCINA'], icon: Flame },
-    { to: '/admin/mozo', label: 'Mozo', roles: [...ALL, 'MOZO'], icon: Users },
-    { to: '/admin/caja', label: 'Caja', roles: [...ALL, 'CAJERO'], icon: Wallet },
-    { to: '/admin/delivery', label: 'Delivery', roles: [...ALL, 'REPARTIDOR', 'CAJERO', 'MOZO'], icon: Bike },
-    { to: '/admin/reservas-admin', label: 'Reservas', roles: [...ALL, 'MOZO', 'CAJERO'], icon: CalendarDays },
+    { to: '/admin', label: 'Dashboard', roles: ADMIN_ROLES.adminSupervisor, icon: LayoutDashboard },
+    { to: '/admin/mesas', label: 'Mesas', roles: ADMIN_ROLES.adminSupervisor, icon: LayoutGrid },
+    { to: '/admin/pedidos', label: 'Pedidos', roles: ADMIN_ROLES.orders, icon: ShoppingBag },
+    { to: '/admin/cocina', label: 'Cocina KDS', roles: ADMIN_ROLES.kitchen, icon: Flame },
+    { to: '/admin/mozo', label: 'Mozo', roles: ADMIN_ROLES.waiter, icon: Users },
+    { to: '/admin/caja', label: 'Caja', roles: ADMIN_ROLES.cashier, icon: Wallet },
+    { to: '/admin/delivery', label: 'Delivery', roles: ADMIN_ROLES.delivery, icon: Bike },
+    { to: '/admin/reservas-admin', label: 'Reservas', roles: ADMIN_ROLES.reservations, icon: CalendarDays },
   ] },
   { title: 'Catálogo', links: [
-    { to: '/admin/productos', label: 'Productos', roles: ALL, icon: ShoppingBag },
-    { to: '/admin/categorias', label: 'Categorías', roles: ALL, icon: Tag },
-    { to: '/admin/unidades', label: 'Unidades', roles: ALL, icon: ShoppingBag },
-    { to: '/admin/mesas-admin', label: 'Mesas Admin', roles: ALL, icon: Armchair },
-    { to: '/admin/inventario', label: 'Inventario', roles: ALL, icon: Package },
+    { to: '/admin/productos', label: 'Productos', roles: ADMIN_ROLES.adminSupervisor, icon: ShoppingBag },
+    { to: '/admin/categorias', label: 'Categorías', roles: ADMIN_ROLES.adminSupervisor, icon: Tag },
+    { to: '/admin/unidades', label: 'Unidades', roles: ADMIN_ROLES.adminSupervisor, icon: ShoppingBag },
+    { to: '/admin/mesas-admin', label: 'Mesas Admin', roles: ADMIN_ROLES.adminSupervisor, icon: Armchair },
+    { to: '/admin/inventario', label: 'Inventario', roles: ADMIN_ROLES.inventory, icon: Package },
    ] },
   { title: 'Gestión', links: [
-    { to: '/admin/clientes', label: 'Clientes', roles: [...ALL, 'CAJERO'], icon: Users },
-    { to: '/admin/personas', label: 'Personas', roles: ALL, icon: Users },
-    { to: '/admin/personal', label: 'Personal', roles: ALL, icon: UserRound },
-    { to: '/admin/empleados', label: 'Empleados', roles: ALL, icon: UserRound },
-    { to: '/admin/usuarios', label: 'Usuarios y Roles', roles: ALL, icon: ShieldCheck },
+    { to: '/admin/clientes', label: 'Clientes', roles: ADMIN_ROLES.customers, icon: Users },
+    { to: '/admin/personas', label: 'Personas', roles: ADMIN_ROLES.admin, icon: Users },
+    { to: '/admin/personal', label: 'Personal', roles: ADMIN_ROLES.admin, icon: UserRound },
+    { to: '/admin/empleados', label: 'Empleados', roles: ADMIN_ROLES.admin, icon: UserRound },
+    { to: '/admin/usuarios', label: 'Usuarios y Roles', roles: ADMIN_ROLES.adminSupervisor, permisos: ['SEG_USUARIO', 'SEG_ROL'], icon: ShieldCheck },
   ] },
   { title: 'Análisis', links: [
-    { to: '/admin/reportes', label: 'Reportes', roles: [...ALL, 'CAJERO'], icon: BarChart3 },
-    { to: '/admin/auditoria', label: 'Auditoría', roles: ALL, icon: ShieldCheck },
-    { to: '/admin/crud', label: 'CRUD Genérico', roles: ALL, icon: ShoppingBag },
+    { to: '/admin/reportes', label: 'Reportes', roles: ADMIN_ROLES.adminSupervisor, icon: BarChart3 },
+    { to: '/admin/auditoria', label: 'Auditoría', roles: ADMIN_ROLES.admin, icon: ShieldCheck },
+    { to: '/admin/crud', label: 'CRUD Genérico', roles: ADMIN_ROLES.admin, icon: ShoppingBag },
   ] },
 ];
 
@@ -48,6 +48,7 @@ export default function StaffLayout() {
   const nav = useNavigate();
   const { pathname } = useLocation();
   const reduceMotion = useReducedMotion();
+  const permisos = leerPermisos();
   const [open, setOpen] = useState(false);
   const [verClave, setVerClave] = useState(false);
   const [actual, setActual] = useState('');
@@ -58,7 +59,9 @@ export default function StaffLayout() {
   const [guardando, setGuardando] = useState(false);
 
   const rol = (usuario?.tipo ?? '').toUpperCase();
-  const can = (l: L) => !l.roles || l.roles.includes(rol) || rol === 'ADMINISTRADOR';
+  const can = (l: L) =>
+    l.roles.includes(rol) &&
+    (!l.permisos || l.permisos.some((permiso) => permisos.includes(permiso)));
 
   const salir = () => {
     logout();

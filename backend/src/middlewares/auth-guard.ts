@@ -5,7 +5,7 @@ import type { JwtPayload } from '../models/auth.js';
 import { leerEstadoSesion } from '../repositories/auth-repository.js';
 
 export interface AuthenticatedRequest extends Request {
-  user: JwtPayload;
+  user: JwtPayload & { empleadoId?: number };
 }
 
 /** AuthGuard: exige JWT válido en Authorization: Bearer. */
@@ -42,7 +42,10 @@ export async function authGuard(req: Request, res: Response, next: NextFunction)
       res.status(401).json({ error: 'SESION_REVOCADA' });
       return;
     }
-    (req as AuthenticatedRequest).user = decoded;
+    (req as AuthenticatedRequest).user = {
+      ...decoded,
+      ...(state.empleado ? { empleadoId: state.empleado.id } : {}),
+    };
     next();
   } catch {
     res.status(503).json({ error: 'AUTHORIZATION_STATE_UNAVAILABLE' });

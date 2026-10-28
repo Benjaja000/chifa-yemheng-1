@@ -19,7 +19,7 @@ Pantalla del Repartidor (Mis Entregas + GPS + Por Rendir)
 ### Shell
 
 ```text
-StaffShell
+RepartidorLayout
 ```
 
 ### Feature
@@ -32,7 +32,7 @@ features/repartidor/mis-entregas
 
 ```text
 REPARTIDOR
-SUPERVISOR (consulta)
+DELIVERY
 ```
 
 ### Permisos
@@ -52,7 +52,7 @@ Permite:
 
 - Ver mis pedidos asignados (P asignado a mí + R míos).
 - Iniciar ruta / confirmar entrega propios.
-- Compartir GPS solo en turno y en R cada 30s.
+- Compartir GPS solo en estado R, cada 10s; es opcional.
 - Ver saldo "por rendir" (efectivo no entregado a caja).
 - Ver dirección + teléfono + total + método.
 
@@ -153,24 +153,25 @@ Si efectivo → suma a por rendir.
 Comportamiento:
 
 ```text
-Solo en turno y en estado R, cada 30s.
-Botón [Compartir ubicación] visible solo en R.
+Solo con entrega en estado R, cada 10s.
+El GPS se activa al iniciar la ruta o reabrir una entrega R.
 En E/C se deja de compartir automáticamente.
 Sin permiso → sigue con dirección manual, sin bloquear.
+El cliente consulta la ubicación por endpoint autenticado cada 8s mientras está en ruta.
 ```
 
 Implementación:
 
 ```http
-POST /api/repartidor/entregas/{id}/ubicacion
+POST /api/v1/repartidor/entregas/{id}/ubicacion
 Body: { lat, lng }
-→ USP_ACTUALIZAR_UBICACION_DELIVERY(id_pedido, lat, lng, 'REPARTIDOR')
+→ actualiza solo si ID_Empleado coincide y situacion = 'R'
 ```
 
 Valida:
 
 ```text
-Rangos lat/lng + p_quien='REPARTIDOR' + estado='A'.
+Rangos lat/lng + ID_Empleado de la sesión + situacion='R' + estado='A'.
 Nunca toca situacion ni costo_envio.
 ```
 
@@ -229,7 +230,7 @@ Sin GPS sigue con dirección+distrito; compartir es opcional.
 # Seguridad
 
 ```text
-REPARTIDOR solo ve/opera ID_Empleado = yo (backend lo impone).
+REPARTIDOR/DELIVERY solo ve/opera ID_Empleado = empleado de la sesión (backend lo impone).
 SUPERVISOR consulta global en seguimiento-entregas.md.
 ```
 
@@ -238,12 +239,12 @@ SUPERVISOR consulta global en seguimiento-entregas.md.
 # APIs
 
 ```http
-GET /api/repartidor/entregas?estado=P,R
-GET /api/repartidor/entregas/{id}
-PATCH /api/repartidor/entregas/{id}/ruta
-PATCH /api/repartidor/entregas/{id}/entregar
-POST /api/repartidor/entregas/{id}/ubicacion
-GET /api/repartidor/por-rendir
+GET /api/v1/repartidor/entregas?estado=P,R
+GET /api/v1/repartidor/entregas/{id}
+PATCH /api/v1/repartidor/entregas/{id}/ruta
+PATCH /api/v1/repartidor/entregas/{id}/entregar
+POST /api/v1/repartidor/entregas/{id}/ubicacion
+GET /api/v1/repartidor/por-rendir
 ```
 
 ---
@@ -253,9 +254,9 @@ GET /api/repartidor/por-rendir
 ```text
 PEDIDO_DELIVERY (ID_Empleado=yo, Situacion, F_Salida/F_Entrega,
 lat/lng_repartidor, f_ubicacion)
-PEDIDO + CLIENTE (dirección)
-PAGO_VENTA (para por rendir efectivo)
-USP_ACTUALIZAR_UBICACION_DELIVERY (ALTER 03)
+PEDIDO + CLIENTE (dirección, nombre, pagos)
+MOVIMIENTO_CAJA (excluir rendido)
+Actualización GPS filtrada por empleado asignado y estado en ruta
 ```
 
 ---

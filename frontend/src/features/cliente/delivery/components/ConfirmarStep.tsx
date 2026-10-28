@@ -1,5 +1,5 @@
 import { Button } from '@/shared/ui/Button';
-import { Badge } from '@/shared/ui/Badge';
+import { MapPin, Phone, ReceiptText } from 'lucide-react';
 
 interface ConfirmarStepProps {
   items: Array<{ productoId: number; cantidad: number; precioUnit: number; nombre?: string; nota?: string }>;
@@ -26,52 +26,65 @@ export function ConfirmarStep({
   const total = subtotal + costoEnvio;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-3">Resumen del pedido</h3>
-        <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-          {items.map((item, i) => (
-            <div key={i} className="flex justify-between text-sm">
-              <span>{item.cantidad}x {item.nombre ?? `Producto #${item.productoId}`}</span>
-              <Badge variant="default">S/ {(item.precioUnit * item.cantidad).toFixed(2)}</Badge>
-            </div>
-          ))}
-          <div className="border-t pt-2 space-y-1">
-            <div className="flex justify-between text-sm">
-              <span>Subtotal</span>
-              <span>S/ {subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span>Envío sugerido</span>
-              <span>S/ {costoEnvio.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between font-medium text-lg border-t pt-2">
-              <span>Total estimado</span>
-              <span>S/ {total.toFixed(2)}</span>
+    <div className="y-delivery-confirm">
+      <div className="y-delivery-step-heading">
+        <div>
+          <span className="y-cliente-kicker">Paso 2 de 2</span>
+          <h2>Revisa tu pedido</h2>
+          <p>Confirma que los platos y los datos de entrega estén correctos.</p>
+        </div>
+        <ReceiptText size={25} aria-hidden="true" />
+      </div>
+
+      <div className="y-delivery-confirm__grid">
+        <section className="y-delivery-section">
+          <div className="y-delivery-section__heading">
+            <div>
+              <span className="y-cliente-kicker">Tu selección</span>
+              <h3>Platos del pedido</h3>
             </div>
           </div>
-        </div>
+          <div className="y-delivery-confirm__items">
+            {items.map((item) => (
+              <div key={item.productoId} className="y-delivery-confirm__item">
+                <span><b>{item.cantidad}×</b> {item.nombre ?? `Producto #${item.productoId}`}</span>
+                <strong>S/ {(item.precioUnit * item.cantidad).toFixed(2)}</strong>
+              </div>
+            ))}
+          </div>
+
+          <div className="y-delivery-total">
+            <div><span>Subtotal</span><strong>S/ {subtotal.toFixed(2)}</strong></div>
+            <div><span>Envío estimado</span><strong>S/ {costoEnvio.toFixed(2)}</strong></div>
+            <div className="y-delivery-total__grand"><span>Total estimado</span><strong>S/ {total.toFixed(2)}</strong></div>
+          </div>
+        </section>
+
+        <section className="y-delivery-section y-delivery-address-summary">
+          <div className="y-delivery-section__heading">
+            <div>
+              <span className="y-cliente-kicker">Entrega</span>
+              <h3>¿Dónde lo llevamos?</h3>
+            </div>
+            <MapPin size={20} aria-hidden="true" />
+          </div>
+          <p className="y-delivery-address-summary__address">{direccion}</p>
+          {referencia && <p className="y-delivery-address-summary__detail">Referencia: {referencia}</p>}
+          <p className="y-delivery-address-summary__detail"><Phone size={15} aria-hidden="true" /> {telefono}</p>
+        </section>
       </div>
 
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-3">Dirección de entrega</h3>
-        <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-700">
-          {direccion}
-          {referencia && <p className="mt-2 mb-0 text-gray-500">Referencia: {referencia}</p>}
-          <p className="mt-2 mb-0 text-gray-500">Teléfono de contacto: {telefono}</p>
-        </div>
-      </div>
-
-      <div>
-        <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Este paso solo registra tu pedido; no realiza un cobro. El equipo confirmará el costo final del envío y el pago se registrará al momento de la entrega.
+      <div className="y-delivery-confirm__notice" role="note">
+        <strong>El envío es estimado</strong>
+        <p>
+          Esta solicitud no realiza un cobro. El equipo confirmará el costo final del envío antes de preparar tu pedido; el pago se coordinará al momento de la entrega.
         </p>
       </div>
 
-      <div className="flex justify-between pt-4 border-t">
-        <Button variant="secondary" onClick={onPrev} size="lg">Anterior</Button>
-        <Button onClick={onSubmit} loading={loading} size="lg" className="w-full md:w-auto">
-          {loading ? 'Enviando pedido...' : 'Solicitar delivery'}
+      <div className="y-delivery-step-actions">
+        <Button type="button" variant="secondary" onClick={onPrev} size="lg">Volver a dirección</Button>
+        <Button type="button" onClick={onSubmit} loading={loading} size="lg" className="y-delivery-primary-button">
+          {loading ? 'Enviando solicitud…' : 'Confirmar pedido'}
         </Button>
       </div>
     </div>

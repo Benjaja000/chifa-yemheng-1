@@ -1,4 +1,4 @@
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/login/auth-context';
 import { useState } from 'react';
 import { Ico } from '@/components/Icon';
@@ -28,18 +28,17 @@ export default function RepartidorLayout() {
           <div className="y-header .in y-logo">
             <span className="w s">Yemheng</span>
           </div>
-          <div className="y-header .in y-nav">
+          <nav className="y-header .in y-nav">
             {NAV_LINKS.map((link) => (
-              <a
+              <Link
                 key={link.to}
-                href={link.to}
                 className={`y-nav-link ${location.pathname === link.to ? 'active' : ''}`}
-                onClick={() => navigate(link.to)}
+                to={link.to}
               >
                 <Ico n={link.icon} size={18} /> {link.label}
-              </a>
+              </Link>
             ))}
-          </div>
+          </nav>
         </div>
       </header>
 

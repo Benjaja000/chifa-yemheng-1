@@ -102,13 +102,13 @@ Sin PII sensible.
 ```text
 Leaflet/OSM: pin cliente + pin repartidor + f_ubicacion.
 Sin GPS → mensaje + dirección textual.
-Polling 30s.
+Polling: 20s mientras está pendiente, 8s durante la ruta y se detiene al completar/cancelar.
 ```
 
 Fuente:
 
 ```text
-VW_DELIVERY_UBICACION (solo mis filas; backend filtra por dueño).
+GET /api/v1/cliente/delivery/{id}/ubicacion (el backend filtra por dueño).
 ```
 
 ---
@@ -125,8 +125,8 @@ solo lectura (sin transición desde aquí).
 # APIs
 
 ```http
-GET /api/cliente/delivery/{id}
-GET /api/cliente/delivery/{id}/ubicacion
+GET /api/v1/cliente/delivery/{id}
+GET /api/v1/cliente/delivery/{id}/ubicacion
 Response: { situacion, fSalida, fEntrega, repartidor,
 latCliente, lngCliente, latRepartidor, lngRepartidor, fUbicacion }
 ```
@@ -138,8 +138,7 @@ latCliente, lngCliente, latRepartidor, lngRepartidor, fUbicacion }
 # BD
 
 ```text
-PEDIDO_DELIVERY + VW_DELIVERY_UBICACION (ALTER 04)
-+ EMPLEADO repartidor (nombre).
+PEDIDO_DELIVERY + EMPLEADO repartidor (nombre).
 ```
 
 ---

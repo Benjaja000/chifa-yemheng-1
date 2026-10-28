@@ -57,20 +57,26 @@ export function RoleGuard({ roles, children }: { roles: string[]; children: Reac
   const payload = useMemo(() => validateToken(token), [token]);
   const allowedRoles = roles.map((role) => role.toUpperCase()).join('|');
   const [authorized, setAuthorized] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
     if (!payload) {
       navigate('/auth/login', { replace: true });
     } else {
       const tipo = (usuario?.tipo ?? payload.tipo ?? '').toUpperCase();
-      if (!allowedRoles.split('|').includes(tipo)) {
-        navigate('/auth/login', { replace: true });
-      } else {
-        setAuthorized(true);
-      }
+      const allowed = allowedRoles.split('|').includes(tipo);
+      setAuthorized(allowed);
+      setAccessDenied(!allowed);
     }
   }, [payload, usuario?.tipo, allowedRoles, navigate]);
 
+  if (accessDenied) {
+    return (
+      <div className="y-panel" role="alert" style={{ margin: 24, padding: 24 }}>
+        No tienes autorización para acceder a esta sección.
+      </div>
+    );
+  }
   if (!authorized) return null;
   return <>{children}</>;
 }
@@ -114,6 +120,7 @@ export function AreaGuard({ area, children }: { area: keyof typeof AREA_PERMISOS
   const navigate = useNavigate();
   const payload = useMemo(() => validateToken(token), [token]);
   const [authorized, setAuthorized] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
     if (!payload) {
@@ -121,14 +128,19 @@ export function AreaGuard({ area, children }: { area: keyof typeof AREA_PERMISOS
     } else {
       const permisos = leerPermisos();
       const requeridos = AREA_PERMISOS[area] ?? [];
-      if (permisos.length > 0 && requeridos.length > 0 && !requeridos.some((p) => permisos.includes(p))) {
-        navigate('/admin', { replace: true });
-      } else {
-        setAuthorized(true);
-      }
+      const allowed = requeridos.length > 0 && requeridos.some((p) => permisos.includes(p));
+      setAuthorized(allowed);
+      setAccessDenied(!allowed);
     }
   }, [payload, area, navigate]);
 
+  if (accessDenied) {
+    return (
+      <div className="y-panel" role="alert" style={{ margin: 24, padding: 24 }}>
+        Tu cuenta no tiene permisos para acceder a esta área.
+      </div>
+    );
+  }
   if (!authorized) return null;
   return <>{children}</>;
 }

@@ -49,8 +49,15 @@ export async function confirmarEntregaRepartidorService(id: number, empleadoId: 
   return r;
 }
 
-export async function actualizarUbicacionRepartidorService(id: number, lat: number, lng: number): Promise<void> {
-  return actualizarUbicacionRepartidor(id, lat, lng);
+export async function actualizarUbicacionRepartidorService(
+  id: number,
+  empleadoId: number,
+  lat: number,
+  lng: number,
+  usumod: string,
+  pc?: string,
+): Promise<void> {
+  return actualizarUbicacionRepartidor(id, empleadoId, lat, lng, usumod, pc);
 }
 
 export async function getPorRendirService(empleadoId: number): Promise<PorRendirItem[]> {

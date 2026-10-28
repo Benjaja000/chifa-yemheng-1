@@ -85,6 +85,7 @@ export async function crearDeliveryCliente(
   if (error) {
     if (error.message.includes('CLIENTE_NOT_FOUND')) throw new DeliveryError('CLIENTE_NOT_FOUND');
     if (error.message.includes('DISTRITO_NOT_FOUND')) throw new DeliveryError('DISTRITO_NOT_FOUND');
+    if (error.message.includes('AUTOSERVICIO_USER_NOT_READY')) throw new DeliveryError('AUTOSERVICIO_USER_NOT_READY');
     if (error.message.includes('Producto no disponible.')) throw new DeliveryError('PRODUCTO_NO_DISPONIBLE');
     if (error.message.includes('DELIVERY_VALIDATION_ERROR') || error.message.includes('DELIVERY_ITEMS_INVALID')) {
       throw new DeliveryError('VALIDATION_ERROR');
@@ -150,16 +151,73 @@ export async function getDeliveryActivoCliente(clienteId: number): Promise<numbe
 }
 
 export async function getDeliveryUbicacion(id: number, clienteId: number) {
-  const pedidoId = await getPedidoDeliveryCliente(id, clienteId);
-  if (pedidoId === null) return null;
-
   const { data, error } = await supabase
-    .from('vw_delivery_ubicacion')
-    .select('*')
+    .from('pedido_delivery')
+    .select(`
+      id_pedidodelivery,
+      id_pedido,
+      id_distrito,
+      distrito:distrito(d_distrito),
+      direccion_entrega,
+      costo_envio,
+      costo_envio_confirmado,
+      situacion,
+      f_salida,
+      f_entrega,
+      lat_cliente,
+      lng_cliente,
+      lat_repartidor,
+      lng_repartidor,
+      f_ubicacion,
+      id_empleado,
+      repartidor:empleado(persona:persona(nombre, ap_paterno)),
+      pedido:pedido!inner(id_cliente)
+    `)
     .eq('id_pedidodelivery', id)
-    .eq('id_pedido', pedidoId)
+    .eq('pedido.id_cliente', clienteId)
+    .eq('estado', 'A')
     .maybeSingle();
 
   if (error) throw new Error(`UBICACION_GET_FAIL: ${error.message}`);
-  return data;
+  if (!data) return null;
+  const row = data as unknown as {
+    id_pedidodelivery: number;
+    id_pedido: number;
+    id_distrito: number | null;
+    distrito: { d_distrito: string } | null;
+    direccion_entrega: string;
+    costo_envio: number;
+    costo_envio_confirmado: boolean;
+    situacion: string;
+    f_salida: string | null;
+    f_entrega: string | null;
+    lat_cliente: number | null;
+    lng_cliente: number | null;
+    lat_repartidor: number | null;
+    lng_repartidor: number | null;
+    f_ubicacion: string | null;
+    id_empleado: number | null;
+    repartidor: { persona: { nombre: string; ap_paterno: string | null } | null } | null;
+  };
+  return {
+    id_pedidodelivery: row.id_pedidodelivery,
+    id_pedido: row.id_pedido,
+    id_distrito: row.id_distrito,
+    distrito: row.distrito?.d_distrito ?? null,
+    direccion_entrega: row.direccion_entrega,
+    costo_envio: Number(row.costo_envio ?? 0),
+    costo_envio_confirmado: row.costo_envio_confirmado,
+    situacion: row.situacion,
+    f_salida: row.f_salida,
+    f_entrega: row.f_entrega,
+    lat_cliente: row.lat_cliente,
+    lng_cliente: row.lng_cliente,
+    lat_repartidor: row.lat_repartidor,
+    lng_repartidor: row.lng_repartidor,
+    f_ubicacion: row.f_ubicacion,
+    id_repartidor: row.id_empleado,
+    repartidor: row.repartidor?.persona
+      ? `${row.repartidor.persona.nombre} ${row.repartidor.persona.ap_paterno ?? ''}`.trim()
+      : null,
+  };
 }

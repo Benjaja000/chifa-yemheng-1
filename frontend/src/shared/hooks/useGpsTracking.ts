@@ -7,16 +7,21 @@ export interface GpsPosition {
 
 export interface UseGpsTrackingOptions {
   onPosition: (position: GpsPosition) => void;
-  autoStop?: 'P' | 'R' | 'E' | 'C';
   enabled?: boolean;
+  onError?: (error: GeolocationPositionError) => void;
 }
 
 export function useGpsTracking(options: UseGpsTrackingOptions) {
-  const { onPosition, autoStop: autoStopProp, enabled: enabledProp = true } = options;
+  const { onPosition, onError, enabled: enabledProp = true } = options;
   const [enabled, setEnabled] = useState(enabledProp);
-  const [state, setState] = useState<'P' | 'R' | 'E' | 'C'>('P');
-
+  const onPositionRef = useRef(onPosition);
+  const onErrorRef = useRef(onError);
   const watchIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    onPositionRef.current = onPosition;
+    onErrorRef.current = onError;
+  }, [onPosition, onError]);
 
   useEffect(() => {
     if (!enabled) {
@@ -27,36 +32,27 @@ export function useGpsTracking(options: UseGpsTrackingOptions) {
       return;
     }
 
-    const checkAutoStop = (_pos: GpsPosition) => {
-      if (autoStopProp && autoStopProp.includes(state)) {
-        navigator.geolocation.clearWatch(watchIdRef.current!);
-        watchIdRef.current = null;
-        setEnabled(false);
-      }
-    };
+    if (!navigator.geolocation) {
+      return;
+    }
 
-    let watchId: number | null = null;
-
-    const startWatch = () => {
-      watchId = navigator.geolocation.watchPosition(
+    const watchId = navigator.geolocation.watchPosition(
         (pos) => {
-          onPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          checkAutoStop({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          onPositionRef.current({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         },
-        (err) => console.error('Error GPS:', err),
+        (err) => {
+          console.error('Error GPS:', err);
+          onErrorRef.current?.(err);
+        },
         { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
       );
-      watchIdRef.current = watchId;
-    };
-
-    startWatch();
+    watchIdRef.current = watchId;
 
     return () => {
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-      }
+      navigator.geolocation.clearWatch(watchId);
+      watchIdRef.current = null;
     };
-  }, [enabled, onPosition, autoStopProp]);
+  }, [enabled]);
 
-  return { enabled, setEnabled, state, setState };
+  return { enabled, setEnabled };
 }

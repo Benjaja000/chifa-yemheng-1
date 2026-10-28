@@ -34,6 +34,7 @@ export interface JwtPayload {
   roles: string[];
   permisos: string[];
   authVersion: number;
+  empleadoId?: number;
 }
 
 /** Respuesta cruda de fn_login (JSON). */

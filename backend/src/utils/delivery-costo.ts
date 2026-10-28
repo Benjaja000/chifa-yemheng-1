@@ -7,6 +7,24 @@ export interface CalcularSugerenciaCostoInput {
   radioCoberturaKm: number | null;
 }
 
+export function calcularDistanciaHaversineKm(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const radianes = Math.PI / 180;
+  const diferenciaLat = (lat2 - lat1) * radianes;
+  const diferenciaLng = (lng2 - lng1) * radianes;
+  const latitud1 = lat1 * radianes;
+  const latitud2 = lat2 * radianes;
+  const a = Math.sin(diferenciaLat / 2) ** 2
+    + Math.cos(latitud1) * Math.cos(latitud2) * Math.sin(diferenciaLng / 2) ** 2;
+  const distanciaAngular = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return 6371 * distanciaAngular;
+}
+
 export function calcularSugerenciaCosto({
   costoBase,
   radioKm,

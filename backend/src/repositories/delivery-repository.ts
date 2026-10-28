@@ -2,7 +2,7 @@ import { supabase } from '../config/supabase.js';
 import { DeliveryError, type Delivery, type DeliveryLista } from '../models/delivery.js';
 import type { DeliveryCreate, DeliveryQuery, ParametrosNegocioUpdate, TarifaUpsert } from '../schemas/delivery.js';
 import { createAudit, updateAudit } from '../utils/auditoria.js';
-import { calcularSugerenciaCosto } from '../utils/delivery-costo.js';
+import { calcularDistanciaHaversineKm, calcularSugerenciaCosto } from '../utils/delivery-costo.js';
 
 interface DeliveryRow {
   id_pedidodelivery: number;
@@ -209,23 +209,15 @@ export async function sugerirCosto(lat: number | null, lng: number | null, distr
   const calcularDistancia = async (
     latOrigen: number | null | undefined,
     lngOrigen: number | null | undefined,
-    tipo: 'tarifa' | 'cobertura',
   ): Promise<number | null> => {
     if (latOrigen == null || lngOrigen == null) return null;
 
-    const { data, error: distanciaError } = await supabase.rpc('haversine_km', {
-      lat1: latOrigen,
-      lng1: lngOrigen,
-      lat2: lat,
-      lng2: lng,
-    });
-    if (distanciaError) throw new Error(`HAVERSINE_${tipo.toUpperCase()}_FAIL: ${distanciaError.message}`);
-    return Number(data ?? 0);
+    return calcularDistanciaHaversineKm(latOrigen, lngOrigen, lat, lng);
   };
 
   const [distanciaTarifaKm, distanciaCoberturaKm] = await Promise.all([
-    calcularDistancia(d.lat_ref, d.lng_ref, 'tarifa'),
-    calcularDistancia(local?.lat_local, local?.lng_local, 'cobertura'),
+    calcularDistancia(d.lat_ref, d.lng_ref),
+    calcularDistancia(local?.lat_local, local?.lng_local),
   ]);
 
   // La tarifa usa el centro de referencia del distrito (BR-GPS-002); el límite

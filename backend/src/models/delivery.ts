@@ -15,6 +15,18 @@ export interface Delivery {
   costoConfirmado?: boolean;
   estado: EstadoDelivery;
   fechaCreacion: string;
+  fechaSalida?: string | null;
+  fechaEntrega?: string | null;
+  fechaUbicacion?: string | null;
+  latCliente?: number | null;
+  lngCliente?: number | null;
+  latRepartidor?: number | null;
+  lngRepartidor?: number | null;
+  nombreCliente?: string | null;
+  totalPedido?: number;
+  montoPagado?: number;
+  montoPorCobrar?: number;
+  metodoPago?: string | null;
 }
 
 export interface DeliveryLista {
@@ -31,7 +43,8 @@ export type DeliveryErrorCode =
   | 'FUERA_DE_COBERTURA'
   | 'CLIENTE_NOT_FOUND'
   | 'DISTRITO_NOT_FOUND'
-  | 'PRODUCTO_NO_DISPONIBLE';
+  | 'PRODUCTO_NO_DISPONIBLE'
+  | 'AUTOSERVICIO_USER_NOT_READY';
 
 export class DeliveryError extends Error {
   readonly code: DeliveryErrorCode;

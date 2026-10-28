@@ -1,0 +1,12 @@
+export const ADMIN_ROLES = {
+  admin: ['ADMINISTRADOR'],
+  adminSupervisor: ['ADMINISTRADOR', 'SUPERVISOR'],
+  customers: ['ADMINISTRADOR', 'SUPERVISOR', 'CAJERO'],
+  orders: ['ADMINISTRADOR', 'SUPERVISOR', 'MOZO', 'CAJERO', 'COCINA'],
+  delivery: ['ADMINISTRADOR', 'SUPERVISOR', 'DELIVERY', 'REPARTIDOR', 'CAJERO', 'MOZO'],
+  reservations: ['ADMINISTRADOR', 'SUPERVISOR', 'MOZO', 'CAJERO'],
+  inventory: ['ADMINISTRADOR', 'SUPERVISOR'],
+  kitchen: ['ADMINISTRADOR', 'SUPERVISOR', 'COCINA'],
+  waiter: ['ADMINISTRADOR', 'SUPERVISOR', 'MOZO'],
+  cashier: ['ADMINISTRADOR', 'SUPERVISOR', 'CAJERO'],
+};

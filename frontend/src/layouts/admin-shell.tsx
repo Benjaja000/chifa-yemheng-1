@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { cambiarClaveRequest, leerUsuario } from '../features/auth/login/auth-service';
+import { cambiarClaveRequest, leerPermisos, leerUsuario } from '../features/auth/login/auth-service';
 import { useAuth } from '../features/auth/login/auth-context';
 import { useTheme } from '../theme/theme-context';
+import { ADMIN_ROLES } from '../routes/admin-access';
 
 interface Modulo {
   to: string;
   icono: string;
   label: string;
+  roles: string[];
+  permisos?: string[];
 }
 
 interface Grupo {
@@ -17,55 +20,55 @@ interface Grupo {
 }
 
 const GRUPOS: Grupo[] = [
-  { titulo: 'Principal', items: [{ to: '/admin', icono: 'dashboard', label: 'Dashboard' }] },
+  { titulo: 'Principal', items: [{ to: '/admin', icono: 'dashboard', label: 'Dashboard', roles: ADMIN_ROLES.adminSupervisor }] },
   {
     titulo: 'Gestión de carta',
     items: [
-      { to: '/admin/productos', icono: 'restaurant_menu', label: 'Productos' },
-      { to: '/admin/categorias', icono: 'category', label: 'Categorías' },
-      { to: '/admin/unidades', icono: 'straighten', label: 'Unidades' },
+      { to: '/admin/productos', icono: 'restaurant_menu', label: 'Productos', roles: ADMIN_ROLES.adminSupervisor },
+      { to: '/admin/categorias', icono: 'category', label: 'Categorías', roles: ADMIN_ROLES.adminSupervisor },
+      { to: '/admin/unidades', icono: 'straighten', label: 'Unidades', roles: ADMIN_ROLES.adminSupervisor },
     ],
   },
   {
     titulo: 'Gestión de salón',
     items: [
-      { to: '/admin/mesas', icono: 'table_restaurant', label: 'Mesas y Ambientes' },
-      { to: '/admin/reservas-admin', icono: 'event_seat', label: 'Reservas' },
+      { to: '/admin/mesas', icono: 'table_restaurant', label: 'Mesas y Ambientes', roles: ADMIN_ROLES.adminSupervisor },
+      { to: '/admin/reservas-admin', icono: 'event_seat', label: 'Reservas', roles: ADMIN_ROLES.reservations },
     ],
   },
   {
     titulo: 'Gestión de personas',
     items: [
-      { to: '/admin/personal', icono: 'badge', label: 'Personal' },
-      { to: '/admin/clientes', icono: 'groups', label: 'Clientes' },
-      { to: '/admin/empleados', icono: 'people', label: 'Empleados' },
+      { to: '/admin/personal', icono: 'badge', label: 'Personal', roles: ADMIN_ROLES.admin },
+      { to: '/admin/clientes', icono: 'groups', label: 'Clientes', roles: ADMIN_ROLES.customers },
+      { to: '/admin/empleados', icono: 'people', label: 'Empleados', roles: ADMIN_ROLES.admin },
     ],
   },
   {
     titulo: 'Operaciones',
     items: [
-      { to: '/admin/pedidos', icono: 'point_of_sale', label: 'Pedidos' },
-      { to: '/admin/pedidos-delivery', icono: 'delivery_dining', label: 'Pedidos Delivery' },
-      { to: '/admin/delivery', icono: 'local_shipping', label: 'Delivery Staff' },
-      { to: '/admin/parametros-delivery', icono: 'pin_drop', label: 'Parámetros Delivery' },
-      { to: '/admin/cocina', icono: 'kitchen', label: 'Cocina' },
-      { to: '/admin/mozo', icono: 'room_service', label: 'Mozo' },
-      { to: '/admin/caja', icono: 'point_of_sale', label: 'Caja' },
+      { to: '/admin/pedidos', icono: 'point_of_sale', label: 'Pedidos', roles: ADMIN_ROLES.orders },
+      { to: '/admin/pedidos-delivery', icono: 'delivery_dining', label: 'Pedidos Delivery', roles: ADMIN_ROLES.delivery },
+      { to: '/admin/delivery', icono: 'local_shipping', label: 'Delivery Staff', roles: ADMIN_ROLES.delivery },
+      { to: '/admin/parametros-delivery', icono: 'pin_drop', label: 'Parámetros Delivery', roles: ADMIN_ROLES.admin },
+      { to: '/admin/cocina', icono: 'kitchen', label: 'Cocina', roles: ADMIN_ROLES.kitchen },
+      { to: '/admin/mozo', icono: 'room_service', label: 'Mozo', roles: ADMIN_ROLES.waiter },
+      { to: '/admin/caja', icono: 'point_of_sale', label: 'Caja', roles: ADMIN_ROLES.cashier },
     ],
   },
   {
     titulo: 'Inventario y Compras',
     items: [
-      { to: '/admin/inventario', icono: 'inventory_2', label: 'Inventario' },
+      { to: '/admin/inventario', icono: 'inventory_2', label: 'Inventario', roles: ADMIN_ROLES.inventory },
     ],
   },
   {
     titulo: 'Administración',
     items: [
-      { to: '/admin/usuarios', icono: 'admin_panel_settings', label: 'Usuarios y Roles' },
-      { to: '/admin/auditoria', icono: 'security', label: 'Auditoría' },
-      { to: '/admin/reportes', icono: 'bar_chart', label: 'Reportes' },
-      { to: '/admin/crud', icono: 'table_view', label: 'CRUD Genérico' },
+      { to: '/admin/usuarios', icono: 'admin_panel_settings', label: 'Usuarios y Roles', roles: ADMIN_ROLES.adminSupervisor, permisos: ['SEG_USUARIO', 'SEG_ROL'] },
+      { to: '/admin/auditoria', icono: 'security', label: 'Auditoría', roles: ADMIN_ROLES.admin },
+      { to: '/admin/reportes', icono: 'bar_chart', label: 'Reportes', roles: ADMIN_ROLES.adminSupervisor },
+      { to: '/admin/crud', icono: 'table_view', label: 'CRUD Genérico', roles: ADMIN_ROLES.admin },
     ],
   },
 ];
@@ -77,6 +80,7 @@ export function AdminShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const reduceMotion = useReducedMotion();
+  const permisos = leerPermisos();
   const [busqueda, setBusqueda] = useState('');
   const [abiertos, setAbiertos] = useState<string[]>(GRUPOS.map((g) => g.titulo));
   const [menuUsuario, setMenuUsuario] = useState(false);
@@ -125,10 +129,14 @@ export function AdminShell() {
     setAbiertos((prev) => (prev.includes(titulo) ? prev.filter((t) => t !== titulo) : [...prev, titulo]));
   };
 
+  const rol = (usuario?.tipo ?? '').toUpperCase();
+  const puedeVerModulo = (modulo: Modulo) =>
+    modulo.roles.includes(rol) &&
+    (!modulo.permisos || modulo.permisos.some((permiso) => permisos.includes(permiso)));
   const q = busqueda.trim().toLowerCase();
   const gruposFiltrados = GRUPOS.map((g) => ({
     ...g,
-    items: q ? g.items.filter((m) => m.label.toLowerCase().includes(q)) : g.items,
+    items: g.items.filter((m) => puedeVerModulo(m) && (!q || m.label.toLowerCase().includes(q))),
   })).filter((g) => g.items.length > 0);
 
   const linkCls = ({ isActive }: { isActive: boolean }) =>

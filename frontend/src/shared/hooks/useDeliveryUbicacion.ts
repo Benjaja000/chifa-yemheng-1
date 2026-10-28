@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api-client';
-import { useRealtimeDelivery } from './useRealtimeDelivery';
 
 export type DeliverySituacion = 'P' | 'R' | 'E' | 'C';
 
@@ -21,18 +20,18 @@ export interface DeliveryUbicacion {
   lng_repartidor: number | null;
   f_ubicacion: string | null;
   id_repartidor: number | null;
+  repartidor: string | null;
 }
-
-const POLL_INTERVAL = 30000;
 
 /**
  * Ubicación/estado de un delivery para el cliente.
- * Actualización en vivo vía Realtime (pedido_delivery) + respaldo por polling.
- * Datos desde vw_delivery_ubicacion (BR-GPS-001/002), sin PII.
+ * Actualiza el seguimiento por el endpoint autenticado del cliente.
+ * No consulta directamente pedido_delivery desde el navegador.
  */
-export function useDeliveryUbicacion(deliveryId: number | null, interval = POLL_INTERVAL) {
+export function useDeliveryUbicacion(deliveryId: number | null, interval?: number) {
   const [ubicacion, setUbicacion] = useState<DeliveryUbicacion | null>(null);
   const [loading, setLoading] = useState(true);
+  const pollingInterval = interval ?? (ubicacion?.situacion === 'R' ? 8000 : ubicacion?.situacion === 'P' ? 20000 : 0);
 
   const refresh = useCallback(async () => {
     if (!deliveryId) return;
@@ -49,11 +48,10 @@ export function useDeliveryUbicacion(deliveryId: number | null, interval = POLL_
   useEffect(() => {
     if (!deliveryId) return;
     void refresh();
-    const timer = setInterval(() => void refresh(), interval);
+    if (pollingInterval <= 0) return;
+    const timer = setInterval(() => void refresh(), pollingInterval);
     return () => clearInterval(timer);
-  }, [deliveryId, interval, refresh]);
-
-  useRealtimeDelivery(deliveryId, () => void refresh());
+  }, [deliveryId, pollingInterval, refresh]);
 
   return { ubicacion, loading, refresh };
 }

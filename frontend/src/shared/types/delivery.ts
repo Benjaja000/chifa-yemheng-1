@@ -20,6 +20,37 @@ export interface DeliveryShared {
   telefono: string | null;
   repartidor: string | null;
   costo: number;
+  costoConfirmado?: boolean;
   estado: EstadoDelivery;
   fechaCreacion: string;
+  fechaSalida?: string | null;
+  fechaEntrega?: string | null;
+  fechaUbicacion?: string | null;
+  latCliente?: number | null;
+  lngCliente?: number | null;
+  latRepartidor?: number | null;
+  lngRepartidor?: number | null;
+  nombreCliente?: string | null;
+  totalPedido?: number;
+  montoPagado?: number;
+  montoPorCobrar?: number;
+  metodoPago?: string | null;
+}
+
+export interface DeliveryListaShared {
+  data: DeliveryShared[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export interface PorRendirShared {
+  idPedidoDelivery: number;
+  pedidoId: number;
+  cliente: string;
+  direccion: string;
+  total: number;
+  metodoPago: string;
+  fechaEntrega: string;
+  estadoRendicion: 'P';
 }

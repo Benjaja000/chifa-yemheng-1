@@ -63,4 +63,20 @@ describe('crearDeliveryCliente', () => {
       costoEnvio: 7.5,
     }, '', 1)).rejects.toMatchObject({ code: 'PRODUCTO_NO_DISPONIBLE' });
   });
+
+  it('identifies when the autoservice database user is not ready', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'AUTOSERVICIO_USER_NOT_READY' },
+    });
+
+    await expect(crearDeliveryCliente({
+      clienteId: 8,
+      items: [{ productoId: 3, cantidad: 1 }],
+      direccion: 'Av. Central 123',
+      distritoId: 5,
+      telefono: '987654321',
+      costoEnvio: 7.5,
+    }, '', 1)).rejects.toMatchObject({ code: 'AUTOSERVICIO_USER_NOT_READY' });
+  });
 });

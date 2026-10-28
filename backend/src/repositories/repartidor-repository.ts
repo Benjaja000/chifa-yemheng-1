@@ -1,6 +1,7 @@
 import { supabase } from '../config/supabase.js';
-import type { Delivery, DeliveryLista } from '../models/delivery.js';
+import { DeliveryError, type Delivery, type DeliveryLista } from '../models/delivery.js';
 import { updateAudit } from '../utils/auditoria.js';
+import { listarPendientesRendicion, type PendienteRendicionItem } from './rendicion-repository.js';
 
 interface DeliveryRow {
   id_pedidodelivery: number;
@@ -20,9 +21,48 @@ interface DeliveryRow {
   lat_repartidor: number | null;
   lng_repartidor: number | null;
   f_ubicacion: string | null;
+  f_salida?: string | null;
+  f_entrega?: string | null;
+  costo_envio_confirmado?: boolean;
+  pedido?: {
+    total: number | null;
+    cliente?: { persona?: { nombre: string; ap_paterno: string | null } | null } | null;
+    venta?: Array<{
+      pago_venta?: Array<{ monto: number; metodo_pago?: { n_metodopago: string } | null }> | null;
+    }> | null;
+  } | null;
 }
 
 const SELECT = 'id_pedidodelivery, id_pedido, id_distrito, distrito(d_distrito), direccion_entrega, referencia, telefono_contacto, id_empleado, repartidor:empleado(persona(nombre, ap_paterno)), costo_envio, situacion, feccre, lat_cliente, lng_cliente, lat_repartidor, lng_repartidor, f_ubicacion';
+const SELECT_REPARTIDOR = `${SELECT}, f_salida, f_entrega, costo_envio_confirmado, pedido:pedido!inner(total, cliente:cliente!fk_pedido_cliente(persona:persona(nombre, ap_paterno)), venta:venta(pago_venta:pago_venta(monto, metodo_pago:metodo_pago(n_metodopago))))`;
+
+function mapRepartidorRow(row: DeliveryRow): Delivery {
+  const result = mapRow(row);
+  const totalPedido = Number(row.pedido?.total ?? 0);
+  const pagos = row.pedido?.venta?.flatMap((venta) => venta.pago_venta ?? []) ?? [];
+  const montoPagado = pagos.reduce((total, pago) => total + Number(pago.monto ?? 0), 0);
+  const costo = Number(row.costo_envio ?? 0);
+  const costoConfirmado = row.costo_envio_confirmado ?? true;
+
+  return {
+    ...result,
+    costoConfirmado,
+    fechaSalida: row.f_salida ?? null,
+    fechaEntrega: row.f_entrega ?? null,
+    fechaUbicacion: row.f_ubicacion ?? null,
+    latCliente: row.lat_cliente,
+    lngCliente: row.lng_cliente,
+    latRepartidor: row.lat_repartidor,
+    lngRepartidor: row.lng_repartidor,
+    nombreCliente: row.pedido?.cliente?.persona
+      ? `${row.pedido.cliente.persona.nombre} ${row.pedido.cliente.persona.ap_paterno ?? ''}`.trim()
+      : null,
+    totalPedido,
+    montoPagado,
+    montoPorCobrar: costoConfirmado ? Math.max(0, totalPedido + costo - montoPagado) : undefined,
+    metodoPago: pagos.map((pago) => pago.metodo_pago?.n_metodopago).filter(Boolean).join(', ') || null,
+  };
+}
 
 function mapRow(row: DeliveryRow): Delivery {
   return {
@@ -49,8 +89,9 @@ export async function listarMisEntregas(empleadoId: number, estado?: 'P' | 'R' |
 
   let query = supabase
     .from('pedido_delivery')
-    .select(SELECT, { count: 'exact' })
+    .select(SELECT_REPARTIDOR, { count: 'exact' })
     .eq('id_empleado', empleadoId)
+    .eq('estado', 'A')
     .order('feccre', { ascending: false })
     .range(desde, hasta);
 
@@ -59,7 +100,7 @@ export async function listarMisEntregas(empleadoId: number, estado?: 'P' | 'R' |
   const { data, error, count } = await query;
   if (error) throw new Error(`DB_LIST_FAIL: ${error.message}`);
   return {
-    data: ((data ?? []) as unknown as DeliveryRow[]).map(mapRow),
+    data: ((data ?? []) as unknown as DeliveryRow[]).map(mapRepartidorRow),
     page,
     limit,
     total: count ?? 0,
@@ -69,14 +110,15 @@ export async function listarMisEntregas(empleadoId: number, estado?: 'P' | 'R' |
 export async function getMiEntregaDetalle(id: number, empleadoId: number): Promise<Delivery | null> {
   const { data, error } = await supabase
     .from('pedido_delivery')
-    .select(SELECT)
+    .select(SELECT_REPARTIDOR)
     .eq('id_pedidodelivery', id)
     .eq('id_empleado', empleadoId)
+    .eq('estado', 'A')
     .maybeSingle();
 
   if (error) throw new Error(`DB_GET_FAIL: ${error.message}`);
   if (!data) return null;
-  return mapRow(data as unknown as DeliveryRow);
+  return mapRepartidorRow(data as unknown as DeliveryRow);
 }
 
 export async function iniciarRutaRepartidor(id: number, empleadoId: number, usumod: string, pc = ''): Promise<Delivery | null> {
@@ -85,12 +127,14 @@ export async function iniciarRutaRepartidor(id: number, empleadoId: number, usum
     .update({ situacion: 'R', f_salida: new Date().toISOString(), ...updateAudit(usumod, pc) })
     .eq('id_pedidodelivery', id)
     .eq('id_empleado', empleadoId)
-    .select(SELECT)
+    .eq('estado', 'A')
+    .eq('situacion', 'P')
+    .select(SELECT_REPARTIDOR)
     .maybeSingle();
 
   if (error) throw new Error(`DB_UPDATE_FAIL: ${error.message}`);
   if (!data) return null;
-  return mapRow(data as unknown as DeliveryRow);
+  return mapRepartidorRow(data as unknown as DeliveryRow);
 }
 
 export async function confirmarEntregaRepartidor(id: number, empleadoId: number, usumod: string, pc = ''): Promise<Delivery | null> {
@@ -99,69 +143,39 @@ export async function confirmarEntregaRepartidor(id: number, empleadoId: number,
     .update({ situacion: 'E', f_entrega: new Date().toISOString(), ...updateAudit(usumod, pc) })
     .eq('id_pedidodelivery', id)
     .eq('id_empleado', empleadoId)
-    .select(SELECT)
+    .eq('estado', 'A')
+    .eq('situacion', 'R')
+    .select(SELECT_REPARTIDOR)
     .maybeSingle();
 
   if (error) throw new Error(`DB_UPDATE_FAIL: ${error.message}`);
   if (!data) return null;
-  return mapRow(data as unknown as DeliveryRow);
+  return mapRepartidorRow(data as unknown as DeliveryRow);
 }
 
-export async function actualizarUbicacionRepartidor(id: number, lat: number, lng: number): Promise<void> {
-  const { error } = await supabase.rpc('usp_actualizar_ubicacion_delivery', {
-    p_id_pedido: (await supabase.from('pedido_delivery').select('id_pedido').eq('id_pedidodelivery', id).single()).data?.id_pedido,
-    p_lat: lat,
-    p_lng: lng,
-    p_quien: 'REPARTIDOR',
-  });
-  if (error) throw new Error(`UBI_ACTUALIZAR_FAIL: ${error.message}`);
-}
-
-export interface PorRendirItem {
-  idPedidoDelivery: number;
-  pedidoId: number;
-  cliente: string;
-  direccion: string;
-  total: number;
-  fechaEntrega: string;
-}
-
-export async function getPorRendir(empleadoId: number): Promise<PorRendirItem[]> {
+export async function actualizarUbicacionRepartidor(
+  id: number,
+  empleadoId: number,
+  lat: number,
+  lng: number,
+  usumod: string,
+  pc = '',
+): Promise<void> {
   const { data, error } = await supabase
     .from('pedido_delivery')
-    .select(`
-      id_pedidodelivery,
-      id_pedido,
-      direccion_entrega,
-      costo_envio,
-      f_entrega,
-      pedido:pedido!inner(
-        id_cliente,
-        cliente:cliente!fk_pedido_cliente!inner(
-          persona:persona!inner(nombre, ap_paterno)
-        ),
-        venta:venta!inner(
-          pago_venta:pago_venta!inner(
-            monto,
-            metodo_pago:metodo_pago!inner(afecta_efectivo)
-          )
-        )
-      )
-    `)
+    .update({ lat_repartidor: lat, lng_repartidor: lng, f_ubicacion: new Date().toISOString(), ...updateAudit(usumod, pc) })
+    .eq('id_pedidodelivery', id)
     .eq('id_empleado', empleadoId)
-    .eq('situacion', 'E')
-    .eq('pedido.venta.pago_venta.metodo_pago.afecta_efectivo', 'S');
+    .eq('estado', 'A')
+    .eq('situacion', 'R')
+    .select('id_pedidodelivery')
+    .maybeSingle();
+  if (error) throw new Error(`UBI_ACTUALIZAR_FAIL: ${error.message}`);
+  if (!data) throw new DeliveryError('NOT_FOUND');
+}
 
-  if (error) throw new Error(`POR_RENDIR_FAIL: ${error.message}`);
+export type PorRendirItem = PendienteRendicionItem;
 
-  return (data ?? []).map((row: any) => ({
-    idPedidoDelivery: row.id_pedidodelivery,
-    pedidoId: row.id_pedido,
-    cliente: row.pedido?.cliente?.persona
-      ? `${row.pedido.cliente.persona.nombre} ${row.pedido.cliente.persona.ap_paterno ?? ''}`.trim()
-      : 'Sin cliente',
-    direccion: row.direccion_entrega,
-    total: Number(row.pedido?.venta?.[0]?.pago_venta?.[0]?.monto ?? 0) + Number(row.costo_envio ?? 0),
-    fechaEntrega: row.f_entrega,
-  }));
+export async function getPorRendir(empleadoId: number): Promise<PorRendirItem[]> {
+  return listarPendientesRendicion(empleadoId);
 }
